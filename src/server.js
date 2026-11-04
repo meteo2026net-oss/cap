@@ -268,7 +268,7 @@ app.post("/api/alerts/:id/publish",auth,roles("admin","publisher"),(req,res)=>{
 app.get("/api/webhooks/inbox",auth,roles("admin","reviewer"),(req,res)=>{
  const status=req.query.status;
  if(status!==undefined && !["pending","reviewed","rejected"].includes(status)) return res.status(400).json({error:"Invalid webhook inbox status"});
- const rows=db.prepare(`SELECT id,received_at,source_timestamp,payload_json,status,reviewed_at,review_note FROM webhook_inbox WHERE (? IS NULL OR status=?) ORDER BY received_at DESC LIMIT 100`).all(status ?? null,status ?? null);
+ const rows=db.prepare(`SELECT w.id,w.received_at,w.source_timestamp,w.payload_json,w.status,w.reviewed_at,w.review_note,w.reviewed_by,u.username AS reviewer_username FROM webhook_inbox w LEFT JOIN users u ON u.id=w.reviewed_by WHERE (? IS NULL OR w.status=?) ORDER BY w.received_at DESC LIMIT 100`).all(status ?? null,status ?? null);
  res.json({messages:rows.map(row=>({...row,payload:JSON.parse(row.payload_json),payload_json:undefined}))});
 });
 app.patch("/api/webhooks/inbox/:id/review",auth,roles("admin","reviewer"),(req,res)=>{
@@ -276,10 +276,10 @@ app.patch("/api/webhooks/inbox/:id/review",auth,roles("admin","reviewer"),(req,r
  if(!Number.isSafeInteger(id) || id<1) return res.status(400).json({error:"Invalid inbox id"});
  try {
   const data=z.object({status:z.enum(["reviewed","rejected"]),note:z.string().max(2000).optional().default("")}).parse(req.body);
-  const result=db.prepare("UPDATE webhook_inbox SET status=?,reviewed_at=CURRENT_TIMESTAMP,review_note=? WHERE id=? AND status='pending'").run(data.status,data.note,id);
+  const result=db.prepare("UPDATE webhook_inbox SET status=?,reviewed_at=CURRENT_TIMESTAMP,reviewed_by=?,review_note=? WHERE id=? AND status='pending'").run(data.status,req.user.id,data.note,id);
   if(!result.changes) return res.status(409).json({error:"Webhook message is missing or no longer pending"});
   audit(req.user.id,null,"webhook_inbox_"+data.status,`Reviewed inbound webhook message ${id}`);
-  res.json({ok:true,id,status:data.status});
+  res.json({ok:true,id,status:data.status,reviewed_by:req.user.id,reviewer_username:req.user.username});
  } catch(error) { res.status(400).json({error:error.message}); }
 });
 

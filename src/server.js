@@ -234,23 +234,29 @@ app.get("/api/delivery/outbox",auth,roles("admin","publisher"),(req,res)=>{
  res.json({deliveries:rows,external_adapters_enabled:process.env.CAP_DELIVERY_ENABLED==="true"});
 });
 app.post("/api/delivery/outbox/:id/claim",auth,roles("admin","publisher"),(req,res)=>{
- const delivery=claimDelivery(db,Number(req.params.id));
+ const deliveryId=Number(req.params.id);
+ if(!Number.isSafeInteger(deliveryId) || deliveryId<1) return res.status(400).json({error:"Invalid delivery id"});
+ const delivery=claimDelivery(db,deliveryId);
  if(!delivery) return res.status(409).json({error:"Delivery is not queued or has already been claimed"});
  audit(req.user.id,delivery.alert_id,"delivery_claimed",`Claimed outbox entry ${delivery.id}; no external transmission is performed by this endpoint`);
  res.json({delivery:{id:delivery.id,alert_id:delivery.alert_id,channel:delivery.channel,status:delivery.status,attempts:delivery.attempts,payload:delivery.payload},external_adapters_enabled:process.env.CAP_DELIVERY_ENABLED==="true"});
 });
 app.post("/api/delivery/outbox/:id/receipt",auth,roles("admin","publisher"),(req,res)=>{
+ const deliveryId=Number(req.params.id);
+ if(!Number.isSafeInteger(deliveryId) || deliveryId<1) return res.status(400).json({error:"Invalid delivery id"});
  try {
   const receiptSchema=z.object({status:z.enum(["delivered","failed"]),externalId:z.string().max(256).optional(),details:z.string().max(2000).optional()});
   const data=receiptSchema.parse(req.body);
-  const delivery=recordDeliveryReceipt(db,Number(req.params.id),data);
+  const delivery=recordDeliveryReceipt(db,deliveryId,data);
   if(!delivery) return res.status(409).json({error:"A receipt can only be recorded for a sending delivery"});
   audit(req.user.id,delivery.alert_id,"delivery_"+delivery.status,`Receipt recorded for outbox entry ${delivery.id}`);
   res.json({ok:true,delivery:{id:delivery.id,status:delivery.status,attempts:delivery.attempts,external_id:delivery.external_id}});
  } catch(error) { res.status(400).json({error:error.message}); }
 });
 app.post("/api/delivery/outbox/:id/retry",auth,roles("admin","publisher"),(req,res)=>{
- const delivery=retryDelivery(db,Number(req.params.id));
+ const deliveryId=Number(req.params.id);
+ if(!Number.isSafeInteger(deliveryId) || deliveryId<1) return res.status(400).json({error:"Invalid delivery id"});
+ const delivery=retryDelivery(db,deliveryId);
  if(!delivery) return res.status(409).json({error:"Only failed deliveries can be retried"});
  audit(req.user.id,delivery.alert_id,"delivery_retry_queued",`Requeued outbox entry ${delivery.id}`);
  res.json({ok:true,delivery:{id:delivery.id,status:delivery.status,attempts:delivery.attempts}});

@@ -32,6 +32,7 @@ Open http://localhost:8095.
 - Administrator account activation/deactivation with safeguards against disabling the current administrator or the last active administrator.
 - GitHub Actions downloads the official OASIS CAP 1.2 XSD and validates a generated multilingual XML example with xmllint.
 - Public JSON feed for published Public-scope `Actual` alerts, including multilingual `info_blocks`, geometry, references, and CAP metadata.
+- Public GeoJSON feed for published Public-scope `Actual` alerts; CAP polygons are converted to GeoJSON longitude-latitude coordinate order and CAP circles are represented as points with `radius_km` metadata.
 - Basic audit trail.
 - Basic validation of required CAP fields, enumerations, date ordering, closed polygons, and circle geometry.
 - GitHub Actions workflow runs the automated test suite on pushes and pull requests.
@@ -55,6 +56,7 @@ Open http://localhost:8095.
 - `POST /api/alerts/:id/publish`
 - `GET /api/alerts/:id/cap.xml`
 - `GET /api/public/alerts`
+- `GET /api/public/alerts.geojson`
 - `GET /api/audit`
 
 ## Important safety and deployment notes

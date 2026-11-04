@@ -36,6 +36,8 @@ jobs:
         run: |
           node --check scripts/setup-local.mjs
           node --check src/webhook-signature.js
+          node --check src/webhook-replay.js
+          node --check tests/webhook-replay.test.js
           node --check tests/webhook-signature.test.js
           node --check src/delivery-worker.js
           node --check src/server.js

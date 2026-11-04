@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { verifyWebhookSignature } from "./webhook-signature.js";
 
 const SIGNATURE_PATTERN = /^sha256=[a-f0-9]{64}$/;
 
@@ -36,4 +37,16 @@ export function consumeWebhookReplay(database, signature, nowSeconds = Math.floo
     return result.changes === 1;
   });
   return consume.immediate();
+}
+
+
+export function verifyAndConsumeWebhook(database, secret, timestamp, body, signature, {
+  nowSeconds = Math.floor(Date.now() / 1000),
+  toleranceSeconds = 300,
+  retentionSeconds = 600
+} = {}) {
+  if (!verifyWebhookSignature(secret, timestamp, body, signature, { nowSeconds, toleranceSeconds })) {
+    return false;
+  }
+  return consumeWebhookReplay(database, signature, nowSeconds, retentionSeconds);
 }

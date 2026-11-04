@@ -24,5 +24,15 @@ jobs:
           mkdir -p schemas
           curl --fail --silent --show-error --location https://docs.oasis-open.org/emergency/cap/v1.2/CAP-v1.2.xsd -o schemas/CAP-v1.2.xsd
       - run: npm install
+      - name: Check JavaScript syntax
+        run: |
+          node --check src/server.js
+          node --check src/db.js
+          node --check src/cap.js
+          node --check src/geojson.js
+          node --check public/app.js
+          node --check tests/cap.test.js
+          node --check tests/cap-schema.test.js
+          node --check tests/geojson.test.js
       - run: npm test
       - run: npm run test:cap-schema

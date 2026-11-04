@@ -19,7 +19,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-          cache: npm
       - name: Install XML schema validator
         run: |
           sudo apt-get update
@@ -28,7 +27,7 @@ jobs:
         run: |
           mkdir -p schemas
           curl --fail --silent --show-error --location https://docs.oasis-open.org/emergency/cap/v1.2/CAP-v1.2.xsd -o schemas/CAP-v1.2.xsd
-      - run: npm ci --no-audit --no-fund
+      - run: npm install --no-audit --no-fund
       - name: Report dependency vulnerabilities
         run: |
           npm audit --json > npm-audit.json || true

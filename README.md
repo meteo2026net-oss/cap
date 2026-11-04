@@ -101,10 +101,14 @@ The service listens on `127.0.0.1:8095` by default and stores SQLite data in the
 - `GET /api/public/alerts`
 - `GET /api/public/alerts.geojson`
 - `GET /api/audit`
+- `GET /api/delivery/outbox` (admin/publisher only; filter with `?status=queued|sending|delivered|failed`)
+- `POST /api/delivery/outbox/:id/claim` (claims a queued job and returns its CAP XML payload; does not transmit externally)
+- `POST /api/delivery/outbox/:id/receipt` (records a delivered/failed receipt for a claimed job)
+- `POST /api/delivery/outbox/:id/retry` (requeues a failed job for controlled retry)
 
 ## Important safety and deployment notes
 
-This repository is an initial development foundation, not a certified or production-ready public warning service. Publishing currently exposes approved alerts through the public JSON endpoint only when their CAP status is `Actual` and scope is `Public`; Test and Exercise messages are excluded. No external CAP distribution, email, SMS, push, or government alert gateway is configured. The dashboard includes an administrator-only account provisioning panel and an advanced JSON editor for multilingual CAP info blocks. MFA and administrator password-reset workflows are still pending; account activation/deactivation is available with last-administrator safeguards.
+This repository is an initial development foundation, not a certified or production-ready public warning service. Publishing currently exposes approved alerts through the public JSON endpoint only when their CAP status is `Actual` and scope is `Public`; Test and Exercise messages are excluded. No external CAP distribution, email, SMS, push, or government alert gateway is configured. Publishing now creates an idempotent `cap_feed` outbox job in the same database transaction as internal publication. Authorized publishers can claim jobs, record delivery receipts, and manually requeue failures. Claiming only exposes the stored CAP XML payload; it never sends data externally. `CAP_DELIVERY_ENABLED` remains false unless explicitly configured, and no transport adapter is implemented. The dashboard includes an administrator-only account provisioning panel and an advanced JSON editor for multilingual CAP info blocks. MFA and administrator password-reset workflows are still pending; account activation/deactivation is available with last-administrator safeguards.
 
 Before operational use, expand the existing official CAP 1.2 XSD check into a complete conformance suite across all CAP message types, profiles, signatures, edge cases, and institutional interoperability scenarios, complete account lifecycle controls (including MFA and secure password recovery), HTTPS, backups, monitoring, security testing, and institution-specific authorization and approval procedures. Keep deployments private until these controls are completed. Use Test/Exercise messages during development, and configure unique non-placeholder `JWT_SECRET` and `ADMIN_PASSWORD` values before startup.
 

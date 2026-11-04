@@ -98,6 +98,19 @@ CREATE INDEX IF NOT EXISTS idx_delivery_alert ON delivery_outbox(alert_id);
  if (!deliveryColumns.includes("dead_letter_at")) db.exec("ALTER TABLE delivery_outbox ADD COLUMN dead_letter_at TEXT");
  migrateLeaseTokenStorage(db);
  initializeWebhookReplayStore(db);
+ db.exec(`
+  CREATE TABLE IF NOT EXISTS webhook_inbox (
+   id INTEGER PRIMARY KEY AUTOINCREMENT,
+   received_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+   source_timestamp INTEGER NOT NULL,
+   signature_hash TEXT NOT NULL,
+   payload_json TEXT NOT NULL,
+   status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','reviewed','rejected')),
+   reviewed_at TEXT,
+   review_note TEXT NOT NULL DEFAULT ''
+  );
+  CREATE INDEX IF NOT EXISTS idx_webhook_inbox_status ON webhook_inbox(status, received_at);
+ `);
  db.exec("CREATE INDEX IF NOT EXISTS idx_delivery_retry_due ON delivery_outbox(status,next_attempt_at,attempts)");
 
 

@@ -6,7 +6,7 @@
 <div class="shell">
  <header><div class="brand"><span class="logo">⚡</span><div><b>METEO CAP</b><small>مركز إدارة التحذيرات الجوية</small></div></div><div id="userBadge" class="muted">نظام مستقل • CAP 1.2</div></header>
  <section id="loginPanel" class="login card"><h1>تسجيل الدخول</h1><p class="muted">الدخول إلى مركز إدارة التحذيرات</p>
-  <form id="loginForm"><label>اسم المستخدم<input name="username" value="admin" required></label><label>كلمة المرور<input name="password" type="password" required></label><button>دخول آمن</button><p id="loginError" class="error"></p></form>
+  <form id="loginForm"><label>اسم المستخدم<input name="username" autocomplete="username" required></label><label>كلمة المرور<input name="password" type="password" required></label><button>دخول آمن</button><p id="loginError" class="error"></p></form>
  </section>
  <main id="appPanel" hidden>
   <div class="welcome"><div><p class="eyebrow">OPERATIONS CENTER</p><h1>مركز التحذيرات الجوية</h1><p class="muted">إدارة دورة حياة التحذير من المسودة حتى النشر.</p></div><button id="logoutBtn" class="secondary">تسجيل الخروج</button></div>
@@ -27,7 +27,9 @@
      <label class="wide">المنطقة المتأثرة<input name="area_desc" placeholder="محافظة / مدينة / منطقة" required></label>
      <label class="wide">الوصف<textarea name="description" rows="3" required></textarea></label>
      <label class="wide">التعليمات<textarea name="instruction" rows="2"></textarea></label>
-     <label class="wide">مضلع CAP (اختياري: lat,lon مفصولة بمسافات)<input name="polygon" placeholder="33.5,36.2 33.7,36.4 33.4,36.6 33.5,36.2"></label>
+     <label class="wide">مضلع CAP (lat,lon مفصولة بمسافات)<input name="polygon" placeholder="33.5,36.2 33.7,36.4 33.4,36.6 33.5,36.2"></label>
+     <label class="wide">دائرة CAP (اختياري: latitude,longitude radiusKm)<input name="circle" placeholder="33.5,36.2 25"></label>
+     <p class="wide muted small">يجب إدخال مضلع مغلق أو دائرة جغرافية واحدة على الأقل حتى يكون عنصر المنطقة صالحاً في CAP 1.2.</p>
      <button class="wide">حفظ كمسودة</button>
     </form>
    </section>

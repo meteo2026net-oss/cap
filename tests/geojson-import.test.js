@@ -34,3 +34,30 @@ test("rejects excessive coordinate counts", () => {
     type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: coords }
   }] }), /100000/);
 });
+
+import { polygonLatLngsToCap, circleToCap } from "../public/geojson-validation.js";
+
+test("limits nested GeometryCollections and clips long feature identifiers", () => {
+  let geometry = { type: "Point", coordinates: [1, 2] };
+  for (let i = 0; i < 10; i++) geometry = { type: "GeometryCollection", geometries: [geometry] };
+  assert.throws(() => validateImportedGeoJSON({ type: "FeatureCollection", features: [{
+    type: "Feature", properties: {}, geometry
+  }] }), /تداخل/);
+  const id = "x".repeat(500);
+  const result = validateImportedGeoJSON({ type: "FeatureCollection", features: [{
+    type: "Feature", id, properties: {}, geometry: { type: "Point", coordinates: [1, 2] }
+  }] });
+  assert.equal(result.features[0].id.length, 128);
+});
+
+test("converts drawn Leaflet polygon points to closed CAP latitude-longitude text", () => {
+  assert.equal(polygonLatLngsToCap([
+    { lat: 33.5, lng: 36.2 }, { lat: 33.6, lng: 36.3 }, { lat: 33.7, lng: 36.4 }
+  ]), "33.500000,36.200000 33.600000,36.300000 33.700000,36.400000 33.500000,36.200000");
+  assert.throws(() => polygonLatLngsToCap([{ lat: 91, lng: 0 }, { lat: 0, lng: 0 }, { lat: 1, lng: 1 }]), /غير صالحة/);
+});
+
+test("converts drawn circle center and radius from meters to CAP kilometers", () => {
+  assert.equal(circleToCap(33.5, 36.2, 12500), "33.500000,36.200000 12.50");
+  assert.throws(() => circleToCap(33.5, 36.2, 0), /غير صالح/);
+});

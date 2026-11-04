@@ -45,3 +45,5 @@ jobs:
           node --check tests/api.integration.test.js
       - run: npm test
       - run: npm run test:cap-schema
+      - name: Build production Docker image
+        run: docker build --pull -t meteo-cap-warning-system:ci .

@@ -65,7 +65,7 @@ The service listens on `127.0.0.1:8095` by default and stores SQLite data in the
 - CAP 1.2 XML export with numeric-offset timestamps, multiple language blocks, multiple categories/response types, multiple affected areas, geocodes, altitude/ceiling, parameters and supplemental resources.
 - Dashboard advanced JSON editor for multilingual information blocks and supplemental resources.
 - Dashboard actions and API support for linked Update and Cancel drafts; derived messages remain in Test status pending independent review.
-- Administrator account activation/deactivation with safeguards against disabling the current administrator or the last active administrator.
+- Administrator account activation/deactivation and role changes with safeguards against disabling/demoting the current or last active administrator; role changes revoke existing sessions.
 - GitHub Actions downloads the official OASIS CAP 1.2 XSD and validates a generated multilingual XML example with xmllint.
 - Public JSON feed for published Public-scope `Actual` alerts, including multilingual `info_blocks`, geometry, references, and CAP metadata.
 - Public JSON and GeoJSON feeds automatically exclude alerts whose CAP `expires` timestamp has passed; alerts without an expiry remain available until administratively superseded or cancelled.
@@ -90,6 +90,7 @@ The service listens on `127.0.0.1:8095` by default and stores SQLite data in the
 - `GET /api/users` (admin only)
 - `POST /api/users` (admin only; provisions admin/forecaster/reviewer/approver/publisher/viewer accounts)
 - `PATCH /api/users/:id/status` (admin only; activates/deactivates an account with last-admin safeguards)
+- `PATCH /api/users/:id/role` (admin only; changes an account role, prevents self/last-admin demotion, and revokes existing sessions)
 - `GET /api/alerts`
 - `GET /api/alerts/:id`
 - `POST /api/alerts`

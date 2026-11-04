@@ -173,6 +173,31 @@ app.post("/api/users",auth,roles("admin"),(req,res)=>{
  }
 });
 
+app.patch("/api/users/:id/role",auth,roles("admin"),(req,res)=>{
+ const id=Number(req.params.id);
+ if(!Number.isSafeInteger(id) || id<1) return res.status(400).json({error:"Invalid user id"});
+ if(id===req.user.id) return res.status(409).json({error:"You cannot change your own role; ask another administrator"});
+ try {
+  const data=z.object({role:z.enum(["admin","forecaster","reviewer","approver","publisher","viewer"])}).parse(req.body);
+  const changeRole=db.transaction(()=>{
+   const target=db.prepare("SELECT id,username,role,active FROM users WHERE id=?").get(id);
+   if(!target) return {kind:"missing"};
+   if(target.role===data.role) return {kind:"unchanged",target};
+   if(target.active && target.role==="admin" && data.role!=="admin") {
+    const activeAdmins=db.prepare("SELECT COUNT(*) AS count FROM users WHERE role='admin' AND active=1").get().count;
+    if(activeAdmins<=1) return {kind:"last_admin"};
+   }
+   db.prepare("UPDATE users SET role=?,token_version=token_version+1 WHERE id=?").run(data.role,id);
+   audit(req.user.id,null,"user_role_changed",`Changed role for ${target.username} from ${target.role} to ${data.role}; existing sessions revoked`);
+   return {kind:"updated",target:{...target,role:data.role}};
+  });
+  const result=changeRole.immediate();
+  if(result.kind==="missing") return res.status(404).json({error:"User not found"});
+  if(result.kind==="last_admin") return res.status(409).json({error:"At least one active administrator must remain"});
+  res.json({ok:true,id,role:result.target.role,changed:result.kind==="updated",sessions_revoked:result.kind==="updated"});
+ } catch(error) { res.status(400).json({error:error.message}); }
+});
+
 app.patch("/api/users/:id/status",auth,roles("admin"),(req,res)=>{
  const active=req.body?.active;
  if(typeof active!=="boolean") return res.status(400).json({error:"active must be a boolean"});

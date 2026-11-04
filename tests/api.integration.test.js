@@ -131,6 +131,29 @@ test("API enforces role separation, public-feed filtering and account deactivati
   await createUser("reviewer1", "reviewer");
   await createUser("publisher1", "publisher");
   const disabledId = await createUser("disabled1", "viewer");
+  const roleChangeId = await createUser("rolechange1", "viewer");
+  const roleChangeOldSession = await login("rolechange1", "Temporary-Password-2026!");
+  const roleChange = await request(`/api/users/${roleChangeId}/role`, {
+    token: admin, method: "PATCH", body: { role: "publisher" }
+  });
+  assert.equal(roleChange.status, 200, "administrator should be able to change a user's role");
+  assert.equal(roleChange.data.role, "publisher");
+  assert.equal(roleChange.data.sessions_revoked, true, "role changes should revoke existing sessions");
+  assert.equal((await request("/api/delivery/outbox", { token: roleChangeOldSession })).status, 401,
+    "a session issued before a role change must be revoked");
+  const roleChangeNewSession = await login("rolechange1", "Temporary-Password-2026!");
+  assert.equal((await request("/api/delivery/outbox", { token: roleChangeNewSession })).status, 200,
+    "the new role should take effect after signing in again");
+  assert.equal((await request("/api/users/not-a-number/role", {
+    token: admin, method: "PATCH", body: { role: "viewer" }
+  })).status, 400, "non-numeric user ids must be rejected");
+  assert.equal((await request(`/api/users/${roleChangeId}/role`, {
+    token: admin, method: "PATCH", body: { role: "unknown" }
+  })).status, 400, "unknown roles must be rejected");
+  assert.equal((await request("/api/users/1/role", {
+    token: admin, method: "PATCH", body: { role: "viewer" }
+  })).status, 409, "an administrator cannot change their own role");
+
 
   const forecaster = await login("forecaster1", "Temporary-Password-2026!");
   const reviewer = await login("reviewer1", "Temporary-Password-2026!");

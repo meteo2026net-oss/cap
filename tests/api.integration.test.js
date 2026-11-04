@@ -113,7 +113,7 @@ test("API enforces role separation, public-feed filtering and account deactivati
   assert.equal((await request("/api/users", { token: forecaster })).status, 403,
     "forecasters must not administer users");
 
-  const createAndPublish = async status => {
+  const createAndPublish = async (status, expires = "") => {
     const created = await request("/api/alerts", {
       token: forecaster, method: "POST",
       body: {
@@ -127,6 +127,7 @@ test("API enforces role separation, public-feed filtering and account deactivati
         severity: "Moderate",
         certainty: "Likely",
         status,
+        expires,
         scope: "Public"
       }
     });
@@ -204,6 +205,14 @@ test("API enforces role separation, public-feed filtering and account deactivati
     "published Actual/Public warning should be visible in the public feed");
   assert.ok(!publicFeed.data.alerts.some(alert => alert.identifier === testIdentifier),
     "published Test warning must not appear in the public feed");
+
+  const expiredIdentifier = await createAndPublish("Actual", "2020-01-01T00:00:00Z");
+  const feedAfterExpiry = await request("/api/public/alerts");
+  assert.ok(!feedAfterExpiry.data.alerts.some(alert => alert.identifier === expiredIdentifier),
+    "expired Actual/Public warnings must be excluded from the public JSON feed");
+  const geoAfterExpiry = await request("/api/public/alerts.geojson");
+  assert.ok(!geoAfterExpiry.data.features.some(feature => feature.properties?.identifier === expiredIdentifier),
+    "expired Actual/Public warnings must be excluded from the public GeoJSON feed");
 
   assert.equal((await request(`/api/users/${disabledId}/status`, {
     token: admin, method: "PATCH", body: { active: false }

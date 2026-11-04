@@ -247,7 +247,7 @@ app.post("/api/delivery/outbox/:id/claim",auth,roles("admin","publisher"),(req,r
  const delivery=claimDelivery(db,deliveryId);
  if(!delivery) return res.status(409).json({error:"Delivery is not queued or has already been claimed"});
  audit(req.user.id,delivery.alert_id,"delivery_claimed",`Claimed outbox entry ${delivery.id}; no external transmission is performed by this endpoint`);
- res.json({delivery:{id:delivery.id,alert_id:delivery.alert_id,channel:delivery.channel,status:delivery.status,attempts:delivery.attempts,payload:delivery.payload},external_adapters_enabled:process.env.CAP_DELIVERY_ENABLED==="true"});
+ res.json({delivery:{id:delivery.id,alert_id:delivery.alert_id,channel:delivery.channel,status:delivery.status,attempts:delivery.attempts,payload:delivery.payload},external_adapters_enabled:false});
 });
 app.post("/api/delivery/outbox/:id/receipt",auth,roles("admin","publisher"),(req,res)=>{
  const deliveryId=Number(req.params.id);

@@ -56,7 +56,7 @@ export function recordDeliveryReceipt(database, id, { status, leaseToken, extern
 export function retryDelivery(database, id) {
   const result = database.prepare(
     `UPDATE delivery_outbox
-       SET status='queued', last_error='', next_attempt_at=NULL, updated_at=CURRENT_TIMESTAMP
+       SET status='queued', lease_token=NULL, last_error='', next_attempt_at=NULL, updated_at=CURRENT_TIMESTAMP
      WHERE id=? AND status='failed' AND dead_letter_at IS NULL AND attempts < max_attempts`
   ).run(id);
   if (!result.changes) return null;

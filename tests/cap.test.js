@@ -37,7 +37,7 @@ test("validates circle coordinates and positive radius", () => {
 
 test("rejects invalid dates and expiry before onset", () => {
   assert.throws(() => validateAlert({ ...valid, onset: "not-a-date" }), /Invalid date/);
-  assert.throws(() => validateAlert({ ...valid, onset: "2026-11-05T00:00:00Z", expires: "2026-11-04T00:00:00Z" }), /Expiry/);
+  assert.throws(() => validateAlert({ ...valid, onset: "2026-11-05T00:00:00Z", expires: "2026-11-04T00:00:00Z" }), /expiry/i);
 });
 
 

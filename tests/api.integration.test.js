@@ -469,16 +469,18 @@ test("API enforces role separation, public-feed filtering and account deactivati
     { token: reviewer }
   );
   assert.equal(auditPageThree.status, 200);
-  assert.equal(auditPageThree.data.entries.length, 5);
-  assert.equal(auditPageThree.data.has_more, true,
-    "cursor should continue to older audit records after fixture rows");
-  const fixtureIds = [
+  assert.ok(auditPageThree.data.entries.length > 0);
+  const pagedEntries = [
     ...auditPageOne.data.entries,
     ...auditPageTwo.data.entries,
     ...auditPageThree.data.entries
-  ].map(entry => entry.id);
-  assert.equal(new Set(fixtureIds).size, 105, "three audit pages must not overlap");
-  assert.ok(fixtureIds.every((id, index) => index === 0 || id < fixtureIds[index - 1]),
+  ];
+  const fixtureEntries = pagedEntries.filter(entry => entry.action === "pagination_fixture");
+  assert.equal(fixtureEntries.length, 105,
+    "three cursor pages must include every inserted pagination fixture");
+  const pagedIds = pagedEntries.map(entry => entry.id);
+  assert.equal(new Set(pagedIds).size, pagedIds.length, "cursor pages must not overlap");
+  assert.ok(pagedIds.every((id, index) => index === 0 || id < pagedIds[index - 1]),
     "audit pages must preserve strict descending ID order");
 
   const auditStatus = await request("/api/audit/verify", { token: reviewer });

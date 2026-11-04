@@ -27,7 +27,8 @@ app.use(helmet({ contentSecurityPolicy: false }));
 const origins = (process.env.CORS_ORIGINS || "").split(",").map(s=>s.trim()).filter(Boolean);
 app.use(cors({ origin: origins.length ? origins : false }));
 app.use(express.json({ limit: "1mb" }));
-app.use("/api/auth", rateLimit({ windowMs: 15*60*1000, limit: 30 }));
+app.use("/api", rateLimit({ windowMs: 15*60*1000, limit: 300, standardHeaders: true, legacyHeaders: false }));
+app.use("/api/auth", rateLimit({ windowMs: 15*60*1000, limit: 30, standardHeaders: true, legacyHeaders: false }));
 app.use(express.static("public"));
 
 const areaSchema = z.object({

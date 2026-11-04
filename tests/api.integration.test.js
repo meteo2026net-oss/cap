@@ -162,6 +162,7 @@ test("API enforces role separation, public-feed filtering and account deactivati
     "forecasters must not access the delivery outbox");
   const outbox = await request("/api/delivery/outbox", { token: publisher });
   assert.equal(outbox.status, 200);
+  assert.equal(outbox.data.external_adapters_enabled, false, "external delivery must remain disabled without a real adapter");
   const queuedDelivery = outbox.data.deliveries.find(item => item.alert_id === actualRow.id && item.channel === "cap_feed");
   assert.ok(queuedDelivery, "publishing must atomically enqueue an internal CAP feed delivery");
   assert.equal(queuedDelivery.status, "queued");
@@ -170,6 +171,7 @@ test("API enforces role separation, public-feed filtering and account deactivati
   });
   assert.equal(claimedDelivery.status, 200);
   assert.equal(claimedDelivery.data.delivery.status, "sending");
+  assert.equal(claimedDelivery.data.external_adapters_enabled, false);
   assert.match(claimedDelivery.data.delivery.payload, /<alert xmlns=/);
   const failedReceipt = await request(`/api/delivery/outbox/${queuedDelivery.id}/receipt`, {
     token: publisher, method: "POST", body: { status: "failed", details: "Synthetic test failure" }

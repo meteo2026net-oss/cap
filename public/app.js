@@ -1,12 +1,13 @@
 let token = "";
+let currentRole = "";
 const $ = s => document.querySelector(s);
 const loginPanel=$("#loginPanel"), appPanel=$("#appPanel");
 function headers(){return {"Content-Type":"application/json","Authorization":`Bearer ${token}`}}
 async function api(url,opts={}){const r=await fetch(url,{...opts,headers:{...headers(),...(opts.headers||{})}});const data=await r.json().catch(()=>({}));if(!r.ok)throw new Error(data.error||"Request failed");return data}
 function showApp(on){loginPanel.hidden=on;appPanel.hidden=!on}
-$("#loginForm").addEventListener("submit",async e=>{e.preventDefault();const f=new FormData(e.target);try{const d=await fetch("/api/auth/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(Object.fromEntries(f))}).then(r=>r.json());if(!d.token)throw new Error(d.error||"تعذر تسجيل الدخول");token=d.token;$("#userBadge").textContent=`${d.user.username} • ${d.user.role}`;$("#userAdmin").hidden=d.user.role!=="admin";const canVerifyAudit=["admin","reviewer","approver"].includes(d.user.role);$("#auditIntegrity").hidden=!canVerifyAudit;showApp(true);await loadAlerts();initWarningMap();await refreshWarningMap();if(d.user.role==="admin")await loadUsers();if(canVerifyAudit)await loadAuditIntegrity()}catch(err){$("#loginError").textContent=err.message}});
+$("#loginForm").addEventListener("submit",async e=>{e.preventDefault();const f=new FormData(e.target);try{const d=await fetch("/api/auth/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(Object.fromEntries(f))}).then(r=>r.json());if(!d.token)throw new Error(d.error||"تعذر تسجيل الدخول");token=d.token;currentRole=d.user.role;$("#userBadge").textContent=`${d.user.username} • ${d.user.role}`;$("#deliveryMonitor").hidden=!["admin","publisher"].includes(currentRole);$("#userAdmin").hidden=d.user.role!=="admin";const canVerifyAudit=["admin","reviewer","approver"].includes(d.user.role);$("#auditIntegrity").hidden=!canVerifyAudit;showApp(true);await loadAlerts();initWarningMap();await refreshWarningMap();if(d.user.role==="admin")await loadUsers();if(canVerifyAudit)await loadAuditIntegrity();if(["admin","publisher"].includes(currentRole))await loadDeliveryOutbox()}catch(err){$("#loginError").textContent=err.message}});
 let warningMap=null, publishedGeoLayer=null, importedGeoLayer=null, drawnGeoLayer=null, drawControl=null;
-$("#logoutBtn").onclick=()=>{token="";showApp(false);$("#userAdmin").hidden=true;$("#auditIntegrity").hidden=true};
+$("#logoutBtn").onclick=()=>{token="";currentRole="";showApp(false);$("#userAdmin").hidden=true;$("#auditIntegrity").hidden=true;$("#deliveryMonitor").hidden=true};
 $("#passwordForm").addEventListener("submit",async e=>{
  e.preventDefault();
  const form=e.currentTarget, data=Object.fromEntries(new FormData(form));
@@ -155,3 +156,33 @@ function esc(s=""){return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt
 async function downloadXml(id){try{const r=await fetch(`/api/alerts/${id}/cap.xml`,{headers:headers()});if(!r.ok)throw new Error("تعذر إنشاء XML");const blob=await r.blob(),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download=`cap-alert-${id}.xml`;a.click();URL.revokeObjectURL(url)}catch(e){alert(e.message)}}
 window.act=act;window.derive=derive;window.toggleUser=toggleUser;window.downloadXml=downloadXml;
 showApp(false);
+
+async function loadDeliveryOutbox(){
+ const status=$("#deliveryStatus"),list=$("#deliveryList");
+ try{
+  const result=await api("/api/delivery/outbox");
+  const rows=result.deliveries||[];
+  const counts={queued:0,sending:0,failed:0,dead_letter:0};
+  rows.forEach(row=>{if(Object.hasOwn(counts,row.status))counts[row.status]++});
+  $("#deliveryQueued").textContent=counts.queued;
+  $("#deliverySending").textContent=counts.sending;
+  $("#deliveryFailed").textContent=counts.failed;
+  $("#deliveryDead").textContent=counts.dead_letter;
+  list.innerHTML=rows.map(row=>{
+   const label={queued:"بانتظار المعالجة",sending:"قيد المعالجة",delivered:"تم التسليم المسجل",failed:"فشل - بانتظار المحاولة",dead_letter:"معزولة نهائياً"}[row.status]||row.status;
+   const next=row.next_attempt_at?" • المحاولة التالية: "+esc(row.next_attempt_at):"";
+   const error=row.last_error?'<p class="small error">'+esc(row.last_error)+'</p>':"";
+   return '<article class="alertItem"><b>'+esc(row.headline||row.identifier||("مهمة #"+row.id))+'</b><div class="alertMeta"><span class="pill">'+esc(label)+'</span><span>القناة: '+esc(row.channel)+'</span><span>المحاولات: '+row.attempts+'/'+row.max_attempts+'</span><span>المعرف: #'+row.id+'</span>'+next+'</div>'+error+'</article>';
+  }).join("")||'<p class="muted">قائمة التوزيع فارغة.</p>';
+  status.textContent="تم تحديث "+rows.length+" مهمة. الموصلات الخارجية: "+(result.external_adapters_enabled?"مفعّلة":"معطّلة");
+ }catch(error){status.textContent=error.message}
+}
+$("#deliveryRefreshBtn")?.addEventListener("click",loadDeliveryOutbox);
+$("#deliveryProcessBtn")?.addEventListener("click",async()=>{
+ const status=$("#deliveryStatus");
+ try{
+  const result=await api("/api/delivery/process-retries",{method:"POST",body:"{}"});
+  status.textContent="اكتملت المعالجة: "+result.requeued_count+" أعيدت إلى الانتظار، و"+result.dead_lettered_count+" عُزلت نهائياً.";
+  await loadDeliveryOutbox();
+ }catch(error){status.textContent=error.message}
+});

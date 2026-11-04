@@ -4,9 +4,9 @@ const loginPanel=$("#loginPanel"), appPanel=$("#appPanel");
 function headers(){return {"Content-Type":"application/json","Authorization":`Bearer ${token}`}}
 async function api(url,opts={}){const r=await fetch(url,{...opts,headers:{...headers(),...(opts.headers||{})}});const data=await r.json().catch(()=>({}));if(!r.ok)throw new Error(data.error||"Request failed");return data}
 function showApp(on){loginPanel.hidden=on;appPanel.hidden=!on}
-$("#loginForm").addEventListener("submit",async e=>{e.preventDefault();const f=new FormData(e.target);try{const d=await fetch("/api/auth/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(Object.fromEntries(f))}).then(r=>r.json());if(!d.token)throw new Error(d.error||"تعذر تسجيل الدخول");token=d.token;$("#userBadge").textContent=`${d.user.username} • ${d.user.role}`;$("#userAdmin").hidden=d.user.role!=="admin";showApp(true);await loadAlerts();initWarningMap();await refreshWarningMap();if(d.user.role==="admin")await loadUsers()}catch(err){$("#loginError").textContent=err.message}});
+$("#loginForm").addEventListener("submit",async e=>{e.preventDefault();const f=new FormData(e.target);try{const d=await fetch("/api/auth/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(Object.fromEntries(f))}).then(r=>r.json());if(!d.token)throw new Error(d.error||"تعذر تسجيل الدخول");token=d.token;$("#userBadge").textContent=`${d.user.username} • ${d.user.role}`;$("#userAdmin").hidden=d.user.role!=="admin";const canVerifyAudit=["admin","reviewer","approver"].includes(d.user.role);$("#auditIntegrity").hidden=!canVerifyAudit;showApp(true);await loadAlerts();initWarningMap();await refreshWarningMap();if(d.user.role==="admin")await loadUsers();if(canVerifyAudit)await loadAuditIntegrity()}catch(err){$("#loginError").textContent=err.message}});
 let warningMap=null, publishedGeoLayer=null, importedGeoLayer=null, drawnGeoLayer=null, drawControl=null;
-$("#logoutBtn").onclick=()=>{token="";showApp(false);$("#userAdmin").hidden=true};
+$("#logoutBtn").onclick=()=>{token="";showApp(false);$("#userAdmin").hidden=true;$("#auditIntegrity").hidden=true};
 function initWarningMap(){
  if(warningMap||!window.L)return;
  warningMap=L.map("warningMap").setView([34.8,38.5],5);
@@ -116,6 +116,22 @@ $("#exportGeoBtn")?.addEventListener("click",async()=>{
 $("#refreshBtn").onclick=loadAlerts;
 $("#userForm").addEventListener("submit",async e=>{e.preventDefault();const data=Object.fromEntries(new FormData(e.target));try{await api("/api/users",{method:"POST",body:JSON.stringify(data)});e.target.reset();await loadUsers();alert("تم إنشاء الحساب بنجاح.")}catch(err){alert(err.message)}});
 async function toggleUser(id,active){const action=active?'تفعيل':'إيقاف';if(!confirm('هل تريد '+action+' هذا الحساب؟'))return;try{await api('/api/users/'+id+'/status',{method:'PATCH',body:JSON.stringify({active:!!active})});await loadUsers()}catch(e){alert(e.message)}}
+async function loadAuditIntegrity(){
+ try{
+  const data=await api("/api/audit/verify");
+  const status=$("#auditStatus");
+  status.className=data.valid?"pill":"pill red";
+  if(!data.valid)status.textContent="تحذير: اكتُشف خلل في سلسلة سجل التدقيق.";
+  else if(data.legacy_unhashed_entries)status.textContent="سلسلة السجلات الجديدة سليمة، مع وجود سجلات تاريخية غير مجزأة.";
+  else status.textContent="سلسلة سجل التدقيق سليمة.";
+  $("#auditMeta").textContent="سجلات تم التحقق منها: "+data.verified_entries+" • سجلات تاريخية غير مجزأة: "+data.legacy_unhashed_entries+(data.first_invalid_id?" • أول سجل متأثر: "+data.first_invalid_id:"");
+ }catch(error){
+  $("#auditStatus").className="pill red";
+  $("#auditStatus").textContent="تعذر التحقق من سجل التدقيق.";
+  $("#auditMeta").textContent=error.message;
+ }
+}
+$("#auditRefreshBtn")?.addEventListener("click",loadAuditIntegrity);
 async function loadUsers(){try{const {users}=await api("/api/users");$("#usersList").innerHTML=users.map(u=>`<article class="alertItem"><b>${esc(u.username)}</b><div class="alertMeta"><span class="pill">${esc(u.role)}</span><span>${u.active?"نشط":"موقوف"}</span></div><button class="secondary" onclick="toggleUser(${u.id},${u.active?0:1})">${u.active?"إيقاف الحساب":"إعادة تفعيل الحساب"}</button></article>`).join("")||'<p class="muted">لا توجد حسابات.</p>'}catch(e){$("#usersList").textContent=e.message}}
 $("#alertForm").addEventListener("submit",async e=>{e.preventDefault();const obj=Object.fromEntries(new FormData(e.target));const jsonBlocks=obj.info_blocks_json?.trim();delete obj.info_blocks_json;if(jsonBlocks){try{obj.info_blocks=JSON.parse(jsonBlocks)}catch{alert("صيغة JSON غير صحيحة في كتل اللغات المتعددة.");return}}const hasInfoArea=obj.info_blocks?.some(b=>b.area||b.areas?.length);if(!obj.polygon?.trim()&&!obj.circle?.trim()&&!hasInfoArea){alert("أدخل مضلعاً أو دائرة أو منطقة جغرافية ضمن كتل المعلومات.");return}for(const k of ["onset","expires"])if(obj[k])obj[k]=new Date(obj[k]).toISOString();else obj[k]="";try{const d=await api("/api/alerts",{method:"POST",body:JSON.stringify(obj)});e.target.reset();alert(`تم حفظ المسودة: ${d.identifier}`);await loadAlerts()}catch(err){alert(err.message)}});
 async function act(id,action){try{await api(`/api/alerts/${id}/${action}`,{method:"POST",body:"{}"});await loadAlerts()}catch(e){alert(e.message)}}

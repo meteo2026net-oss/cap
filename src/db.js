@@ -64,7 +64,8 @@ CREATE INDEX IF NOT EXISTS idx_alert_sent ON alerts(sent);
 
 export function ensureAdmin() {
  const username = process.env.ADMIN_USERNAME || "admin";
- const password = process.env.ADMIN_PASSWORD || "ChangeThisImmediately!123";
+ const password = process.env.ADMIN_PASSWORD;
+ if (!password || password.length < 14) throw new Error("ADMIN_PASSWORD must be configured with at least 14 characters.");
  const existing = db.prepare("SELECT id FROM users WHERE username=?").get(username);
  if (!existing) {
    const hash = bcrypt.hashSync(password, 12);

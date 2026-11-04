@@ -1,6 +1,7 @@
 import Database from "better-sqlite3";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { randomUUID } from "node:crypto";
 import { verifyAuditChain } from "./audit.js";
 
 function timestampSlug(date) {
@@ -33,7 +34,7 @@ async function validateDatabaseFile(filePath) {
 
 export async function createDatabaseBackup(database, directory, { now = new Date() } = {}) {
   await fs.mkdir(directory, { recursive: true });
-  const destination = path.join(directory, `cap-${timestampSlug(now)}.sqlite`);
+  const destination = path.join(directory, `cap-${timestampSlug(now)}-${randomUUID()}.sqlite`);
   try {
     await database.backup(destination);
     await fs.chmod(destination, 0o600);
@@ -60,7 +61,7 @@ export async function pruneDatabaseBackups(directory, { retentionDays = 30, now 
   const cutoff = now.getTime() - retentionDays * 24 * 60 * 60 * 1000;
   const removed = [];
   for (const name of names) {
-    if (!/^cap-\d{8}T\d{6}(?:\d{3})?Z\.sqlite$/.test(name)) continue;
+    if (!/^cap-\d{8}T\d{6}(?:\d{3})?Z(?:-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?\.sqlite$/.test(name)) continue;
     const filePath = path.join(directory, name);
     const stat = await fs.stat(filePath);
     if (stat.isFile() && stat.mtimeMs < cutoff) {

@@ -39,6 +39,11 @@ test("SQLite backup is consistent and can be restored with hash-chain validation
       now: new Date("2026-11-04T12:30:00.500Z")
     });
     assert.notEqual(backup, sameSecondBackup, "backups created within the same second must not collide");
+    const sameMillisecondBackup = await createDatabaseBackup(database, path.join(directory, "backups"), {
+      now: new Date("2026-11-04T12:30:00.000Z")
+    });
+    assert.notEqual(backup, sameMillisecondBackup,
+      "backups created at the exact same millisecond must have unique filenames");
 
     const result = await restoreDatabaseBackup(backup, restored);
     assert.equal(result.target, restored);

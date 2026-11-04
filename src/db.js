@@ -90,6 +90,13 @@ CREATE INDEX IF NOT EXISTS idx_delivery_alert ON delivery_outbox(alert_id);
  const userColumns = db.prepare("PRAGMA table_info(users)").all().map(column => column.name);
  if (!userColumns.includes("token_version")) db.exec("ALTER TABLE users ADD COLUMN token_version INTEGER NOT NULL DEFAULT 0");
 
+ const deliveryColumns = db.prepare("PRAGMA table_info(delivery_outbox)").all().map(column => column.name);
+ if (!deliveryColumns.includes("max_attempts")) db.exec("ALTER TABLE delivery_outbox ADD COLUMN max_attempts INTEGER NOT NULL DEFAULT 5 CHECK(max_attempts BETWEEN 1 AND 20)");
+ if (!deliveryColumns.includes("next_attempt_at")) db.exec("ALTER TABLE delivery_outbox ADD COLUMN next_attempt_at TEXT");
+ if (!deliveryColumns.includes("dead_letter_at")) db.exec("ALTER TABLE delivery_outbox ADD COLUMN dead_letter_at TEXT");
+ db.exec("CREATE INDEX IF NOT EXISTS idx_delivery_retry_due ON delivery_outbox(status,next_attempt_at,attempts)");
+
+
  const auditColumns = db.prepare("PRAGMA table_info(audit_log)").all().map(column => column.name);
  if (!auditColumns.includes("previous_hash")) db.exec("ALTER TABLE audit_log ADD COLUMN previous_hash TEXT");
  if (!auditColumns.includes("entry_hash")) db.exec("ALTER TABLE audit_log ADD COLUMN entry_hash TEXT");

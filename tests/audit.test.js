@@ -113,6 +113,7 @@ test("audit verification flags unhashed records appended after hash-chain activa
     installAuditLogGuards(database);
     appendAuditLog(database, { action: "first_hashed_event" });
     database.exec("DROP TRIGGER audit_log_no_update");
+    database.exec("DROP TRIGGER audit_log_no_unhashed_tail");
     database.prepare("INSERT INTO audit_log(action,created_at) VALUES ('unhashed_tail','2026-11-04T12:00:00.000Z')").run();
 
     const result = verifyAuditChain(database);

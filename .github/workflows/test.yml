@@ -51,3 +51,20 @@ jobs:
       - run: npm run test:cap-schema
       - name: Build production Docker image
         run: docker build --pull -t meteo-cap-warning-system:ci .
+      - name: Smoke test Docker container
+        run: |
+          docker run -d --name cap-smoke -p 127.0.0.1:18095:8095 \
+            -e JWT_SECRET=ci-smoke-test-secret-at-least-32-characters-long \
+            -e ADMIN_PASSWORD=CI-Smoke-Test-Admin-Password-2026 \
+            meteo-cap-warning-system:ci
+          trap 'docker logs cap-smoke || true; docker rm -f cap-smoke || true' EXIT
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:18095/api/health; then
+              echo "Container health endpoint passed."
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Container did not become healthy."
+          docker logs cap-smoke
+          exit 1

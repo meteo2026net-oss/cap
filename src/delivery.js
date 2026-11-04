@@ -39,7 +39,7 @@ export function claimDelivery(database, id) {
 
 export function recordDeliveryReceipt(database, id, { status, leaseToken, externalId = "", details = "" }) {
   if (!["delivered", "failed"].includes(status)) throw new TypeError("Receipt status must be delivered or failed");
-  if (typeof leaseToken !== "string" || !/^[0-9a-f-]{36}$/i.test(leaseToken)) throw new TypeError("A valid delivery lease token is required");
+  if (typeof leaseToken !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(leaseToken)) throw new TypeError("A valid delivery lease token is required");
   if (typeof externalId !== "string" || externalId.length > 256) throw new TypeError("externalId is too long");
   if (typeof details !== "string" || details.length > 2000) throw new TypeError("Receipt details are too long");
   const row = database.prepare("SELECT attempts,max_attempts,lease_token_hash FROM delivery_outbox WHERE id=? AND status='sending'").get(id);

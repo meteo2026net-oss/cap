@@ -20,6 +20,10 @@ npm start
 
 Open http://localhost:8095. The interactive map uses Leaflet, OpenStreetMap tiles, and internet access; map tiles are provided by OpenStreetMap's public tile service.
 
+## Audit integrity
+
+New audit entries are linked with SHA-256 hashes. Administrators, reviewers, and approvers can check the chain through the authenticated `GET /api/audit/verify` endpoint. Existing audit entries from before this migration are preserved and reported separately as legacy unhashed entries. A local hash chain detects accidental or partial tampering; it is not a substitute for externally anchored signatures or immutable off-host storage.
+
 ## Docker deployment
 
 Requirements: Docker Engine with the Compose plugin.

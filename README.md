@@ -28,7 +28,8 @@ Open http://localhost:8095.
 - Draft -> pending review -> approved -> internal publication workflow with independent creator/reviewer/publisher separation.
 - CAP 1.2 XML export with numeric-offset timestamps, multiple language blocks, multiple categories/response types, multiple affected areas, geocodes, altitude/ceiling, parameters and supplemental resources.
 - Dashboard advanced JSON editor for multilingual information blocks and supplemental resources.
-- API support for linked Update and Cancel drafts; derived messages remain in Test status pending independent review.
+- Dashboard actions and API support for linked Update and Cancel drafts; derived messages remain in Test status pending independent review.
+- Administrator account activation/deactivation with safeguards against disabling the current administrator or the last active administrator.
 - GitHub Actions downloads the official OASIS CAP 1.2 XSD and validates a generated multilingual XML example with xmllint.
 - Public JSON feed for published Public-scope `Actual` alerts, including multilingual `info_blocks`, geometry, references, and CAP metadata.
 - Basic audit trail.
@@ -44,6 +45,7 @@ Open http://localhost:8095.
 - `POST /api/auth/change-password`
 - `GET /api/users` (admin only)
 - `POST /api/users` (admin only; provisions admin/forecaster/reviewer/approver/publisher/viewer accounts)
+- `PATCH /api/users/:id/status` (admin only; activates/deactivates an account with last-admin safeguards)
 - `GET /api/alerts`
 - `GET /api/alerts/:id`
 - `POST /api/alerts`

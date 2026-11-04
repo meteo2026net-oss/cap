@@ -6,7 +6,7 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/*
 
 COPY package.json ./
-RUN npm install --omit=dev
+RUN npm install --omit=dev --no-audit --no-fund
 
 FROM node:24-bookworm-slim AS runtime
 WORKDIR /app

@@ -7,7 +7,7 @@ const valid = {
   sent: "2026-11-04T00:00:00.000Z", status: "Test", msg_type: "Alert", scope: "Public",
   event: "Heavy rainfall", category: "Met", urgency: "Expected", severity: "Moderate",
   certainty: "Likely", headline: "Heavy rain warning", description: "Heavy rain is possible.",
-  area_desc: "Test district", language: "en-GB"
+  area_desc: "Test district", circle: "51.5,-0.1 10", language: "en-GB"
 };
 
 test("creates unique CAP identifiers", () => {

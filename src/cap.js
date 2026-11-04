@@ -125,7 +125,7 @@ export function validateAlert(input) {
     expires: input.expires, headline: input.headline, description: input.description,
     instruction: input.instruction, response_type: input.response_type,
     area: { areaDesc: input.area_desc, polygon: input.polygon, circle: input.circle }
-  }];
+  }]);
   if (input.msg_type === "Alert" && !blocks.length) throw new Error("CAP Alert messages require at least one info block.");
   if (input.msg_type !== "Cancel" && input.msg_type !== "Ack" && input.msg_type !== "Error" && !blocks.length) throw new Error("This CAP message type requires an info block.");
   blocks.forEach(normalizeInfo);

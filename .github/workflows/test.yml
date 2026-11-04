@@ -35,6 +35,7 @@ jobs:
       - name: Check JavaScript syntax
         run: |
           node --check scripts/setup-local.mjs
+          node --check src/delivery-worker.js
           node --check src/server.js
           node --check src/db.js
           node --check src/cap.js

@@ -2,6 +2,12 @@ import fs from "node:fs";
 import path from "node:path";
 import { randomBytes } from "node:crypto";
 
+const nodeMajor = Number(process.versions.node.split(".")[0]);
+if (nodeMajor < 20) {
+  console.error(`Node.js 20 or newer is required. Detected: ${process.version}`);
+  process.exit(1);
+}
+
 const root = process.cwd();
 const envPath = path.join(root, ".env");
 const examplePath = path.join(root, ".env.example");

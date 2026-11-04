@@ -15,10 +15,11 @@ async function tick() {
   try {
     const recovered = recoverStaleDeliveries(db, 10);
     const retries = processDueRetries(db);
-    if (recovered.length || retries.requeued.length || retries.deadLettered.length) {
+    if (recovered.recovered.length || recovered.deadLettered.length || retries.requeued.length || retries.deadLettered.length) {
       console.log(JSON.stringify({
         event: "delivery_queue_maintenance",
-        recovered_stale: recovered.length,
+        recovered_stale: recovered.recovered.length,
+        stale_dead_lettered: recovered.deadLettered.length,
         auto_requeued: retries.requeued.length,
         dead_lettered: retries.deadLettered.length,
         external_adapters_enabled: false

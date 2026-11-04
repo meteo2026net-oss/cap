@@ -33,3 +33,11 @@
 - GitHub Actions downloads the official OASIS CAP 1.2 XSD and runs xmllint against a multilingual sample; the result must be checked in the Actions run before treating it as passed.
 - Automated tests cover CAP validation/XML, official CAP 1.2 XSD validation, GeoJSON conversion, audit immutability and end-to-end API role/workflow/public-feed behavior. The latest observed GitHub Actions run completed successfully; syntax checks for server, browser, and test scripts are now included in CI.
 - This remains a development foundation. Do not use it as an operational public-warning authority until formal CAP conformance, security, institutional, and end-to-end distribution testing are complete.
+
+
+## Delivery operations and security helpers
+- The Arabic operations dashboard exposes the protected internal outbox to administrators and publishers, including queued, sending, failed, and dead-letter counts. The dead-letter filter is available through `GET /api/delivery/outbox?status=dead_letter`.
+- Retry scheduling uses exponential delays beginning at 30 seconds and capped at one hour. Each job has a maximum-attempt count (default 5, permitted range 1–20); exhausted jobs are retained with a `dead_letter_at` timestamp and excluded from automatic retry.
+- The optional `src/delivery-worker.js` process recovers stale sending leases and processes due retries. It does not claim jobs, open network connections, or transmit alerts.
+- `src/webhook-signature.js` provides HMAC-SHA256 signing and verification for timestamped raw webhook bodies, with constant-time signature comparison and a bounded replay window. It is a cryptographic helper only: no webhook sender, receiver, secret storage, or external adapter is enabled.
+- Both direct Node.js and Docker Compose installations support the optional maintenance worker. Docker uses the shared persistent SQLite volume; direct mode uses the local `storage/cap.sqlite` file.

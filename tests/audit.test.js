@@ -6,7 +6,7 @@ import { appendAuditLog, installAuditLogGuards, verifyAuditChain } from "../src/
 test("audit log records cannot be updated or deleted", () => {
   const database = new Database(":memory:");
   try {
-    database.exec("CREATE TABLE audit_log (id INTEGER PRIMARY KEY, action TEXT NOT NULL)");
+    database.exec("CREATE TABLE audit_log (id INTEGER PRIMARY KEY, action TEXT NOT NULL, entry_hash TEXT, previous_hash TEXT)");
     installAuditLogGuards(database);
     database.prepare("INSERT INTO audit_log(action) VALUES (?)").run("created");
     assert.throws(() => database.prepare("UPDATE audit_log SET action=? WHERE id=1").run("rewritten"), /append-only/);
@@ -52,6 +52,7 @@ test("audit hash chain verifies append order and detects modified entries", () =
     assert.equal(verified.legacy_unhashed_entries, 0);
 
     database.exec("DROP TRIGGER audit_log_no_update");
+    database.exec("DROP TRIGGER audit_log_no_unhashed_tail");
     database.prepare("UPDATE audit_log SET details=? WHERE id=?").run("tampered", first.id);
 
     const tampered = verifyAuditChain(database);
@@ -121,4 +122,16 @@ test("audit verification flags unhashed records appended after hash-chain activa
   } finally {
     database.close();
   }
+});
+
+
+test("audit log rejects unhashed inserts after hash-chain activation", () => {
+  const database = new Database(":memory:");
+  try {
+    database.exec("CREATE TABLE audit_log (id INTEGER PRIMARY KEY,user_id INTEGER,alert_id INTEGER,action TEXT NOT NULL,details TEXT,created_at TEXT NOT NULL,previous_hash TEXT,entry_hash TEXT)");
+    installAuditLogGuards(database);
+    appendAuditLog(database, { action: "chain_started" });
+    assert.throws(() => database.prepare("INSERT INTO audit_log(action,created_at) VALUES ('unhashed_tail','2026-11-04T12:00:00.000Z')").run(), /cannot accept unhashed entries/);
+    assert.equal(verifyAuditChain(database).valid, true);
+  } finally { database.close(); }
 });

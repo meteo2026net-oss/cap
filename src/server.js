@@ -10,6 +10,7 @@ import { db, ensureAdmin } from "./db.js";
 import { buildCapXml, makeIdentifier, validateAlert } from "./cap.js";
 import { alertsToGeoJSON } from "./geojson.js";
 import { appendAuditLog, verifyAuditChain } from "./audit.js";
+import { enqueueDelivery, claimDelivery, recordDeliveryReceipt, retryDelivery } from "./delivery.js";
 
 const app = express();
 const port = Number(process.env.PORT || 8095);
@@ -216,10 +217,45 @@ app.post("/api/alerts/:id/publish",auth,roles("admin","publisher"),(req,res)=>{
  if(a.workflow!=="approved") return res.status(409).json({error:"Approval is required before publishing"});
  if(a.approved_by===req.user.id) return res.status(403).json({error:"The approving user cannot publish the same warning; a separate publisher is required."});
  const publishedStatus = a.status;
- db.prepare("UPDATE alerts SET workflow='published',status=?,published_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(publishedStatus,a.id);
- audit(req.user.id,a.id,"published","Published to internal CAP feed");
- res.json({ok:true,workflow:"published",note:"Internal publication only; external distribution connectors are not configured."});
+ const delivery = db.transaction(() => {
+  db.prepare("UPDATE alerts SET workflow='published',status=?,published_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(publishedStatus,a.id);
+  const published = db.prepare("SELECT * FROM alerts WHERE id=?").get(a.id);
+  return enqueueDelivery(db,{alertId:a.id,channel:"cap_feed",payload:buildCapXml(rowToCap(published))});
+ })();
+ audit(req.user.id,a.id,"published","Published to internal CAP feed; distribution outbox entry "+delivery.id+" queued");
+ res.json({ok:true,workflow:"published",delivery:{id:delivery.id,status:delivery.status,channel:delivery.channel},note:"Internal publication only. External delivery adapters remain disabled; the outbox entry is queued for controlled processing."});
 });
+app.get("/api/delivery/outbox",auth,roles("admin","publisher"),(req,res)=>{
+ const status=req.query.status;
+ if(status!==undefined && !["queued","sending","delivered","failed"].includes(status)) return res.status(400).json({error:"Invalid delivery status filter"});
+ const rows=db.prepare(`SELECT d.id,d.alert_id,d.channel,d.status,d.attempts,d.external_id,d.last_error,d.created_at,d.updated_at,d.last_attempt_at,d.delivered_at,a.identifier,a.headline
+  FROM delivery_outbox d JOIN alerts a ON a.id=d.alert_id
+  WHERE (? IS NULL OR d.status=?) ORDER BY d.created_at DESC LIMIT 500`).all(status ?? null,status ?? null);
+ res.json({deliveries:rows,external_adapters_enabled:process.env.CAP_DELIVERY_ENABLED==="true"});
+});
+app.post("/api/delivery/outbox/:id/claim",auth,roles("admin","publisher"),(req,res)=>{
+ const delivery=claimDelivery(db,Number(req.params.id));
+ if(!delivery) return res.status(409).json({error:"Delivery is not queued or has already been claimed"});
+ audit(req.user.id,delivery.alert_id,"delivery_claimed",`Claimed outbox entry ${delivery.id}; no external transmission is performed by this endpoint`);
+ res.json({delivery:{id:delivery.id,alert_id:delivery.alert_id,channel:delivery.channel,status:delivery.status,attempts:delivery.attempts,payload:delivery.payload},external_adapters_enabled:process.env.CAP_DELIVERY_ENABLED==="true"});
+});
+app.post("/api/delivery/outbox/:id/receipt",auth,roles("admin","publisher"),(req,res)=>{
+ try {
+  const receiptSchema=z.object({status:z.enum(["delivered","failed"]),externalId:z.string().max(256).optional(),details:z.string().max(2000).optional()});
+  const data=receiptSchema.parse(req.body);
+  const delivery=recordDeliveryReceipt(db,Number(req.params.id),data);
+  if(!delivery) return res.status(409).json({error:"A receipt can only be recorded for a sending delivery"});
+  audit(req.user.id,delivery.alert_id,"delivery_"+delivery.status,`Receipt recorded for outbox entry ${delivery.id}`);
+  res.json({ok:true,delivery:{id:delivery.id,status:delivery.status,attempts:delivery.attempts,external_id:delivery.external_id}});
+ } catch(error) { res.status(400).json({error:error.message}); }
+});
+app.post("/api/delivery/outbox/:id/retry",auth,roles("admin","publisher"),(req,res)=>{
+ const delivery=retryDelivery(db,Number(req.params.id));
+ if(!delivery) return res.status(409).json({error:"Only failed deliveries can be retried"});
+ audit(req.user.id,delivery.alert_id,"delivery_retry_queued",`Requeued outbox entry ${delivery.id}`);
+ res.json({ok:true,delivery:{id:delivery.id,status:delivery.status,attempts:delivery.attempts}});
+});
+
 app.get("/api/alerts/:id/cap.xml",auth,(req,res)=>{
  const a=db.prepare("SELECT * FROM alerts WHERE id=?").get(req.params.id);
  if(!a) return res.status(404).json({error:"Alert not found"});

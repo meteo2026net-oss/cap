@@ -5,9 +5,9 @@ const loginPanel=$("#loginPanel"), appPanel=$("#appPanel");
 function headers(){return {"Content-Type":"application/json","Authorization":`Bearer ${token}`}}
 async function api(url,opts={}){const r=await fetch(url,{...opts,headers:{...headers(),...(opts.headers||{})}});const data=await r.json().catch(()=>({}));if(!r.ok)throw new Error(data.error||"Request failed");return data}
 function showApp(on){loginPanel.hidden=on;appPanel.hidden=!on}
-$("#loginForm").addEventListener("submit",async e=>{e.preventDefault();const f=new FormData(e.target);try{const d=await fetch("/api/auth/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(Object.fromEntries(f))}).then(r=>r.json());if(!d.token)throw new Error(d.error||"تعذر تسجيل الدخول");token=d.token;currentRole=d.user.role;auditHistoryGeneration++;$("#userBadge").textContent=`${d.user.username} • ${d.user.role}`;$("#deliveryMonitor").hidden=!["admin","publisher"].includes(currentRole);$("#webhookInboxMonitor").hidden=!["admin","reviewer"].includes(currentRole);$("#userAdmin").hidden=d.user.role!=="admin";const canVerifyAudit=["admin","reviewer","approver"].includes(d.user.role);$("#auditIntegrity").hidden=!canVerifyAudit;$("#auditHistoryPanel").hidden=!canVerifyAudit;showApp(true);await loadAlerts();initWarningMap();await refreshWarningMap();if(d.user.role==="admin")await loadUsers();if(canVerifyAudit){await loadAuditIntegrity();await loadAuditHistory();}if(["admin","publisher"].includes(currentRole))await loadDeliveryOutbox();if(["admin","reviewer"].includes(currentRole))await loadWebhookInbox()}catch(err){$("#loginError").textContent=err.message}});
+$("#loginForm").addEventListener("submit",async e=>{e.preventDefault();const f=new FormData(e.target);try{const d=await fetch("/api/auth/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(Object.fromEntries(f))}).then(r=>r.json());if(!d.token)throw new Error(d.error||"تعذر تسجيل الدخول");token=d.token;currentRole=d.user.role;auditHistoryGeneration++;auditHistoryLoading=false;$("#userBadge").textContent=`${d.user.username} • ${d.user.role}`;$("#deliveryMonitor").hidden=!["admin","publisher"].includes(currentRole);$("#webhookInboxMonitor").hidden=!["admin","reviewer"].includes(currentRole);$("#userAdmin").hidden=d.user.role!=="admin";const canVerifyAudit=["admin","reviewer","approver"].includes(d.user.role);$("#auditIntegrity").hidden=!canVerifyAudit;$("#auditHistoryPanel").hidden=!canVerifyAudit;showApp(true);await loadAlerts();initWarningMap();await refreshWarningMap();if(d.user.role==="admin")await loadUsers();if(canVerifyAudit){await loadAuditIntegrity();await loadAuditHistory();}if(["admin","publisher"].includes(currentRole))await loadDeliveryOutbox();if(["admin","reviewer"].includes(currentRole))await loadWebhookInbox()}catch(err){$("#loginError").textContent=err.message}});
 let warningMap=null, publishedGeoLayer=null, importedGeoLayer=null, drawnGeoLayer=null, drawControl=null;
-$("#logoutBtn").onclick=()=>{token="";currentRole="";auditHistoryGeneration++;auditHistoryCursor=null;showApp(false);$("#userAdmin").hidden=true;$("#auditIntegrity").hidden=true;$("#auditHistoryPanel").hidden=true;$("#deliveryMonitor").hidden=true;$("#webhookInboxMonitor").hidden=true};
+$("#logoutBtn").onclick=()=>{token="";currentRole="";auditHistoryGeneration++;auditHistoryLoading=false;auditHistoryCursor=null;showApp(false);$("#userAdmin").hidden=true;$("#auditIntegrity").hidden=true;$("#auditHistoryPanel").hidden=true;$("#deliveryMonitor").hidden=true;$("#webhookInboxMonitor").hidden=true};
 $("#passwordForm").addEventListener("submit",async e=>{
  e.preventDefault();
  const form=e.currentTarget, data=Object.fromEntries(new FormData(form));
@@ -203,9 +203,11 @@ async function loadAuditHistory(append=false){
  }catch(error){
   if(requestGeneration===auditHistoryGeneration)status.textContent="تعذر تحميل سجل التدقيق: "+error.message;
  }finally{
-  auditHistoryLoading=false;
-  if(more)more.disabled=false;
-  if(refresh)refresh.disabled=false;
+  if(requestGeneration===auditHistoryGeneration){
+   auditHistoryLoading=false;
+   if(more)more.disabled=false;
+   if(refresh)refresh.disabled=false;
+  }
  }
 }
 $("#auditHistoryRefreshBtn")?.addEventListener("click",()=>loadAuditHistory());

@@ -10,7 +10,7 @@ import { db, ensureAdmin } from "./db.js";
 import { buildCapXml, makeIdentifier, validateAlert } from "./cap.js";
 import { alertsToGeoJSON } from "./geojson.js";
 import { appendAuditLog, verifyAuditChain } from "./audit.js";
-import { enqueueDelivery, claimDelivery, recordDeliveryReceipt, retryDelivery, recoverStaleDeliveries } from "./delivery.js";
+import { enqueueDelivery, claimDelivery, recordDeliveryReceipt, retryDelivery, recoverStaleDeliveries, processDueRetries } from "./delivery.js";
 
 const app = express();
 const port = Number(process.env.PORT || 8095);
@@ -227,12 +227,19 @@ app.post("/api/alerts/:id/publish",auth,roles("admin","publisher"),(req,res)=>{
 });
 app.get("/api/delivery/outbox",auth,roles("admin","publisher"),(req,res)=>{
  const status=req.query.status;
- if(status!==undefined && !["queued","sending","delivered","failed"].includes(status)) return res.status(400).json({error:"Invalid delivery status filter"});
- const rows=db.prepare(`SELECT d.id,d.alert_id,d.channel,d.status,d.attempts,d.external_id,d.last_error,d.created_at,d.updated_at,d.last_attempt_at,d.delivered_at,a.identifier,a.headline
+ if(status!==undefined && !["queued","sending","delivered","failed","dead_letter"].includes(status)) return res.status(400).json({error:"Invalid delivery status filter"});
+ const rows=db.prepare(\`SELECT d.id,d.alert_id,d.channel,CASE WHEN d.dead_letter_at IS NOT NULL THEN 'dead_letter' ELSE d.status END AS status,d.attempts,d.max_attempts,d.next_attempt_at,d.dead_letter_at,d.external_id,d.last_error,d.created_at,d.updated_at,d.last_attempt_at,d.delivered_at,a.identifier,a.headline
   FROM delivery_outbox d JOIN alerts a ON a.id=d.alert_id
-  WHERE (? IS NULL OR d.status=?) ORDER BY d.created_at DESC LIMIT 500`).all(status ?? null,status ?? null);
+  WHERE (? IS NULL OR (?='dead_letter' AND d.dead_letter_at IS NOT NULL) OR (?<>'dead_letter' AND d.status=? AND d.dead_letter_at IS NULL)) ORDER BY d.created_at DESC LIMIT 500\`).all(status ?? null,status ?? null,status ?? null,status ?? null);
  res.json({deliveries:rows,external_adapters_enabled:false});
 });
+app.post("/api/delivery/process-retries",auth,roles("admin","publisher"),(req,res)=>{
+ const result=processDueRetries(db);
+ for(const item of result.requeued) audit(req.user.id,item.alert_id,"delivery_auto_retry_queued",\`Automatically requeued outbox entry \${item.id}\`);
+ for(const item of result.deadLettered) audit(req.user.id,item.alert_id,"delivery_dead_lettered",\`Moved outbox entry \${item.id} to dead-letter state\`);
+ res.json({ok:true,requeued_count:result.requeued.length,requeued_ids:result.requeued.map(item=>item.id),dead_lettered_count:result.deadLettered.length,dead_letter_ids:result.deadLettered.map(item=>item.id)});
+});
+
 app.post("/api/delivery/recover-stale",auth,roles("admin","publisher"),(req,res)=>{
  const staleMinutes=req.body?.staleMinutes ?? 10;
  if(!Number.isInteger(staleMinutes) || staleMinutes<1 || staleMinutes>1440) return res.status(400).json({error:"staleMinutes must be an integer from 1 to 1440"});

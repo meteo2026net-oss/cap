@@ -162,12 +162,12 @@ async function loadDeliveryOutbox(){
  try{
   const result=await api("/api/delivery/outbox");
   const rows=result.deliveries||[];
-  const counts={queued:0,sending:0,failed:0,dead_letter:0};
-  rows.forEach(row=>{if(Object.hasOwn(counts,row.status))counts[row.status]++});
+  const counts=result.counts||{queued:0,sending:0,failed:0,dead_letter:0,delivered:0};
   $("#deliveryQueued").textContent=counts.queued;
   $("#deliverySending").textContent=counts.sending;
   $("#deliveryFailed").textContent=counts.failed;
   $("#deliveryDead").textContent=counts.dead_letter;
+  $("#deliveryDelivered").textContent=counts.delivered;
   list.innerHTML=rows.map(row=>{
    const label={queued:"بانتظار المعالجة",sending:"قيد المعالجة",delivered:"تم التسليم المسجل",failed:"فشل - بانتظار المحاولة",dead_letter:"معزولة نهائياً"}[row.status]||row.status;
    const next=row.next_attempt_at?" • المحاولة التالية: "+esc(row.next_attempt_at):"";

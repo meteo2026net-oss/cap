@@ -59,7 +59,11 @@ test("restore refuses overwrite without force and preserves the previous databas
   const database = createFixtureDatabase(source);
   try {
     await fs.copyFile(source, target);
-    await assert.rejects(() => restoreDatabaseBackup(source, target), /must be different files/);
+    await assert.rejects(() => restoreDatabaseBackup(source, target), /already exists/);
+    const result = await restoreDatabaseBackup(source, target, { force: true });
+    assert.equal(result.target, target);
+    assert.ok(result.previous_database);
+    await fs.access(result.previous_database);
   } finally {
     database.close();
     await fs.rm(directory, { recursive: true, force: true });

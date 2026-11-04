@@ -4,8 +4,71 @@ const loginPanel=$("#loginPanel"), appPanel=$("#appPanel");
 function headers(){return {"Content-Type":"application/json","Authorization":`Bearer ${token}`}}
 async function api(url,opts={}){const r=await fetch(url,{...opts,headers:{...headers(),...(opts.headers||{})}});const data=await r.json().catch(()=>({}));if(!r.ok)throw new Error(data.error||"Request failed");return data}
 function showApp(on){loginPanel.hidden=on;appPanel.hidden=!on}
-$("#loginForm").addEventListener("submit",async e=>{e.preventDefault();const f=new FormData(e.target);try{const d=await fetch("/api/auth/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(Object.fromEntries(f))}).then(r=>r.json());if(!d.token)throw new Error(d.error||"تعذر تسجيل الدخول");token=d.token;$("#userBadge").textContent=`${d.user.username} • ${d.user.role}`;$("#userAdmin").hidden=d.user.role!=="admin";showApp(true);await loadAlerts();if(d.user.role==="admin")await loadUsers()}catch(err){$("#loginError").textContent=err.message}});
-$("#logoutBtn").onclick=()=>{token="";showApp(false);$("#userAdmin").hidden=true};
+$("#loginForm").addEventListener("submit",async e=>{e.preventDefault();const f=new FormData(e.target);try{const d=await fetch("/api/auth/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(Object.fromEntries(f))}).then(r=>r.json());if(!d.token)throw new Error(d.error||"تعذر تسجيل الدخول");token=d.token;$("#userBadge").textContent=`${d.user.username} • ${d.user.role}`;$("#userAdmin").hidden=d.user.role!=="admin";showApp(true);await loadAlerts();initWarningMap();await refreshWarningMap();if(d.user.role==="admin")await loadUsers()}catch(err){$("#loginError").textContent=err.message}});
+$("#logoutBtn").onclick=()=>{token="";
+let warningMap=null, publishedGeoLayer=null, importedGeoLayer=null;
+function initWarningMap(){
+ if(warningMap||!window.L)return;
+ warningMap=L.map("warningMap").setView([34.8,38.5],5);
+ L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:18,attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'}).addTo(warningMap);
+ publishedGeoLayer=L.featureGroup().addTo(warningMap);
+}
+function featureStyle(feature){
+ const severity=feature?.properties?.severity;
+ return {color:severity==="Extreme"?"#991b1b":severity==="Severe"?"#dc2626":severity==="Moderate"?"#ea580c":"#2563eb",weight:3,fillOpacity:.22};
+}
+function popupFor(feature){
+ const p=feature.properties||{};
+ return '<strong>'+esc(p.headline||p.event||"تحذير جوي")+'</strong><br>'+esc(p.area_description||"")+'<br>الشدة: '+esc(p.severity||"غير محددة")+'<br>الاستعجال: '+esc(p.urgency||"غير محدد")+'<br>اللغة: '+esc(p.language||"");
+}
+function addGeoFeatures(target,data){
+ const layer=L.geoJSON(data,{style:featureStyle,pointToLayer:(feature,latlng)=>{
+  const p=feature.properties||{};
+  if(p.geometry_kind==="circle"&&Number.isFinite(Number(p.radius_km))&&Number(p.radius_km)>0)return L.circle(latlng,{radius:Number(p.radius_km)*1000,...featureStyle(feature)});
+  return L.circleMarker(latlng,{radius:8,...featureStyle(feature)});
+ },onEachFeature:(feature,layer)=>layer.bindPopup(popupFor(feature))});
+ layer.addTo(target);return layer;
+}
+async function refreshWarningMap(){
+ const status=$("#mapStatus");if(!window.L){status.textContent="تعذر تحميل مكتبة الخريطة. تحقق من الاتصال بالإنترنت.";return}
+ initWarningMap();
+ try{
+  const response=await fetch("/api/public/alerts.geojson");
+  if(!response.ok)throw new Error("تعذر جلب طبقة التحذيرات العامة");
+  const data=await response.json();
+  publishedGeoLayer.clearLayers();addGeoFeatures(publishedGeoLayer,data);
+  const count=data.features?.length||0;status.textContent="تم تحميل "+count+" معلم جغرافي من التحذيرات العامة المنشورة.";
+  const bounds=publishedGeoLayer.getBounds();if(bounds.isValid())warningMap.fitBounds(bounds.pad(.15),{maxZoom:10});
+  setTimeout(()=>warningMap.invalidateSize(),100);
+ }catch(error){status.textContent=error.message}
+}
+function clearImportedGeo(){
+ if(importedGeoLayer&&warningMap){warningMap.removeLayer(importedGeoLayer);importedGeoLayer=null}
+ const input=$("#geoImport");if(input)input.value="";
+}
+$("#refreshMapBtn")?.addEventListener("click",refreshWarningMap);
+$("#clearImportBtn")?.addEventListener("click",()=>{clearImportedGeo();$("#mapStatus").textContent="تمت إزالة طبقة المعاينة المستوردة."});
+$("#geoImport")?.addEventListener("change",async event=>{
+ const file=event.target.files?.[0];if(!file)return;
+ try{
+  const data=JSON.parse(await file.text());
+  if(data.type!=="FeatureCollection"||!Array.isArray(data.features))throw new Error("يجب أن يكون الملف GeoJSON من نوع FeatureCollection.");
+  if(importedGeoLayer)warningMap.removeLayer(importedGeoLayer);
+  importedGeoLayer=addGeoFeatures(L.featureGroup(),data);
+  importedGeoLayer.addTo(warningMap);
+  const bounds=importedGeoLayer.getBounds();if(bounds.isValid())warningMap.fitBounds(bounds.pad(.15),{maxZoom:11});
+  $("#mapStatus").textContent="معاينة محلية: "+data.features.length+" معلم. لم يتم حفظ الملف على الخادم.";
+ }catch(error){alert("ملف GeoJSON غير صالح: "+error.message);event.target.value=""}
+});
+$("#exportGeoBtn")?.addEventListener("click",async()=>{
+ try{
+  const response=await fetch("/api/public/alerts.geojson");if(!response.ok)throw new Error("تعذر تصدير GeoJSON");
+  const blob=new Blob([JSON.stringify(await response.json(),null,2)],{type:"application/geo+json"});
+  const url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download="meteo-cap-public-alerts.geojson";a.click();URL.revokeObjectURL(url);
+ }catch(error){alert(error.message)}
+});
+
+showApp(false);$("#userAdmin").hidden=true};
 $("#refreshBtn").onclick=loadAlerts;
 $("#userForm").addEventListener("submit",async e=>{e.preventDefault();const data=Object.fromEntries(new FormData(e.target));try{await api("/api/users",{method:"POST",body:JSON.stringify(data)});e.target.reset();await loadUsers();alert("تم إنشاء الحساب بنجاح.")}catch(err){alert(err.message)}});
 async function toggleUser(id,active){const action=active?'تفعيل':'إيقاف';if(!confirm('هل تريد '+action+' هذا الحساب؟'))return;try{await api('/api/users/'+id+'/status',{method:'PATCH',body:JSON.stringify({active:!!active})});await loadUsers()}catch(e){alert(e.message)}}

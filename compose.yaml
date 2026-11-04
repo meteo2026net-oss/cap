@@ -17,8 +17,11 @@ services:
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
       CAP_SENDER: ${CAP_SENDER:-alerts@example.org}
       CORS_ORIGINS: ${CORS_ORIGINS:-}
+      BACKUP_DIR: /app/backups
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-30}
     volumes:
       - cap-data:/app/storage
+      - cap-backups:/app/backups
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8095/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 30s
@@ -28,3 +31,4 @@ services:
 
 volumes:
   cap-data:
+  cap-backups:

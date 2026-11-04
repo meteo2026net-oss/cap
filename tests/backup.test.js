@@ -83,16 +83,22 @@ test("backup pruning removes only old CAP backup files", async () => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), "cap-prune-test-"));
   try {
     const oldBackup = path.join(directory, "cap-20260101T000000000Z.sqlite");
+    const oldUniqueBackup = path.join(directory, "cap-20260101T000000000Z-00000000-0000-4000-8000-000000000000.sqlite");
     const oldOther = path.join(directory, "other.sqlite");
     await fs.writeFile(oldBackup, "old");
+    await fs.writeFile(oldUniqueBackup, "old unique");
     await fs.writeFile(oldOther, "keep");
     const oldDate = new Date("2026-01-01T00:00:00.000Z");
     await fs.utimes(oldBackup, oldDate, oldDate);
+    await fs.utimes(oldUniqueBackup, oldDate, oldDate);
     const removed = await pruneDatabaseBackups(directory, {
       retentionDays: 30,
       now: new Date("2026-11-04T00:00:00.000Z")
     });
-    assert.deepEqual(removed, ["cap-20260101T000000000Z.sqlite"]);
+    assert.deepEqual(removed, [
+      "cap-20260101T000000000Z-00000000-0000-4000-8000-000000000000.sqlite",
+      "cap-20260101T000000000Z.sqlite"
+    ]);
     assert.equal(await fs.readFile(oldOther, "utf8"), "keep");
   } finally {
     await fs.rm(directory, { recursive: true, force: true });

@@ -203,6 +203,8 @@ test("API enforces role separation, public-feed filtering and account deactivati
 
   const directDatabase = new Database(path.join(cwd, "storage", "cap.sqlite"));
   try {
+    assert.throws(() => directDatabase.prepare("UPDATE delivery_outbox SET lease_token='00000000-0000-4000-8000-000000000000' WHERE alert_id=?").run(actualRow.id),
+      /Plaintext delivery lease tokens are forbidden/, "database triggers must prevent plaintext lease-token storage");
     assert.throws(() => directDatabase.prepare("UPDATE alerts SET status='Draft' WHERE id=?").run(actualRow.id),
       /Invalid CAP 1.2 status/, "database triggers must reject non-standard CAP status values");
     directDatabase.prepare("UPDATE delivery_outbox SET status='sending',last_attempt_at=datetime('now','-30 minutes') WHERE alert_id=? AND channel='cap_feed'").run(actualRow.id);

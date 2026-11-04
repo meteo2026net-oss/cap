@@ -118,3 +118,8 @@ The public feed is an integration data endpoint, not a substitute for an institu
 - Update and Cancel message drafts linked to a previous alert.
 
 The dashboard provides an advanced JSON editor for multilingual `info_blocks`, and approved or published alerts expose Update and Cancel draft actions. A guided visual multilingual editor and interactive map-drawing UI remain future work.
+
+
+## Public GeoJSON feed
+
+`GET /api/public/alerts.geojson` returns a GeoJSON `FeatureCollection` containing geometry from published alerts only when CAP `scope` is `Public` and CAP `status` is `Actual`. CAP polygon coordinate pairs are converted from latitude,longitude to GeoJSON longitude,latitude order. CAP circles are emitted as GeoJSON `Point` features with `geometry_kind: circle` and `radius_km` properties because GeoJSON has no native circle geometry. Each polygon or circle becomes a separate feature; multilingual and multi-area info blocks are included.

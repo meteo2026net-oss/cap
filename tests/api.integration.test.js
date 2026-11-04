@@ -175,7 +175,7 @@ test("API enforces role separation, public-feed filtering and account deactivati
   assert.equal(claimedDelivery.data.external_adapters_enabled, false);
   assert.match(claimedDelivery.data.delivery.payload, /<alert xmlns=/);
   const failedReceipt = await request(`/api/delivery/outbox/${queuedDelivery.id}/receipt`, {
-    token: publisher, method: "POST", body: { status: "failed", details: "Synthetic test failure" }
+    token: publisher, method: "POST", body: { status: "failed", leaseToken: claimedDelivery.data.delivery.lease_token, details: "Synthetic test failure" }
   });
   assert.equal(failedReceipt.status, 200);
   assert.equal(failedReceipt.data.delivery.status, "failed");
@@ -188,10 +188,14 @@ test("API enforces role separation, public-feed filtering and account deactivati
   assert.equal(retryClaim.status, 200);
   assert.equal(retryClaim.data.delivery.attempts, 2);
   const deliveredReceipt = await request(`/api/delivery/outbox/${queuedDelivery.id}/receipt`, {
-    token: publisher, method: "POST", body: { status: "delivered", externalId: "synthetic-provider-id" }
+    token: publisher, method: "POST", body: { status: "delivered", leaseToken: retryClaim.data.delivery.lease_token, externalId: "synthetic-provider-id" }
   });
   assert.equal(deliveredReceipt.status, 200);
   assert.equal(deliveredReceipt.data.delivery.status, "delivered");
+  const staleReceipt = await request(`/api/delivery/outbox/${queuedDelivery.id}/receipt`, {
+    token: publisher, method: "POST", body: { status: "delivered", leaseToken: claimedDelivery.data.delivery.lease_token }
+  });
+  assert.equal(staleReceipt.status, 409, "a receipt from an earlier claim must not affect a later delivery attempt");
 
   const directDatabase = new Database(path.join(cwd, "storage", "cap.sqlite"));
   try {

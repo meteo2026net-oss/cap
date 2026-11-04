@@ -6,6 +6,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import Database from "better-sqlite3";
 
 const serverEntry = fileURLToPath(new URL("../src/server.js", import.meta.url));
 
@@ -155,6 +156,14 @@ test("API enforces role separation, public-feed filtering and account deactivati
   assert.equal(original.status, 200, "authenticated alert history should be available");
   const actualRow = original.data.alerts.find(alert => alert.identifier === actualIdentifier);
   assert.ok(actualRow, "published warning should remain in authenticated history");
+
+  const directDatabase = new Database(path.join(cwd, "storage", "cap.sqlite"));
+  try {
+    assert.throws(() => directDatabase.prepare("UPDATE alerts SET status='Draft' WHERE id=?").run(actualRow.id),
+      /Invalid CAP 1.2 status/, "database triggers must reject non-standard CAP status values");
+  } finally {
+    directDatabase.close();
+  }
 
   const capXml = await fetch(base + "/api/alerts/" + actualRow.id + "/cap.xml", {
     headers: { Authorization: "Bearer " + forecaster }

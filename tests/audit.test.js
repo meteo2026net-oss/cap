@@ -135,3 +135,13 @@ test("audit log rejects unhashed inserts after hash-chain activation", () => {
     assert.equal(verifyAuditChain(database).valid, true);
   } finally { database.close(); }
 });
+
+
+test("audit append rejects oversized action and details", () => {
+  const database = new Database(":memory:");
+  try {
+    database.exec("CREATE TABLE audit_log (id INTEGER PRIMARY KEY,user_id INTEGER,alert_id INTEGER,action TEXT NOT NULL,details TEXT,created_at TEXT NOT NULL,previous_hash TEXT,entry_hash TEXT)");
+    assert.throws(() => appendAuditLog(database, { action: "x".repeat(129) }), /128 characters/);
+    assert.throws(() => appendAuditLog(database, { action: "ok", details: "x".repeat(4001) }), /4000 characters/);
+  } finally { database.close(); }
+});

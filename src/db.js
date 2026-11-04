@@ -2,8 +2,8 @@ import Database from "better-sqlite3";
 import fs from "node:fs";
 import path from "node:path";
 import bcrypt from "bcryptjs";
-import { createHash } from "node:crypto";
 import { installAuditLogGuards } from "./audit.js";
+import { migrateLeaseTokenStorage } from "./lease-migration.js";
 
 const storage = path.resolve("storage");
 fs.mkdirSync(storage, { recursive: true });
@@ -95,29 +95,7 @@ CREATE INDEX IF NOT EXISTS idx_delivery_alert ON delivery_outbox(alert_id);
  if (!deliveryColumns.includes("max_attempts")) db.exec("ALTER TABLE delivery_outbox ADD COLUMN max_attempts INTEGER NOT NULL DEFAULT 5 CHECK(max_attempts BETWEEN 1 AND 20)");
  if (!deliveryColumns.includes("next_attempt_at")) db.exec("ALTER TABLE delivery_outbox ADD COLUMN next_attempt_at TEXT");
  if (!deliveryColumns.includes("dead_letter_at")) db.exec("ALTER TABLE delivery_outbox ADD COLUMN dead_letter_at TEXT");
- if (!deliveryColumns.includes("lease_token")) db.exec("ALTER TABLE delivery_outbox ADD COLUMN lease_token TEXT");
- if (!deliveryColumns.includes("lease_token_hash")) db.exec("ALTER TABLE delivery_outbox ADD COLUMN lease_token_hash TEXT");
- // Migrate active legacy leases before removing their plaintext token.
- const legacyLeaseTokens = db.prepare("SELECT id,lease_token FROM delivery_outbox WHERE lease_token IS NOT NULL").all();
- const migrateLeaseToken = db.prepare("UPDATE delivery_outbox SET lease_token_hash=?,lease_token=NULL WHERE id=?");
- for (const lease of legacyLeaseTokens) {
-  const digest = createHash("sha256").update(lease.lease_token).digest("hex");
-  migrateLeaseToken.run(digest, lease.id);
- }
- db.exec(`
-  CREATE TRIGGER IF NOT EXISTS delivery_outbox_no_plaintext_lease_insert
-  BEFORE INSERT ON delivery_outbox
-  WHEN NEW.lease_token IS NOT NULL
-  BEGIN
-   SELECT RAISE(ABORT, 'Plaintext delivery lease tokens are forbidden');
-  END;
-  CREATE TRIGGER IF NOT EXISTS delivery_outbox_no_plaintext_lease_update
-  BEFORE UPDATE OF lease_token ON delivery_outbox
-  WHEN NEW.lease_token IS NOT NULL
-  BEGIN
-   SELECT RAISE(ABORT, 'Plaintext delivery lease tokens are forbidden');
-  END;
- `);
+ migrateLeaseTokenStorage(db);
  db.exec("CREATE INDEX IF NOT EXISTS idx_delivery_retry_due ON delivery_outbox(status,next_attempt_at,attempts)");
 
 

@@ -281,34 +281,55 @@ app.post("/api/alerts/:id/derive",auth,roles("admin","forecaster"),(req,res)=>{
 });
 
 app.post("/api/alerts/:id/submit",auth,roles("admin","forecaster"),(req,res)=>{
- const a=db.prepare("SELECT * FROM alerts WHERE id=?").get(req.params.id);
- if(!a) return res.status(404).json({error:"Alert not found"});
- if(a.workflow!=="draft") return res.status(409).json({error:"Only drafts can be submitted"});
- db.prepare("UPDATE alerts SET workflow='pending',updated_at=CURRENT_TIMESTAMP WHERE id=?").run(a.id);
- audit(req.user.id,a.id,"submitted","Sent for review");
+ const transition=db.transaction(()=>{
+  const a=db.prepare("SELECT id,workflow FROM alerts WHERE id=?").get(req.params.id);
+  if(!a) return {kind:"missing"};
+  if(a.workflow!=="draft") return {kind:"conflict"};
+  const changed=db.prepare("UPDATE alerts SET workflow='pending',updated_at=CURRENT_TIMESTAMP WHERE id=? AND workflow='draft'").run(a.id);
+  if(changed.changes!==1) return {kind:"conflict"};
+  audit(req.user.id,a.id,"submitted","Sent for review");
+  return {kind:"updated"};
+ });
+ const result=transition.immediate();
+ if(result.kind==="missing") return res.status(404).json({error:"Alert not found"});
+ if(result.kind==="conflict") return res.status(409).json({error:"Only drafts can be submitted"});
  res.json({ok:true,workflow:"pending"});
 });
 app.post("/api/alerts/:id/approve",auth,roles("admin","reviewer","approver"),(req,res)=>{
- const a=db.prepare("SELECT * FROM alerts WHERE id=?").get(req.params.id);
- if(!a) return res.status(404).json({error:"Alert not found"});
- if(a.workflow!=="pending") return res.status(409).json({error:"Only pending alerts can be approved"});
- if(a.created_by===req.user.id) return res.status(403).json({error:"A warning creator cannot approve their own warning; an independent reviewer is required."});
- db.prepare("UPDATE alerts SET workflow='approved',approved_by=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(req.user.id,a.id);
- audit(req.user.id,a.id,"approved","Approved by authorized reviewer");
+ const transition=db.transaction(()=>{
+  const a=db.prepare("SELECT id,workflow,created_by FROM alerts WHERE id=?").get(req.params.id);
+  if(!a) return {kind:"missing"};
+  if(a.workflow!=="pending") return {kind:"conflict"};
+  if(a.created_by===req.user.id) return {kind:"forbidden"};
+  const changed=db.prepare("UPDATE alerts SET workflow='approved',approved_by=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND workflow='pending'").run(req.user.id,a.id);
+  if(changed.changes!==1) return {kind:"conflict"};
+  audit(req.user.id,a.id,"approved","Approved by authorized reviewer");
+  return {kind:"updated"};
+ });
+ const result=transition.immediate();
+ if(result.kind==="missing") return res.status(404).json({error:"Alert not found"});
+ if(result.kind==="forbidden") return res.status(403).json({error:"A warning creator cannot approve their own warning; an independent reviewer is required."});
+ if(result.kind==="conflict") return res.status(409).json({error:"Only pending alerts can be approved"});
  res.json({ok:true,workflow:"approved"});
 });
 app.post("/api/alerts/:id/publish",auth,roles("admin","publisher"),(req,res)=>{
- const a=db.prepare("SELECT * FROM alerts WHERE id=?").get(req.params.id);
- if(!a) return res.status(404).json({error:"Alert not found"});
- if(a.workflow!=="approved") return res.status(409).json({error:"Approval is required before publishing"});
- if(a.approved_by===req.user.id) return res.status(403).json({error:"The approving user cannot publish the same warning; a separate publisher is required."});
- const publishedStatus = a.status;
- const delivery = db.transaction(() => {
-  db.prepare("UPDATE alerts SET workflow='published',status=?,published_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(publishedStatus,a.id);
-  const published = db.prepare("SELECT * FROM alerts WHERE id=?").get(a.id);
-  return enqueueDelivery(db,{alertId:a.id,channel:"cap_feed",payload:buildCapXml(rowToCap(published))});
- })();
- audit(req.user.id,a.id,"published","Published to internal CAP feed; distribution outbox entry "+delivery.id+" queued");
+ const transition=db.transaction(()=>{
+  const a=db.prepare("SELECT * FROM alerts WHERE id=?").get(req.params.id);
+  if(!a) return {kind:"missing"};
+  if(a.workflow!=="approved") return {kind:"conflict"};
+  if(a.approved_by===req.user.id) return {kind:"forbidden"};
+  const changed=db.prepare("UPDATE alerts SET workflow='published',status=?,published_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE id=? AND workflow='approved'").run(a.status,a.id);
+  if(changed.changes!==1) return {kind:"conflict"};
+  const published=db.prepare("SELECT * FROM alerts WHERE id=?").get(a.id);
+  const delivery=enqueueDelivery(db,{alertId:a.id,channel:"cap_feed",payload:buildCapXml(rowToCap(published))});
+  audit(req.user.id,a.id,"published","Published to internal CAP feed; distribution outbox entry "+delivery.id+" queued");
+  return {kind:"updated",delivery};
+ });
+ const result=transition.immediate();
+ if(result.kind==="missing") return res.status(404).json({error:"Alert not found"});
+ if(result.kind==="forbidden") return res.status(403).json({error:"The approving user cannot publish the same warning; a separate publisher is required."});
+ if(result.kind==="conflict") return res.status(409).json({error:"Approval is required before publishing"});
+ const delivery=result.delivery;
  res.json({ok:true,workflow:"published",delivery:{id:delivery.id,status:delivery.status,channel:delivery.channel},note:"Internal publication only. External delivery adapters remain disabled; the outbox entry is queued for controlled processing."});
 });
 app.get("/api/webhooks/inbox",auth,roles("admin","reviewer"),(req,res)=>{

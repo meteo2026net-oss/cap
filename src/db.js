@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS alerts (
  identifier TEXT NOT NULL UNIQUE,
  sender TEXT NOT NULL,
  sent TEXT NOT NULL,
- status TEXT NOT NULL CHECK(status IN ('Actual','Exercise','System','Test','Draft')),
+ status TEXT NOT NULL CHECK(status IN ('Actual','Exercise','System','Test')),
  msg_type TEXT NOT NULL CHECK(msg_type IN ('Alert','Update','Cancel','Ack','Error')),
  scope TEXT NOT NULL CHECK(scope IN ('Public','Restricted','Private')),
  references_text TEXT,
@@ -75,6 +75,21 @@ CREATE INDEX IF NOT EXISTS idx_alert_sent ON alerts(sent);
  const auditColumns = db.prepare("PRAGMA table_info(audit_log)").all().map(column => column.name);
  if (!auditColumns.includes("previous_hash")) db.exec("ALTER TABLE audit_log ADD COLUMN previous_hash TEXT");
  if (!auditColumns.includes("entry_hash")) db.exec("ALTER TABLE audit_log ADD COLUMN entry_hash TEXT");
+
+ db.exec(`
+  CREATE TRIGGER IF NOT EXISTS alerts_cap_status_insert
+  BEFORE INSERT ON alerts
+  WHEN NEW.status NOT IN ('Actual','Exercise','System','Test')
+  BEGIN
+    SELECT RAISE(ABORT, 'Invalid CAP 1.2 status');
+  END;
+  CREATE TRIGGER IF NOT EXISTS alerts_cap_status_update
+  BEFORE UPDATE OF status ON alerts
+  WHEN NEW.status NOT IN ('Actual','Exercise','System','Test')
+  BEGIN
+    SELECT RAISE(ABORT, 'Invalid CAP 1.2 status');
+  END;
+ `);
 
  installAuditLogGuards(db);
 

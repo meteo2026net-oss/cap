@@ -62,7 +62,7 @@ The service listens on `127.0.0.1:8095` by default and stores SQLite data in the
 - JWT login, authenticated password changes, and administrator provisioning for institutional roles.
 - Login uses a dummy bcrypt comparison for unknown/inactive accounts to reduce username-enumeration timing differences; malformed and oversized credentials are rejected before password verification.
 - Per-user token-version enforcement: password changes revoke all previously issued sessions and return a replacement token for the current session.
-- Draft -> pending review -> approved -> internal publication workflow with independent creator/reviewer/publisher separation.
+- Draft -> pending review -> approved -> internal publication workflow with independent creator/reviewer/publisher separation; submit, approve, and publish transitions use immediate SQLite transactions and conditional state updates to reject duplicate/stale transitions, with audit records committed atomically.
 - CAP 1.2 XML export with numeric-offset timestamps, multiple language blocks, multiple categories/response types, multiple affected areas, geocodes, altitude/ceiling, parameters and supplemental resources.
 - Dashboard advanced JSON editor for multilingual information blocks and supplemental resources.
 - Dashboard actions and API support for linked Update and Cancel drafts; derived messages remain in Test status pending independent review.

@@ -28,7 +28,23 @@ if (!process.env.ADMIN_PASSWORD || process.env.ADMIN_PASSWORD.length < 14 || /^R
  process.exit(1);
 }
 ensureAdmin();
-app.use(helmet({ contentSecurityPolicy: false }));
+app.use(helmet({
+ contentSecurityPolicy: {
+  directives: {
+   defaultSrc: ["'self'"],
+   baseUri: ["'self'"],
+   connectSrc: ["'self'"],
+   fontSrc: ["'self'", "data:"],
+   formAction: ["'self'"],
+   frameAncestors: ["'none'"],
+   imgSrc: ["'self'", "data:", "blob:", "https://*.tile.openstreetmap.org", "https://unpkg.com"],
+   objectSrc: ["'none'"],
+   scriptSrc: ["'self'", "https://unpkg.com"],
+   scriptSrcAttr: ["'unsafe-inline'"],
+   styleSrc: ["'self'", "'unsafe-inline'", "https://unpkg.com"]
+  }
+ }
+}));
 const origins = (process.env.CORS_ORIGINS || "").split(",").map(s=>s.trim()).filter(Boolean);
 app.use(cors({ origin: origins.length ? origins : false }));
 app.use("/api", rateLimit({ windowMs: 15*60*1000, limit: 300, standardHeaders: true, legacyHeaders: false }));

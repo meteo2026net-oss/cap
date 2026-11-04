@@ -64,6 +64,14 @@ test("API enforces role separation, public-feed filtering and account deactivati
   }
   assert.equal(ready, true, "API server should become ready");
 
+  const dashboard = await fetch(base + "/");
+  assert.equal(dashboard.status, 200);
+  const csp = dashboard.headers.get("content-security-policy") || "";
+  assert.ok(csp.includes("frame-ancestors"));
+  assert.ok(csp.includes("object-src"));
+  assert.ok(csp.includes("script-src"));
+  assert.ok(csp.includes("script-src-attr"));
+
   const webhookTimestamp = Math.floor(Date.now() / 1000);
   const webhookBody = JSON.stringify({ provider: "synthetic-test", event: "inbound-test", alert: { headline: "Not an operational alert" } });
   const webhookSecret = "integration-webhook-secret-that-is-at-least-32-bytes";

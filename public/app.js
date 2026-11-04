@@ -147,7 +147,38 @@ async function loadAuditIntegrity(){
  }
 }
 $("#auditRefreshBtn")?.addEventListener("click",loadAuditIntegrity);
-async function loadUsers(){try{const {users}=await api("/api/users");$("#usersList").innerHTML=users.map(u=>`<article class="alertItem"><b>${esc(u.username)}</b><div class="alertMeta"><span class="pill">${esc(u.role)}</span><span>${u.active?"نشط":"موقوف"}</span></div><button class="secondary" onclick="toggleUser(${u.id},${u.active?0:1})">${u.active?"إيقاف الحساب":"إعادة تفعيل الحساب"}</button></article>`).join("")||'<p class="muted">لا توجد حسابات.</p>'}catch(e){$("#usersList").textContent=e.message}}
+async function loadUsers(){
+ try{
+  const {users}=await api("/api/users");
+  const labels={admin:"مدير نظام",forecaster:"متنبئ جوي",reviewer:"مراجع",approver:"معتمد",publisher:"ناشر",viewer:"مشاهد"};
+  const cards=users.map(user=>{
+   const card=document.createElement("article");card.className="alertItem userItem";
+   const heading=document.createElement("div");heading.className="userHeading";
+   const name=document.createElement("b");name.textContent=user.username;
+   const state=document.createElement("span");state.className="pill"+(user.active?"":" red");state.textContent=user.active?"نشط":"موقوف";
+   heading.append(name,state);
+   const controls=document.createElement("div");controls.className="userRoleControls";
+   const label=document.createElement("label");label.textContent="الدور الوظيفي";
+   const select=document.createElement("select");select.id="user-role-"+user.id;select.setAttribute("aria-label","الدور الجديد للمستخدم "+user.username);
+   Object.entries(labels).forEach(([role,title])=>{const option=document.createElement("option");option.value=role;option.textContent=title;option.selected=role===user.role;select.append(option)});
+   label.append(select);
+   const actions=document.createElement("div");actions.className="actions";
+   const save=document.createElement("button");save.type="button";save.textContent="حفظ الدور";save.onclick=()=>changeUserRole(user.id,user.role,select.value);
+   const toggle=document.createElement("button");toggle.type="button";toggle.className="secondary";toggle.textContent=user.active?"إيقاف الحساب":"إعادة تفعيل الحساب";toggle.onclick=()=>toggleUser(user.id,!user.active);
+   actions.append(save,toggle);controls.append(label,actions);card.append(heading,controls);return card;
+  });
+  const container=$("#usersList");container.replaceChildren(...cards);
+  if(!users.length){const empty=document.createElement("p");empty.className="muted";empty.textContent="لا توجد حسابات.";container.append(empty)}
+ }catch(e){$("#usersList").textContent=e.message}
+}
+async function changeUserRole(id,currentRole,selectedRole){
+ const role=selectedRole||$("#user-role-"+id)?.value;
+ if(!role||role===currentRole)return;
+ const labels={admin:"مدير نظام",forecaster:"متنبئ جوي",reviewer:"مراجع",approver:"معتمد",publisher:"ناشر",viewer:"مشاهد"};
+ if(!confirm("تغيير دور هذا الحساب إلى "+(labels[role]||role)+"؟ سيتم إلغاء جلساته الحالية."))return;
+ try{await api("/api/users/"+id+"/role",{method:"PATCH",body:JSON.stringify({role})});await loadUsers()}
+ catch(error){alert(error.message);await loadUsers()}
+}
 $("#alertForm").addEventListener("submit",async e=>{e.preventDefault();const obj=Object.fromEntries(new FormData(e.target));const jsonBlocks=obj.info_blocks_json?.trim();delete obj.info_blocks_json;if(jsonBlocks){try{obj.info_blocks=JSON.parse(jsonBlocks)}catch{alert("صيغة JSON غير صحيحة في كتل اللغات المتعددة.");return}}const hasInfoArea=obj.info_blocks?.some(b=>b.area||b.areas?.length);if(!obj.polygon?.trim()&&!obj.circle?.trim()&&!hasInfoArea){alert("أدخل مضلعاً أو دائرة أو منطقة جغرافية ضمن كتل المعلومات.");return}for(const k of ["onset","expires"])if(obj[k])obj[k]=new Date(obj[k]).toISOString();else obj[k]="";try{const d=await api("/api/alerts",{method:"POST",body:JSON.stringify(obj)});e.target.reset();alert(`تم حفظ المسودة: ${d.identifier}`);await loadAlerts()}catch(err){alert(err.message)}});
 async function act(id,action){try{await api(`/api/alerts/${id}/${action}`,{method:"POST",body:"{}"});await loadAlerts()}catch(e){alert(e.message)}}
 async function derive(id,msgType){const label=msgType==='Cancel'?'إلغاء التحذير':'إنشاء تحديث';if(!confirm(label+'؟ ستنشأ مسودة CAP بحالة Test وتحتاج إلى مراجعة واعتماد مستقلين.'))return;try{const result=await api('/api/alerts/'+id+'/derive',{method:'POST',body:JSON.stringify({msg_type:msgType})});alert('تم إنشاء المسودة: '+result.identifier+' (Test)');await loadAlerts()}catch(e){alert(e.message)}}
@@ -231,3 +262,5 @@ $("#webhookInboxRefreshBtn")?.addEventListener("click",()=>loadWebhookInbox());
 $("#webhookInboxLoadMoreBtn")?.addEventListener("click",()=>loadWebhookInbox(true));
 $("#webhookInboxFilter")?.addEventListener("change",()=>loadWebhookInbox());
 window.reviewWebhook=reviewWebhook;
+window.toggleUser=toggleUser;
+window.changeUserRole=changeUserRole;

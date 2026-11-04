@@ -147,7 +147,7 @@ test("API enforces role separation, public-feed filtering and account deactivati
     headers: { Authorization: "Bearer " + forecaster }
   });
   assert.equal(capXml.status, 200, "authorized CAP XML export should succeed");
-  assert.match(capXml.headers.get("content-type") || "", /application\\/xml/);
+  assert.ok((capXml.headers.get("content-type") || "").includes("application/xml"));
   assert.match(await capXml.text(), /<alert xmlns=/);
 
   for (const msg_type of ["Update", "Cancel"]) {

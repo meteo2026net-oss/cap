@@ -5,7 +5,7 @@ This repository supports two equivalent operating modes. Both use the same appli
 ## Mode A — Run directly (no Docker)
 
 ### Requirements
-- Node.js 20 or newer (Node.js 24 is used in CI)
+- Node.js 20 or newer (CI currently tests with Node.js 22)
 - npm (included with Node.js)
 - Windows 10/11, Linux, or macOS
 

@@ -203,6 +203,26 @@ test("API enforces role separation, public-feed filtering and account deactivati
     method: "POST", body: { username: "disabled1", password: "Temporary-Password-2026!" }
   })).status, 401, "deactivated users cannot log in");
 
+  const passwordChange = await request("/api/auth/change-password", {
+    token: forecaster, method: "POST",
+    body: {
+      currentPassword: "Temporary-Password-2026!",
+      newPassword: "Updated-Temporary-Password-2026!"
+    }
+  });
+  assert.equal(passwordChange.status, 200, "password change should succeed");
+  assert.equal(passwordChange.data.session_revoked_for_other_devices, true);
+  assert.equal((await request("/api/me", { token: forecaster })).status, 401,
+    "password changes must revoke previously issued access tokens");
+  assert.equal((await request("/api/me", { token: passwordChange.data.token })).status, 200,
+    "password change should return a replacement session token");
+  assert.equal((await request("/api/auth/login", {
+    method: "POST", body: { username: "forecaster1", password: "Temporary-Password-2026!" }
+  })).status, 401, "the previous password must stop working immediately");
+  assert.equal((await request("/api/auth/login", {
+    method: "POST", body: { username: "forecaster1", password: "Updated-Temporary-Password-2026!" }
+  })).status, 200, "the new password should work immediately");
+
   const users = await request("/api/users", { token: admin });
   const adminUser = users.data.users.find(user => user.username === "admin");
   assert.ok(adminUser);

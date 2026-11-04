@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Meteo CAP Warning System</title><link rel="stylesheet" href="/styles.css"></head>
+<body>
+<div class="shell">
+ <header><div class="brand"><span class="logo">⚡</span><div><b>METEO CAP</b><small>مركز إدارة التحذيرات الجوية</small></div></div><div id="userBadge" class="muted">نظام مستقل • CAP 1.2</div></header>
+ <section id="loginPanel" class="login card"><h1>تسجيل الدخول</h1><p class="muted">الدخول إلى مركز إدارة التحذيرات</p>
+  <form id="loginForm"><label>اسم المستخدم<input name="username" value="admin" required></label><label>كلمة المرور<input name="password" type="password" required></label><button>دخول آمن</button><p id="loginError" class="error"></p></form>
+ </section>
+ <main id="appPanel" hidden>
+  <div class="welcome"><div><p class="eyebrow">OPERATIONS CENTER</p><h1>مركز التحذيرات الجوية</h1><p class="muted">إدارة دورة حياة التحذير من المسودة حتى النشر.</p></div><button id="logoutBtn" class="secondary">تسجيل الخروج</button></div>
+  <div class="stats"><div class="stat"><span>إجمالي التحذيرات</span><b id="total">0</b></div><div class="stat"><span>مسودات</span><b id="drafts">0</b></div><div class="stat"><span>بانتظار المراجعة</span><b id="pending">0</b></div><div class="stat"><span>منشورة</span><b id="published">0</b></div></div>
+  <div class="grid">
+   <section class="card"><div class="sectionHead"><h2>إنشاء تحذير جديد</h2><span class="tag">CAP 1.2</span></div>
+    <form id="alertForm" class="formGrid">
+     <label>الظاهرة الجوية<input name="event" placeholder="عواصف رعدية" required></label>
+     <label>العنوان<input name="headline" placeholder="تحذير من عواصف رعدية" required></label>
+     <label>الفئة<select name="category"><option value="Met">أرصاد جوية</option><option value="Geo">جيولوجي</option><option value="Safety">سلامة</option><option value="Env">بيئي</option></select></label>
+     <label>الاستعجال<select name="urgency"><option>Immediate</option><option>Expected</option><option>Future</option><option>Past</option><option selected>Unknown</option></select></label>
+     <label>الشدة<select name="severity"><option>Extreme</option><option>Severe</option><option>Moderate</option><option>Minor</option><option selected>Unknown</option></select></label>
+     <label>اليقين<select name="certainty"><option>Observed</option><option>Likely</option><option>Possible</option><option>Unlikely</option><option selected>Unknown</option></select></label>
+     <label>حالة CAP<select name="status"><option value="Test">اختبار</option><option value="Exercise">تمرين</option><option value="Actual">فعلي</option></select></label>
+     <label>النطاق<select name="scope"><option value="Public">عام</option><option value="Restricted">مقيّد</option><option value="Private">خاص</option></select></label>
+     <label>بداية التأثير<input name="onset" type="datetime-local"></label>
+     <label>انتهاء التحذير<input name="expires" type="datetime-local"></label>
+     <label class="wide">المنطقة المتأثرة<input name="area_desc" placeholder="محافظة / مدينة / منطقة" required></label>
+     <label class="wide">الوصف<textarea name="description" rows="3" required></textarea></label>
+     <label class="wide">التعليمات<textarea name="instruction" rows="2"></textarea></label>
+     <label class="wide">مضلع CAP (اختياري: lat,lon مفصولة بمسافات)<input name="polygon" placeholder="33.5,36.2 33.7,36.4 33.4,36.6 33.5,36.2"></label>
+     <button class="wide">حفظ كمسودة</button>
+    </form>
+   </section>
+   <section class="card"><div class="sectionHead"><h2>التحذيرات</h2><button id="refreshBtn" class="secondary">تحديث</button></div><div id="alertsList" class="alertsList"><p class="muted">سجل التحذيرات سيظهر هنا.</p></div></section>
+  </div>
+  <section class="card"><h2>سير العمل المؤسسي</h2><div class="workflow"><span>١. مسودة</span><i>←</i><span>٢. مراجعة</span><i>←</i><span>٣. اعتماد</span><i>←</i><span>٤. نشر</span></div><p class="muted small">النشر في هذه النسخة يضيف الرسالة إلى واجهة CAP العامة الداخلية فقط. لم يتم ربط أي قناة خارجية، ولا يصدر النظام تحذيرات فعلية تلقائياً.</p></section>
+ </main>
+ <footer>METEO CAP Warning System <span>•</span> Initial foundation 0.1.0</footer>
+</div><script src="/app.js"></script></body></html>

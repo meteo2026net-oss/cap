@@ -7,6 +7,20 @@ function showApp(on){loginPanel.hidden=on;appPanel.hidden=!on}
 $("#loginForm").addEventListener("submit",async e=>{e.preventDefault();const f=new FormData(e.target);try{const d=await fetch("/api/auth/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(Object.fromEntries(f))}).then(r=>r.json());if(!d.token)throw new Error(d.error||"تعذر تسجيل الدخول");token=d.token;$("#userBadge").textContent=`${d.user.username} • ${d.user.role}`;$("#userAdmin").hidden=d.user.role!=="admin";const canVerifyAudit=["admin","reviewer","approver"].includes(d.user.role);$("#auditIntegrity").hidden=!canVerifyAudit;showApp(true);await loadAlerts();initWarningMap();await refreshWarningMap();if(d.user.role==="admin")await loadUsers();if(canVerifyAudit)await loadAuditIntegrity()}catch(err){$("#loginError").textContent=err.message}});
 let warningMap=null, publishedGeoLayer=null, importedGeoLayer=null, drawnGeoLayer=null, drawControl=null;
 $("#logoutBtn").onclick=()=>{token="";showApp(false);$("#userAdmin").hidden=true;$("#auditIntegrity").hidden=true};
+$("#passwordForm").addEventListener("submit",async e=>{
+ e.preventDefault();
+ const form=e.currentTarget, data=Object.fromEntries(new FormData(form));
+ const status=$("#passwordStatus");
+ if(data.newPassword!==data.confirmPassword){status.textContent="كلمتا المرور الجديدتان غير متطابقتين.";return}
+ delete data.confirmPassword;
+ status.textContent="جارٍ تحديث كلمة المرور...";
+ try{
+  const result=await api("/api/auth/change-password",{method:"POST",body:JSON.stringify(data)});
+  token=result.token;
+  form.reset();
+  status.textContent="تم تحديث كلمة المرور وإلغاء الجلسات السابقة. هذه الجلسة مستمرة بأمان.";
+ }catch(error){status.textContent=error.message}
+});
 function initWarningMap(){
  if(warningMap||!window.L)return;
  warningMap=L.map("warningMap").setView([34.8,38.5],5);

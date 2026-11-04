@@ -102,7 +102,7 @@ export function recoverStaleDeliveries(database, staleMinutes = 10) {
   }
   const recover = database.transaction(() => {
     const stale = database.prepare(
-      `SELECT id, alert_id FROM delivery_outbox
+      `SELECT id, alert_id, attempts, max_attempts FROM delivery_outbox
        WHERE status='sending' AND last_attempt_at IS NOT NULL
          AND julianday(last_attempt_at) <= julianday('now', ?)
        ORDER BY id ASC`
@@ -123,7 +123,9 @@ export function recoverStaleDeliveries(database, staleMinutes = 10) {
          WHERE id IN (${placeholders}) AND status='sending' AND attempts >= max_attempts`
       ).run(...ids);
     }
-    return stale;
+    const recovered = stale.filter(row => row.attempts < row.max_attempts);
+    const deadLettered = stale.filter(row => row.attempts >= row.max_attempts);
+    return { recovered, deadLettered };
   });
   return recover.immediate();
 }

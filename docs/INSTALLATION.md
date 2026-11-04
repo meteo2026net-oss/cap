@@ -124,13 +124,16 @@ docker compose exec cap node src/backup.js
 
 The named volumes `cap-data` and `cap-backups` persist database and backup data across container recreation. Do not use `docker compose down -v` unless you intentionally want to delete those volumes.
 
-To restore a backup, stop the app container first:
+To restore a backup, stop the app container first. SQLite may leave WAL/SHM sidecar files in the persistent volume after shutdown; the restore helper deliberately refuses to proceed while those files exist. Checkpoint the stopped database, close SQLite, and only then remove the sidecars before restoring:
 
 ```bash
 docker compose stop cap
+docker compose run --rm --no-deps cap sh -ec 'node --input-type=module -e "import Database from \"better-sqlite3\"; const db = new Database(\"/app/storage/cap.sqlite\"); try { const checkpoint = db.pragma(\"wal_checkpoint(TRUNCATE)\")[0]; if (checkpoint.busy !== 0) throw new Error(\"SQLite WAL checkpoint remained busy\"); } finally { db.close(); }" && rm -f /app/storage/cap.sqlite-wal /app/storage/cap.sqlite-shm'
 docker compose run --rm --no-deps cap node src/restore.js /app/backups/<backup-file>.sqlite --force
 docker compose up -d
 ```
+
+Do not remove SQLite sidecars while the application or another database process is running. If the checkpoint command fails or reports a busy database, do not continue with the restore; investigate the active process first. The restore utility independently validates SQLite integrity, foreign keys, and the audit hash chain before replacing the database.
 
 ## Important differences
 

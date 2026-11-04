@@ -24,8 +24,8 @@ Open http://localhost:8095.
 
 - Arabic RTL dashboard.
 - SQLite schema and initial administrator bootstrap.
-- JWT login and role-guarded endpoints.
-- Draft -> pending review -> approved -> internal publication workflow.
+- JWT login, authenticated password changes, and administrator provisioning for institutional roles.
+- Draft -> pending review -> approved -> internal publication workflow with independent creator/reviewer/publisher separation.
 - CAP XML export for saved alerts.
 - Public JSON feed for published Public-scope alerts.
 - Basic audit trail.
@@ -38,6 +38,9 @@ Open http://localhost:8095.
 - `GET /api/health`
 - `POST /api/auth/login`
 - `GET /api/me`
+- `POST /api/auth/change-password`
+- `GET /api/users` (admin only)
+- `POST /api/users` (admin only; provisions admin/forecaster/reviewer/approver/publisher/viewer accounts)
 - `GET /api/alerts`
 - `GET /api/alerts/:id`
 - `POST /api/alerts`
@@ -50,7 +53,7 @@ Open http://localhost:8095.
 
 ## Important safety and deployment notes
 
-This repository is an initial development foundation, not a certified or production-ready public warning service. Publishing currently exposes approved alerts through the public JSON endpoint only when their CAP status is `Actual` and scope is `Public`; Test and Exercise messages are excluded. No external CAP distribution, email, SMS, push, or government alert gateway is configured.
+This repository is an initial development foundation, not a certified or production-ready public warning service. Publishing currently exposes approved alerts through the public JSON endpoint only when their CAP status is `Actual` and scope is `Public`; Test and Exercise messages are excluded. No external CAP distribution, email, SMS, push, or government alert gateway is configured. User provisioning is currently API-only; the dashboard does not yet include an administration screen.
 
 Before operational use, implement and test official CAP 1.2 XSD validation, full CAP element coverage (including multilingual Info blocks, Resources, Geocodes, References, and Update/Cancel chains), account administration and MFA, HTTPS, backups, monitoring, security testing, and institution-specific authorization and approval procedures. Keep deployments private until these controls are completed. Use Test/Exercise messages during development, and configure unique non-placeholder `JWT_SECRET` and `ADMIN_PASSWORD` values before startup.
 

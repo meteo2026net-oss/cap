@@ -9,7 +9,6 @@ import { z } from "zod";
 import { db, ensureAdmin } from "./db.js";
 import { buildCapXml, makeIdentifier, validateAlert } from "./cap.js";
 
-ensureAdmin();
 const app = express();
 const port = Number(process.env.PORT || 8095);
 const secret = process.env.JWT_SECRET;
@@ -17,6 +16,7 @@ if (!secret || secret.length < 32) {
  console.error("FATAL: Set JWT_SECRET to a unique random value of at least 32 characters before starting the server.");
  process.exit(1);
 }
+ensureAdmin();
 app.use(helmet({ contentSecurityPolicy: false }));
 const origins = (process.env.CORS_ORIGINS || "").split(",").map(s=>s.trim()).filter(Boolean);
 app.use(cors({ origin: origins.length ? origins : false }));
@@ -126,7 +126,7 @@ app.get("/api/alerts/:id/cap.xml",auth,(req,res)=>{
  } catch(e) { res.status(400).json({error:e.message}); }
 });
 app.get("/api/public/alerts", (req,res)=>{
- const rows=db.prepare("SELECT identifier,sender,sent,status,msg_type,scope,event,urgency,severity,certainty,headline,description,area_desc,onset,expires FROM alerts WHERE workflow='published' AND scope='Public' ORDER BY sent DESC LIMIT 100").all();
+ const rows=db.prepare("SELECT identifier,sender,sent,status,msg_type,scope,event,urgency,severity,certainty,headline,description,area_desc,onset,expires FROM alerts WHERE workflow='published' AND scope='Public' AND status='Actual' ORDER BY sent DESC LIMIT 100").all();
  res.json({alerts:rows});
 });
 app.get("/api/audit",auth,roles("admin","reviewer","approver"),(_req,res)=>{

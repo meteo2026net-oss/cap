@@ -61,6 +61,18 @@ CREATE TABLE IF NOT EXISTS audit_log (
 );
 CREATE INDEX IF NOT EXISTS idx_alert_workflow ON alerts(workflow);
 CREATE INDEX IF NOT EXISTS idx_alert_sent ON alerts(sent);
+
+-- Application-level audit protection: history is append-only through SQL.
+CREATE TRIGGER IF NOT EXISTS audit_log_no_update
+BEFORE UPDATE ON audit_log
+BEGIN
+ SELECT RAISE(ABORT, 'audit_log is append-only');
+END;
+CREATE TRIGGER IF NOT EXISTS audit_log_no_delete
+BEFORE DELETE ON audit_log
+BEGIN
+ SELECT RAISE(ABORT, 'audit_log is append-only');
+END;
 `);
 
 // Forward-compatible, idempotent SQLite migration for existing installations.

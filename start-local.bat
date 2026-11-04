@@ -7,7 +7,7 @@ if errorlevel 1 (
   exit /b 1
 )
 if not exist ".env" (
-  powershell -NoProfile -ExecutionPolicy Bypass -File "scripts\setup-local.ps1"
+  call npm run setup:local
   if errorlevel 1 exit /b 1
 )
 if not exist "node_modules" (

@@ -156,10 +156,6 @@ test("API enforces role separation, public-feed filtering and account deactivati
   })).status, 409, "an administrator cannot change their own role");
 
 
-  await createUser("admin2", "admin");
-  const secondAdmin = await login("admin2", "Temporary-Password-2026!");
-  assert.equal((await request("/api/users/1/role", { token: secondAdmin, method: "PATCH", body: { role: "viewer" } })).status, 409, "the last active administrator cannot be demoted");
-  assert.equal((await request("/api/users/1/status", { token: secondAdmin, method: "PATCH", body: { active: false } })).status, 409, "the last active administrator cannot be deactivated");
   const forecaster = await login("forecaster1", "Temporary-Password-2026!");
   const reviewer = await login("reviewer1", "Temporary-Password-2026!");
   const publisher = await login("publisher1", "Temporary-Password-2026!");

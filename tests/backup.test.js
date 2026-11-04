@@ -80,6 +80,76 @@ test("restore refuses overwrite without force and preserves the previous databas
   }
 });
 
+test("restore restores the original database when installing the replacement fails", async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "cap-restore-install-failure-"));
+  const source = path.join(directory, "source.sqlite");
+  const target = path.join(directory, "target.sqlite");
+  const database = createFixtureDatabase(source);
+  let renameCalls = 0;
+  const fileSystem = {
+    rename: async (from, to) => {
+      renameCalls++;
+      if (renameCalls === 2) throw new Error("simulated replacement rename failure");
+      return fs.rename(from, to);
+    }
+  };
+  try {
+    await fs.copyFile(source, target);
+    await assert.rejects(
+      () => restoreDatabaseBackup(source, target, { force: true, fileSystem }),
+      /simulated replacement rename failure/
+    );
+    const restoredOriginal = new Database(target, { readonly: true });
+    try {
+      assert.equal(restoredOriginal.prepare("SELECT username FROM users").get().username, "backup-test");
+    } finally {
+      restoredOriginal.close();
+    }
+    assert.equal((await fs.readdir(directory)).some(name => name.includes(".pre-restore-")), false,
+      "successfully restored rollback file should be moved back to the target");
+    assert.equal((await fs.readdir(directory)).some(name => name.includes(".restore-")), false,
+      "failed temporary replacement should be removed");
+  } finally {
+    database.close();
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("restore reports and preserves rollback file if rollback rename also fails", async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "cap-restore-rollback-failure-"));
+  const source = path.join(directory, "source.sqlite");
+  const target = path.join(directory, "target.sqlite");
+  const database = createFixtureDatabase(source);
+  let renameCalls = 0;
+  const fileSystem = {
+    rename: async (from, to) => {
+      renameCalls++;
+      if (renameCalls >= 2) throw new Error("simulated rename failure " + renameCalls);
+      return fs.rename(from, to);
+    }
+  };
+  try {
+    await fs.copyFile(source, target);
+    await assert.rejects(
+      () => restoreDatabaseBackup(source, target, { force: true, fileSystem }),
+      error => error instanceof AggregateError &&
+        /preserved rollback file is:/.test(error.message) &&
+        error.errors.length === 2
+    );
+    const rollback = (await fs.readdir(directory)).find(name => name.includes(".pre-restore-"));
+    assert.ok(rollback, "previous database must remain available at the reported rollback path");
+    const preserved = new Database(path.join(directory, rollback), { readonly: true });
+    try {
+      assert.equal(preserved.prepare("SELECT username FROM users").get().username, "backup-test");
+    } finally {
+      preserved.close();
+    }
+  } finally {
+    database.close();
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("backup pruning removes only old CAP backup files", async () => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), "cap-prune-test-"));
   try {

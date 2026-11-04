@@ -72,7 +72,7 @@ export async function pruneDatabaseBackups(directory, { retentionDays = 30, now 
   return removed;
 }
 
-export async function restoreDatabaseBackup(source, destination, { force = false } = {}) {
+export async function restoreDatabaseBackup(source, destination, { force = false, fileSystem = fs } = {}) {
   const sourcePath = path.resolve(source);
   const targetPath = path.resolve(destination);
   if (sourcePath === targetPath) throw new Error("Backup source and restore target must be different files");
@@ -102,19 +102,19 @@ export async function restoreDatabaseBackup(source, destination, { force = false
     try {
       await fs.access(targetPath);
       if (!force) throw new Error("Restore target already exists. Stop the service and pass --force to replace it.");
-      await fs.rename(targetPath, rollback);
+      await fileSystem.rename(targetPath, rollback);
       movedOriginal = true;
     } catch (error) {
       if (error.code !== "ENOENT") throw error;
     }
 
-    await fs.rename(temporary, targetPath);
+    await fileSystem.rename(temporary, targetPath);
     return { target: targetPath, backup_validation: validation, previous_database: movedOriginal ? rollback : null };
   } catch (error) {
     await fs.rm(temporary, { force: true }).catch(() => {});
     if (movedOriginal) {
       try {
-        await fs.rename(rollback, targetPath);
+        await fileSystem.rename(rollback, targetPath);
       } catch (rollbackError) {
         throw new AggregateError(
           [error, rollbackError],

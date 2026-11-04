@@ -198,6 +198,7 @@ test("API enforces role separation, public-feed filtering and account deactivati
     assert.throws(() => directDatabase.prepare("UPDATE alerts SET status='Draft' WHERE id=?").run(actualRow.id),
       /Invalid CAP 1.2 status/, "database triggers must reject non-standard CAP status values");
     directDatabase.prepare("UPDATE delivery_outbox SET status='sending',last_attempt_at=datetime('now','-30 minutes') WHERE alert_id=? AND channel='cap_feed'").run(actualRow.id);
+    directDatabase.prepare("UPDATE delivery_outbox SET status='failed',attempts=max_attempts,dead_letter_at=CURRENT_TIMESTAMP,next_attempt_at=NULL WHERE alert_id=? AND channel='cap_feed'").run(actualRow.id);
   } finally {
     directDatabase.close();
   }
@@ -217,6 +218,8 @@ test("API enforces role separation, public-feed filtering and account deactivati
   const deadLetterRow = await request("/api/delivery/outbox?status=dead_letter", { token: publisher });
   assert.equal(deadLetterRow.status, 200);
   assert.ok(Array.isArray(deadLetterRow.data.deliveries));
+  assert.ok(deadLetterRow.data.deliveries.some(item => item.alert_id === actualRow.id),
+    "dead-letter filter should expose exhausted entries without leaking them into other status filters");
 
   assert.equal((await request("/api/delivery/recover-stale", {
     token: forecaster, method: "POST", body: { staleMinutes: 10 }

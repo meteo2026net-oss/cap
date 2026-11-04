@@ -65,11 +65,16 @@ CREATE INDEX IF NOT EXISTS idx_alert_sent ON alerts(sent);
 
 `);
 
-installAuditLogGuards(db);
+ // Forward-compatible, idempotent SQLite migrations for existing installations.
+ const alertColumns = db.prepare("PRAGMA table_info(alerts)").all().map(column => column.name);
+ if (!alertColumns.includes("info_json")) db.exec("ALTER TABLE alerts ADD COLUMN info_json TEXT");
 
-// Forward-compatible, idempotent SQLite migration for existing installations.
-const alertColumns = db.prepare("PRAGMA table_info(alerts)").all().map(column => column.name);
-if (!alertColumns.includes("info_json")) db.exec("ALTER TABLE alerts ADD COLUMN info_json TEXT");
+ const auditColumns = db.prepare("PRAGMA table_info(audit_log)").all().map(column => column.name);
+ if (!auditColumns.includes("previous_hash")) db.exec("ALTER TABLE audit_log ADD COLUMN previous_hash TEXT");
+ if (!auditColumns.includes("entry_hash")) db.exec("ALTER TABLE audit_log ADD COLUMN entry_hash TEXT");
+
+ installAuditLogGuards(db);
+
 
 export function ensureAdmin() {
  const username = process.env.ADMIN_USERNAME || "admin";

@@ -12,8 +12,12 @@ import { buildCapXml, makeIdentifier, validateAlert } from "./cap.js";
 const app = express();
 const port = Number(process.env.PORT || 8095);
 const secret = process.env.JWT_SECRET;
-if (!secret || secret.length < 32) {
+if (!secret || secret.length < 32 || secret.startsWith("replace-with-")) {
  console.error("FATAL: Set JWT_SECRET to a unique random value of at least 32 characters before starting the server.");
+ process.exit(1);
+}
+if (!process.env.ADMIN_PASSWORD || process.env.ADMIN_PASSWORD.length < 14 || process.env.ADMIN_PASSWORD === "ChangeThisImmediately!123") {
+ console.error("FATAL: Set ADMIN_PASSWORD to a unique password of at least 14 characters.");
  process.exit(1);
 }
 ensureAdmin();
@@ -40,7 +44,7 @@ const schema = z.object({
 });
 
 function auth(req,res,next) {
- const token = (req.headers.authorization || "").replace(/^Bearer\\s+/i,"");
+ const token = (req.headers.authorization || "").replace(/^Bearer\s+/i,"");
  try {
    req.user = jwt.verify(token, secret);
    const user = db.prepare("SELECT id,username,role,active FROM users WHERE id=?").get(req.user.id);

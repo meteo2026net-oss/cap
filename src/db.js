@@ -107,10 +107,13 @@ CREATE INDEX IF NOT EXISTS idx_delivery_alert ON delivery_outbox(alert_id);
    payload_json TEXT NOT NULL,
    status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','reviewed','rejected')),
    reviewed_at TEXT,
+   reviewed_by INTEGER REFERENCES users(id),
    review_note TEXT NOT NULL DEFAULT ''
   );
   CREATE INDEX IF NOT EXISTS idx_webhook_inbox_status ON webhook_inbox(status, received_at);
  `);
+ const webhookInboxColumns = db.prepare("PRAGMA table_info(webhook_inbox)").all().map(column => column.name);
+ if (!webhookInboxColumns.includes("reviewed_by")) db.exec("ALTER TABLE webhook_inbox ADD COLUMN reviewed_by INTEGER REFERENCES users(id)");
  db.exec("CREATE INDEX IF NOT EXISTS idx_delivery_retry_due ON delivery_outbox(status,next_attempt_at,attempts)");
 
 

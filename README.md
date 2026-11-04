@@ -63,6 +63,7 @@ The service listens on `127.0.0.1:8095` by default and stores SQLite data in the
 - Arabic RTL dashboard.
 - SQLite schema and initial administrator bootstrap.
 - JWT login, authenticated password changes, and administrator provisioning for institutional roles.
+- Per-user token-version enforcement: password changes revoke all previously issued sessions and return a replacement token for the current session.
 - Draft -> pending review -> approved -> internal publication workflow with independent creator/reviewer/publisher separation.
 - CAP 1.2 XML export with numeric-offset timestamps, multiple language blocks, multiple categories/response types, multiple affected areas, geocodes, altitude/ceiling, parameters and supplemental resources.
 - Dashboard advanced JSON editor for multilingual information blocks and supplemental resources.

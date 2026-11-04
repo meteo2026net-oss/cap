@@ -206,6 +206,18 @@ test("API enforces role separation, public-feed filtering and account deactivati
   });
   assert.equal(recovery.status, 200);
   assert.equal(recovery.data.recovered_count, 1, "stale sending jobs should be recovered to queued");
+  assert.equal((await request("/api/delivery/process-retries", {
+    token: forecaster, method: "POST", body: {}
+  })).status, 403, "forecasters must not process delivery retries");
+  const processedRetries = await request("/api/delivery/process-retries", {
+    token: publisher, method: "POST", body: {}
+  });
+  assert.equal(processedRetries.status, 200, "publishers may process due internal retries");
+  assert.equal(processedRetries.data.ok, true);
+  const deadLetterRow = await request("/api/delivery/outbox?status=dead_letter", { token: publisher });
+  assert.equal(deadLetterRow.status, 200);
+  assert.ok(Array.isArray(deadLetterRow.data.deliveries));
+
   assert.equal((await request("/api/delivery/recover-stale", {
     token: forecaster, method: "POST", body: { staleMinutes: 10 }
   })).status, 403, "forecasters must not run delivery recovery");

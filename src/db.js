@@ -61,7 +61,7 @@ CREATE TABLE IF NOT EXISTS audit_log (
 );
 CREATE INDEX IF NOT EXISTS idx_alert_workflow ON alerts(workflow);
 CREATE INDEX IF NOT EXISTS idx_alert_sent ON alerts(sent);
-);
+`);
 
 // Forward-compatible, idempotent SQLite migration for existing installations.
 const alertColumns = db.prepare("PRAGMA table_info(alerts)").all().map(column => column.name);

@@ -10,6 +10,7 @@
  </section>
  <main id="appPanel" hidden>
   <div class="welcome"><div><p class="eyebrow">OPERATIONS CENTER</p><h1>مركز التحذيرات الجوية</h1><p class="muted">إدارة دورة حياة التحذير من المسودة حتى النشر.</p></div><button id="logoutBtn" class="secondary">تسجيل الخروج</button></div>
+  <section id="userAdmin" class="card" hidden style="margin-bottom:18px"><div class="sectionHead"><h2>إدارة حسابات الفريق</h2><span class="tag">ADMIN</span></div><form id="userForm" class="formGrid"><label>اسم المستخدم<input name="username" minlength="3" maxlength="64" required></label><label>كلمة مرور مؤقتة (14 حرفاً على الأقل)<input name="password" type="password" minlength="14" required></label><label>الدور الوظيفي<select name="role"><option value="forecaster">متنبئ جوي</option><option value="reviewer">مراجع</option><option value="approver">معتمد</option><option value="publisher">ناشر</option><option value="viewer">مشاهد</option><option value="admin">مدير نظام</option></select></label><button>إنشاء الحساب</button></form><div id="usersList" class="alertsList" style="margin-top:14px"></div></section>
   <div class="stats"><div class="stat"><span>إجمالي التحذيرات</span><b id="total">0</b></div><div class="stat"><span>مسودات</span><b id="drafts">0</b></div><div class="stat"><span>بانتظار المراجعة</span><b id="pending">0</b></div><div class="stat"><span>منشورة</span><b id="published">0</b></div></div>
   <div class="grid">
    <section class="card"><div class="sectionHead"><h2>إنشاء تحذير جديد</h2><span class="tag">CAP 1.2</span></div>

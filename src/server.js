@@ -11,6 +11,8 @@ import { buildCapXml, makeIdentifier, validateAlert } from "./cap.js";
 import { alertsToGeoJSON } from "./geojson.js";
 import { appendAuditLog, verifyAuditChain } from "./audit.js";
 import { enqueueDelivery, claimDelivery, recordDeliveryReceipt, retryDelivery, recoverStaleDeliveries, processDueRetries } from "./delivery.js";
+import { createHash } from "node:crypto";
+import { verifyAndConsumeWebhook } from "./webhook-replay.js";
 
 const app = express();
 const port = Number(process.env.PORT || 8095);
@@ -27,9 +29,47 @@ ensureAdmin();
 app.use(helmet({ contentSecurityPolicy: false }));
 const origins = (process.env.CORS_ORIGINS || "").split(",").map(s=>s.trim()).filter(Boolean);
 app.use(cors({ origin: origins.length ? origins : false }));
-app.use(express.json({ limit: "1mb" }));
 app.use("/api", rateLimit({ windowMs: 15*60*1000, limit: 300, standardHeaders: true, legacyHeaders: false }));
 app.use("/api/auth", rateLimit({ windowMs: 15*60*1000, limit: 30, standardHeaders: true, legacyHeaders: false }));
+
+const webhookIngressEnabled = process.env.CAP_WEBHOOK_INGRESS_ENABLED === "true";
+const webhookSecret = process.env.CAP_WEBHOOK_SECRET || "";
+if (webhookIngressEnabled && (Buffer.byteLength(webhookSecret, "utf8") < 32 || /^REPLACE_WITH_/i.test(webhookSecret))) {
+ console.error("FATAL: CAP_WEBHOOK_INGRESS_ENABLED requires a unique CAP_WEBHOOK_SECRET of at least 32 bytes.");
+ process.exit(1);
+}
+const webhookIngressLimiter = rateLimit({ windowMs: 60*1000, limit: 30, standardHeaders: true, legacyHeaders: false });
+app.post("/api/webhooks/inbound", webhookIngressLimiter, express.raw({ type: "application/json", limit: "64kb" }), (req,res) => {
+ if (!webhookIngressEnabled) return res.status(404).json({ error: "Webhook ingress is disabled" });
+ if (!Buffer.isBuffer(req.body)) return res.status(415).json({ error: "Content-Type must be application/json" });
+ let payload;
+ try {
+  payload = JSON.parse(req.body.toString("utf8"));
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) throw new Error("JSON object required");
+ } catch {
+  return res.status(400).json({ error: "A valid JSON object is required" });
+ }
+ const timestampHeader = req.get("x-webhook-timestamp") || "";
+ if (!/^[0-9]{1,12}$/.test(timestampHeader)) return res.status(400).json({ error: "A valid X-Webhook-Timestamp header is required" });
+ const timestamp = Number(timestampHeader);
+ const signature = req.get("x-webhook-signature") || "";
+ try {
+  const receive = db.transaction(() => {
+   if (!verifyAndConsumeWebhook(db, webhookSecret, timestamp, req.body, signature)) return null;
+   const signatureHash = createHash("sha256").update(signature, "utf8").digest("hex");
+   const result = db.prepare("INSERT INTO webhook_inbox(source_timestamp,signature_hash,payload_json) VALUES(?,?,?)")
+    .run(timestamp, signatureHash, JSON.stringify(payload));
+   return Number(result.lastInsertRowid);
+  });
+  const inboxId = receive.immediate();
+  if (inboxId === null) return res.status(401).json({ error: "Webhook signature is invalid, expired, or has already been used" });
+  return res.status(202).json({ accepted: true, inbox_id: inboxId, status: "pending", action: "manual_review_required" });
+ } catch (error) {
+  console.error("Webhook ingress failed:", error);
+  return res.status(500).json({ error: "Unable to safely store webhook message" });
+ }
+});
+app.use(express.json({ limit: "1mb" }));
 app.use(express.static("public"));
 
 const areaSchema = z.object({

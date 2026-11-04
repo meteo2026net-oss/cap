@@ -198,7 +198,6 @@ test("API enforces role separation, public-feed filtering and account deactivati
     assert.throws(() => directDatabase.prepare("UPDATE alerts SET status='Draft' WHERE id=?").run(actualRow.id),
       /Invalid CAP 1.2 status/, "database triggers must reject non-standard CAP status values");
     directDatabase.prepare("UPDATE delivery_outbox SET status='sending',last_attempt_at=datetime('now','-30 minutes') WHERE alert_id=? AND channel='cap_feed'").run(actualRow.id);
-    directDatabase.prepare("UPDATE delivery_outbox SET status='failed',attempts=max_attempts,dead_letter_at=CURRENT_TIMESTAMP,next_attempt_at=NULL WHERE alert_id=? AND channel='cap_feed'").run(actualRow.id);
   } finally {
     directDatabase.close();
   }
@@ -207,6 +206,13 @@ test("API enforces role separation, public-feed filtering and account deactivati
   });
   assert.equal(recovery.status, 200);
   assert.equal(recovery.data.recovered_count, 1, "stale sending jobs should be recovered to queued");
+  const deadLetterDatabase = new Database(path.join(cwd, "storage", "cap.sqlite"));
+  try {
+    deadLetterDatabase.prepare("UPDATE delivery_outbox SET status='failed',attempts=max_attempts,dead_letter_at=CURRENT_TIMESTAMP,next_attempt_at=NULL WHERE alert_id=? AND channel='cap_feed'").run(actualRow.id);
+  } finally {
+    deadLetterDatabase.close();
+  }
+
   assert.equal((await request("/api/delivery/process-retries", {
     token: forecaster, method: "POST", body: {}
   })).status, 403, "forecasters must not process delivery retries");

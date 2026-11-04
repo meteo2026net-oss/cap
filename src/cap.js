@@ -5,7 +5,7 @@ const allowed = {
   urgency: ["Immediate", "Expected", "Future", "Past", "Unknown"],
   severity: ["Extreme", "Severe", "Moderate", "Minor", "Unknown"],
   certainty: ["Observed", "Likely", "Possible", "Unlikely", "Unknown"],
-  status: ["Actual", "Exercise", "System", "Test", "Draft"],
+  status: ["Actual", "Exercise", "System", "Test"],
   msg_type: ["Alert", "Update", "Cancel", "Ack", "Error"],
   scope: ["Public", "Restricted", "Private"]
 };

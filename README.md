@@ -36,7 +36,7 @@ To restore, stop the service first, then run:
 npm run restore -- backups/cap-YYYYMMDDTHHMMSSZ.sqlite
 ```
 
-The restore command refuses to overwrite an existing database unless `--force` is supplied. With `--force`, the previous database is retained beside the restored file as a pre-restore copy. Confirm the restored service and its data before removing that copy. In Docker, the backup volume is persistent and the commands can be run with `docker compose exec cap node src/backup.js`; for restore, stop the app container and run a one-off container with the same volumes, or perform the restore before starting the service. Keep a separate off-host copy; a backup stored on the same host is not disaster recovery.
+The restore command refuses to overwrite an existing database unless `--force` is supplied. With `--force`, the previous database is retained beside the restored file as a pre-restore copy. Confirm the restored service and its data before removing that copy. In Docker, create a backup with `docker compose exec cap node src/backup.js`. To restore, first stop the app container, then run `docker compose run --rm --no-deps cap node src/restore.js /app/backups/cap-YYYYMMDDTHHMMSSZ.sqlite --force`, and start the service again with `docker compose up -d`. The backup volume remains mounted in the one-off container. Keep a separate off-host copy; a backup stored on the same host is not disaster recovery.
 
 ## Audit integrity
 

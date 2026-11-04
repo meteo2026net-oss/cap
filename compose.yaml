@@ -5,6 +5,15 @@ services:
       dockerfile: Dockerfile
     image: meteo-cap-warning-system:latest
     container_name: meteo-cap-warning-system
+    init: true
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 100
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
     restart: unless-stopped
     ports:
       - "127.0.0.1:${CAP_PORT:-8095}:8095"
@@ -35,6 +44,15 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: meteo-cap-delivery-worker
+    init: true
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 100
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
     profiles: ["worker"]
     restart: unless-stopped
     env_file:

@@ -66,11 +66,24 @@ jobs:
           node --check tests/api.integration.test.js
       - run: npm test
       - run: npm run test:cap-schema
+      - name: Validate hardened Compose configuration
+        run: |
+          set -eu
+          printf '%s\n' 'ADMIN_PASSWORD=CI-Compose-Validation-Password-2026' 'JWT_SECRET=ci-compose-validation-secret-at-least-32-characters-long' > .env
+          docker compose config --quiet
+          rm -f .env
       - name: Build production Docker image
         run: docker build --pull -t meteo-cap-warning-system:ci .
       - name: Smoke test Docker container
         run: |
           docker run -d --name cap-smoke -p 127.0.0.1:18095:8095 \
+            --read-only \
+            --cap-drop ALL \
+            --security-opt no-new-privileges:true \
+            --pids-limit 100 \
+            --tmpfs /tmp:rw,noexec,nosuid,size=16m \
+            -v cap-smoke-data:/app/storage \
+            -v cap-smoke-backups:/app/backups \
             -e JWT_SECRET=ci-smoke-test-secret-at-least-32-characters-long \
             -e ADMIN_PASSWORD=CI-Smoke-Test-Admin-Password-2026 \
             meteo-cap-warning-system:ci

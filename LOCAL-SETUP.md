@@ -1,0 +1,67 @@
+# Local installation (without Docker)
+
+This installation runs Node.js directly on Windows, Linux, or macOS. Docker is not installed or used.
+
+## Requirements
+
+- Node.js 20 or newer (Node.js 22 LTS is recommended).
+- npm (included with Node.js).
+- Internet access for the first dependency installation and OpenStreetMap map tiles.
+
+SQLite is embedded through `better-sqlite3`; there is no separate database server to install. The application creates `storage/cap.sqlite` automatically.
+
+## Windows quick start
+
+1. Install Node.js 20+ (preferably Node.js 22 LTS).
+2. Extract or clone this repository.
+3. Open PowerShell in the project folder.
+4. Run:
+
+   ```powershell
+   powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup-local.ps1
+   npm start
+   ```
+
+   Alternatively, double-click `start-local.bat`. On first run it creates `.env` with cryptographically random secrets and installs npm dependencies if needed.
+
+5. Save the generated administrator password printed by the setup script.
+6. Open http://127.0.0.1:8095.
+
+The setup script never overwrites an existing `.env`. If native dependency installation fails on Windows, install Microsoft C++ Build Tools (Desktop development with C++) and retry `npm install`.
+
+## Linux / macOS
+
+From the repository root:
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env` and replace both placeholder secrets with unique random values. Generate values with:
+
+```bash
+openssl rand -hex 48
+openssl rand -base64 24
+```
+
+Use the first value for `JWT_SECRET` and the second for `ADMIN_PASSWORD`. Then run:
+
+```bash
+npm install
+npm test
+npm start
+```
+
+Open http://127.0.0.1:8095.
+
+## Local data and maintenance
+
+- SQLite database: `storage/cap.sqlite`
+- Backups: `backups/` by default
+- Create a backup: `npm run backup`
+- Restore (stop the server first): `npm run restore -- backups/<backup-file>.sqlite`
+- Run automated tests: `npm test`
+
+Keep `.env`, `storage/`, and `backups/` private. Do not commit credentials or live warning data.
+
+The local and Docker installations use the same application code and SQLite schema. Do not run both against the same database file simultaneously.

@@ -74,6 +74,7 @@ The service listens on `127.0.0.1:8095` by default and stores SQLite data in the
 - Interactive Leaflet map for published public alerts, severity-aware symbols, circle-radius rendering, local GeoJSON preview/import, and public GeoJSON download. Imported files are preview-only and are not persisted.
 - Basic audit trail.
 - Basic validation of required CAP fields, enumerations, date ordering, closed polygons, and circle geometry.
+- CAP `status` is restricted to the four CAP 1.2 values (`Actual`, `Exercise`, `System`, `Test`); `draft`, `pending`, `approved`, and `published` are internal workflow states and are never emitted as CAP status values.
 - GitHub Actions runs Node 24 syntax checks, automated tests, official CAP 1.2 XSD validation, npm audit reporting, Docker image build and container health smoke test.
 - Scheduled CodeQL static analysis and Dependabot dependency updates.
 - Automated Node.js tests for identifiers, CAP validation, geometry, dates, XML export, audit immutability, API role separation, linked Update/Cancel references, public feed filtering and GeoJSON output.

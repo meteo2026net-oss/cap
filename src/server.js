@@ -207,8 +207,8 @@ app.get("/api/alerts/:id/cap.xml",auth,(req,res)=>{
  } catch(e) { res.status(400).json({error:e.message}); }
 });
 app.get("/api/public/alerts", (req,res)=>{
- const rows=db.prepare("SELECT identifier,sender,sent,status,msg_type,scope,event,urgency,severity,certainty,headline,description,area_desc,onset,expires FROM alerts WHERE workflow='published' AND scope='Public' AND status='Actual' ORDER BY sent DESC LIMIT 100").all();
- res.json({alerts:rows});
+ const rows=db.prepare("SELECT identifier,sender,sent,status,msg_type,scope,references_text,event,category,response_type,urgency,severity,certainty,effective,onset,expires,headline,description,instruction,area_desc,polygon,circle,language,info_json FROM alerts WHERE workflow='published' AND scope='Public' AND status='Actual' ORDER BY sent DESC LIMIT 100").all();
+ res.json({alerts:rows.map(row=>{const {info_json,...alert}=row;return {...alert,info_blocks:info_json?JSON.parse(info_json):[]};})});
 });
 app.get("/api/audit",auth,roles("admin","reviewer","approver"),(_req,res)=>{
  res.json({entries:db.prepare(`SELECT l.*,u.username FROM audit_log l LEFT JOIN users u ON u.id=l.user_id ORDER BY l.id DESC LIMIT 500`).all()});

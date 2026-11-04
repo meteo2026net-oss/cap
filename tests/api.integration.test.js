@@ -139,7 +139,8 @@ test("API enforces role separation, public-feed filtering and account deactivati
   };
 
   const actualIdentifier = await createAndPublish("Actual");
-  const original = await request("/api/alerts");
+  const original = await request("/api/alerts", { token: forecaster });
+  assert.equal(original.status, 200, "authenticated alert history should be available");
   const actualRow = original.data.alerts.find(alert => alert.identifier === actualIdentifier);
   assert.ok(actualRow, "published warning should remain in authenticated history");
 

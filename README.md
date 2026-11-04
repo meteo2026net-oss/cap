@@ -74,7 +74,8 @@ The service listens on `127.0.0.1:8095` by default and stores SQLite data in the
 - Append-only audit log enforced by SQLite update/delete triggers, SHA-256 hash chaining for new entries, input-size limits, and an authenticated chain-verification endpoint; pre-migration entries remain explicitly identified as unhashed.
 - Basic validation of required CAP fields, enumerations, date ordering, closed polygons, and circle geometry.
 - CAP `status` is restricted to the four CAP 1.2 values (`Actual`, `Exercise`, `System`, `Test`); `draft`, `pending`, `approved`, and `published` are internal workflow states and are never emitted as CAP status values.
-- Optional internal delivery worker for stale-lease recovery and due-retry/dead-letter maintenance (no outbound network delivery).\n- GitHub Actions runs Node 22 syntax checks, automated tests, official CAP 1.2 XSD validation, npm audit reporting, Docker image build and container health smoke test.
+- Optional internal delivery worker for stale-lease recovery and due-retry/dead-letter maintenance (no outbound network delivery).
+- GitHub Actions runs Node 22 syntax checks, automated tests, official CAP 1.2 XSD validation, npm audit reporting, Docker image build and container health smoke test.
 - Scheduled CodeQL static analysis and Dependabot dependency updates.
 - Automated Node.js tests for identifiers, CAP validation, geometry, dates, XML export, audit immutability, API role separation, linked Update/Cancel references, public feed filtering and GeoJSON output.
 

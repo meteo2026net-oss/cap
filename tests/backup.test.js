@@ -149,3 +149,26 @@ test("backup retention rejects invalid retention windows", async () => {
     await fs.rm(directory, { recursive: true, force: true });
   }
 });
+
+
+test("failed SQLite backup removes a partially created artifact", async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "cap-partial-backup-test-"));
+  const destination = path.join(directory, "backups");
+  const database = {
+    async backup(filePath) {
+      await fs.mkdir(path.dirname(filePath), { recursive: true });
+      await fs.writeFile(filePath, "incomplete SQLite backup");
+      throw new Error("simulated backup interruption");
+    }
+  };
+  try {
+    await assert.rejects(
+      () => createDatabaseBackup(database, destination, { now: new Date("2026-11-04T12:30:00.000Z") }),
+      /simulated backup interruption/
+    );
+    assert.deepEqual(await fs.readdir(destination), [],
+      "a partially written backup must be removed after backup() fails");
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});

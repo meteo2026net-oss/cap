@@ -34,8 +34,8 @@ async function validateDatabaseFile(filePath) {
 export async function createDatabaseBackup(database, directory, { now = new Date() } = {}) {
   await fs.mkdir(directory, { recursive: true });
   const destination = path.join(directory, `cap-${timestampSlug(now)}.sqlite`);
-  await database.backup(destination);
   try {
+    await database.backup(destination);
     await fs.chmod(destination, 0o600);
     await validateDatabaseFile(destination);
     return destination;

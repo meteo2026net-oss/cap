@@ -69,6 +69,9 @@ CREATE INDEX IF NOT EXISTS idx_alert_sent ON alerts(sent);
  const alertColumns = db.prepare("PRAGMA table_info(alerts)").all().map(column => column.name);
  if (!alertColumns.includes("info_json")) db.exec("ALTER TABLE alerts ADD COLUMN info_json TEXT");
 
+ const userColumns = db.prepare("PRAGMA table_info(users)").all().map(column => column.name);
+ if (!userColumns.includes("token_version")) db.exec("ALTER TABLE users ADD COLUMN token_version INTEGER NOT NULL DEFAULT 0");
+
  const auditColumns = db.prepare("PRAGMA table_info(audit_log)").all().map(column => column.name);
  if (!auditColumns.includes("previous_hash")) db.exec("ALTER TABLE audit_log ADD COLUMN previous_hash TEXT");
  if (!auditColumns.includes("entry_hash")) db.exec("ALTER TABLE audit_log ADD COLUMN entry_hash TEXT");

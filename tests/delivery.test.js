@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import Database from "better-sqlite3";
-import { enqueueDelivery, claimDelivery, recordDeliveryReceipt, retryDelivery } from "../src/delivery.js";
+import { enqueueDelivery, claimDelivery, recordDeliveryReceipt, retryDelivery, recoverStaleDeliveries } from "../src/delivery.js";
 
 function fixture() {
  const database=new Database(":memory:");
@@ -72,5 +72,23 @@ test("outbox validates payload size and channel",()=>{
  try {
   assert.throws(()=>enqueueDelivery(db,{alertId:1,channel:"unknown",payload:"x"}),/Unsupported delivery channel/);
   assert.throws(()=>enqueueDelivery(db,{alertId:1,payload:""}),/non-empty string/);
+ } finally { db.close(); }
+});
+
+
+test("stale sending leases are safely returned to the queue",()=>{
+ const db=fixture();
+ try {
+  const stale=enqueueDelivery(db,{alertId:1,payload:"<stale/>"});
+  claimDelivery(db,stale.id);
+  db.prepare("UPDATE delivery_outbox SET last_attempt_at=datetime('now','-30 minutes') WHERE id=?").run(stale.id);
+  const recent=enqueueDelivery(db,{alertId:1,channel:"webhook",payload:"<recent/>"});
+  claimDelivery(db,recent.id);
+  const recovered=recoverStaleDeliveries(db,10);
+  assert.deepEqual(recovered.map(row=>row.id),[stale.id]);
+  assert.equal(db.prepare("SELECT status FROM delivery_outbox WHERE id=?").get(stale.id).status,"queued");
+  assert.equal(db.prepare("SELECT status FROM delivery_outbox WHERE id=?").get(recent.id).status,"sending");
+  assert.match(db.prepare("SELECT last_error FROM delivery_outbox WHERE id=?").get(stale.id).last_error,/Recovered stale sending lease/);
+  assert.throws(()=>recoverStaleDeliveries(db,0),/from 1 to 1440/);
  } finally { db.close(); }
 });

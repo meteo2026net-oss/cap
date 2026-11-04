@@ -29,7 +29,8 @@ Open http://localhost:8095.
 - CAP XML export for saved alerts.
 - Public JSON feed for published Public-scope alerts.
 - Basic audit trail.
-- Basic validation of required fields, CAP enumerations, date ordering, closed polygons, and circle geometry.
+- Basic validation of required CAP fields, enumerations, date ordering, closed polygons, and circle geometry.
+- GitHub Actions workflow runs the automated test suite on pushes and pull requests.
 - Automated Node.js test suite for identifiers, CAP validation, geometry, dates, and XML export.
 
 ## API
@@ -49,9 +50,9 @@ Open http://localhost:8095.
 
 ## Important safety and deployment notes
 
-This repository is an initial development foundation, not a certified or production-ready public warning service. Publishing currently exposes approved alerts only through the internal public JSON endpoint. No external CAP distribution, email, SMS, push, or government alert gateway is configured.
+This repository is an initial development foundation, not a certified or production-ready public warning service. Publishing currently exposes approved alerts through the public JSON endpoint only when their CAP status is `Actual` and scope is `Public`; Test and Exercise messages are excluded. No external CAP distribution, email, SMS, push, or government alert gateway is configured.
 
-Before operational use, implement and test official CAP 1.2 XSD validation, full CAP element coverage (including multilingual Info blocks, Resources, Geocodes, References, and Update/Cancel chains), account administration and MFA, HTTPS, backups, monitoring, security testing, and institution-specific authorization and approval procedures. Keep deployments private until these controls are completed. Use Test/Exercise messages during development.
+Before operational use, implement and test official CAP 1.2 XSD validation, full CAP element coverage (including multilingual Info blocks, Resources, Geocodes, References, and Update/Cancel chains), account administration and MFA, HTTPS, backups, monitoring, security testing, and institution-specific authorization and approval procedures. Keep deployments private until these controls are completed. Use Test/Exercise messages during development, and configure unique non-placeholder `JWT_SECRET` and `ADMIN_PASSWORD` values before startup.
 
 ## Roadmap
 

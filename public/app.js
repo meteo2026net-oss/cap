@@ -253,10 +253,51 @@ async function changeUserRole(id,currentRole,selectedRole){
 $("#alertForm").addEventListener("submit",async e=>{e.preventDefault();const obj=Object.fromEntries(new FormData(e.target));const jsonBlocks=obj.info_blocks_json?.trim();delete obj.info_blocks_json;if(jsonBlocks){try{obj.info_blocks=JSON.parse(jsonBlocks)}catch{alert("صيغة JSON غير صحيحة في كتل اللغات المتعددة.");return}}const hasInfoArea=obj.info_blocks?.some(b=>b.area||b.areas?.length);if(!obj.polygon?.trim()&&!obj.circle?.trim()&&!hasInfoArea){alert("أدخل مضلعاً أو دائرة أو منطقة جغرافية ضمن كتل المعلومات.");return}for(const k of ["onset","expires"])if(obj[k])obj[k]=new Date(obj[k]).toISOString();else obj[k]="";try{const d=await api("/api/alerts",{method:"POST",body:JSON.stringify(obj)});e.target.reset();alert(`تم حفظ المسودة: ${d.identifier}`);await loadAlerts()}catch(err){alert(err.message)}});
 async function act(id,action){try{await api(`/api/alerts/${id}/${action}`,{method:"POST",body:"{}"});await loadAlerts()}catch(e){alert(e.message)}}
 async function derive(id,msgType){const label=msgType==='Cancel'?'إلغاء التحذير':'إنشاء تحديث';if(!confirm(label+'؟ ستنشأ مسودة CAP بحالة Test وتحتاج إلى مراجعة واعتماد مستقلين.'))return;try{const result=await api('/api/alerts/'+id+'/derive',{method:'POST',body:JSON.stringify({msg_type:msgType})});alert('تم إنشاء المسودة: '+result.identifier+' (Test)');await loadAlerts()}catch(e){alert(e.message)}}
-async function loadAlerts(){try{const {alerts}=await api("/api/alerts");$("#total").textContent=alerts.length;$("#drafts").textContent=alerts.filter(a=>a.workflow==="draft").length;$("#pending").textContent=alerts.filter(a=>a.workflow==="pending").length;$("#published").textContent=alerts.filter(a=>a.workflow==="published").length;$("#alertsList").innerHTML=alerts.map(a=>`<article class="alertItem"><b>${esc(a.headline)}</b><div class="alertMeta"><span>${esc(a.event)}</span><span class="pill">${esc(a.workflow)}</span><span class="pill ${a.severity==="Extreme"||a.severity==="Severe"?"red":"orange"}">${esc(a.severity)}</span><span>${esc(a.area_desc)}</span></div><div class="actions">${a.workflow==="draft"?`<button onclick="act(${a.id},'submit')">إرسال للمراجعة</button>`:""}${a.workflow==="pending"?`<button onclick="act(${a.id},'approve')">اعتماد</button>`:""}${a.workflow==="approved"?`<button onclick="act(${a.id},'publish')">نشر داخلي</button>`:""}${(a.workflow==="approved"||a.workflow==="published") ? "<button class=\"secondary\" onclick=\"derive(" + a.id + ", &quot;Update&quot;)\">إنشاء تحديث</button>" + "<button class=\"secondary\" onclick=\"derive(" + a.id + ", &quot;Cancel&quot;)\">إلغاء التحذير</button>" : ""}<button class="secondary" onclick="downloadXml(${a.id})">CAP XML</button></div></article>`).join("")||'<p class="muted">لا توجد تحذيرات حتى الآن.</p>'}catch(e){if(e.message.includes("Authentication")){token="";showApp(false);$("#userAdmin").hidden=true;}else $("#alertsList").textContent=e.message}}
+async function loadAlerts(){
+ try{
+  const {alerts}=await api("/api/alerts");
+  $("#total").textContent=alerts.length;
+  $("#drafts").textContent=alerts.filter(a=>a.workflow==="draft").length;
+  $("#pending").textContent=alerts.filter(a=>a.workflow==="pending").length;
+  $("#published").textContent=alerts.filter(a=>a.workflow==="published").length;
+  $("#alertsList").innerHTML=alerts.map(a=>{
+   const actions=[];
+   const id=String(a.id);
+   if(a.workflow==="draft")actions.push("<button data-alert-action='submit' data-alert-id='"+id+"'>إرسال للمراجعة</button>");
+   if(a.workflow==="pending")actions.push("<button data-alert-action='approve' data-alert-id='"+id+"'>اعتماد</button>");
+   if(a.workflow==="approved")actions.push("<button data-alert-action='publish' data-alert-id='"+id+"'>نشر داخلي</button>");
+   if(a.workflow==="approved"||a.workflow==="published"){
+    actions.push("<button class='secondary' data-alert-derive='Update' data-alert-id='"+id+"'>إنشاء تحديث</button>");
+    actions.push("<button class='secondary' data-alert-derive='Cancel' data-alert-id='"+id+"'>إلغاء التحذير</button>");
+   }
+   actions.push("<button class='secondary' data-alert-download='"+id+"'>CAP XML</button>");
+   const severityClass=a.severity==="Extreme"||a.severity==="Severe"?"red":"orange";
+   return "<article class='alertItem'><b>"+esc(a.headline)+"</b><div class='alertMeta'><span>"+esc(a.event)+"</span><span class='pill'>"+esc(a.workflow)+"</span><span class='pill "+severityClass+"'>"+esc(a.severity)+"</span><span>"+esc(a.area_desc)+"</span></div><div class='actions'>"+actions.join("")+"</div></article>";
+  }).join("")||'<p class="muted">لا توجد تحذيرات حتى الآن.</p>';
+ }catch(e){
+  if(e.message.includes("Authentication")){token="";showApp(false);$("#userAdmin").hidden=true;}
+  else $("#alertsList").textContent=e.message;
+ }
+}
 function esc(s=""){return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
 async function downloadXml(id){try{const r=await fetch(`/api/alerts/${id}/cap.xml`,{headers:headers()});if(!r.ok)throw new Error("تعذر إنشاء XML");const blob=await r.blob(),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download=`cap-alert-${id}.xml`;a.click();URL.revokeObjectURL(url)}catch(e){alert(e.message)}}
-window.act=act;window.derive=derive;window.toggleUser=toggleUser;window.downloadXml=downloadXml;
+$("#alertsList").addEventListener("click",event=>{
+ const button=event.target.closest("button[data-alert-id]");
+ if(!button)return;
+ const id=Number(button.dataset.alertId);
+ if(!Number.isSafeInteger(id)||id<1)return;
+ if(button.dataset.alertAction)act(id,button.dataset.alertAction);
+ else if(button.dataset.alertDerive)derive(id,button.dataset.alertDerive);
+ else if(button.dataset.alertDownload)downloadXml(id);
+});
+$("#webhookInboxList")?.addEventListener("click",event=>{
+ const button=event.target.closest("button[data-webhook-review]");
+ if(!button)return;
+ const id=Number(button.dataset.webhookId);
+ if(Number.isSafeInteger(id)&&id>0)reviewWebhook(id,button.dataset.webhookReview);
+});
+window.toggleUser=toggleUser;
+window.changeUserRole=changeUserRole;
 showApp(false);
 
 async function loadDeliveryOutbox(){
@@ -309,7 +350,7 @@ async function loadWebhookInbox(append=false){
    const payload=esc(JSON.stringify(row.payload,null,2));
    const reviewer=row.reviewer_username?'<p class="small muted">راجع الرسالة: '+esc(row.reviewer_username)+' • '+esc(row.reviewed_at||"")+"</p>":"";
    const note=row.review_note?'<p class="small muted">ملاحظة المراجعة: '+esc(row.review_note)+'</p>':"";
-   const actions=row.status==="pending"?'<div class="actions"><button type="button" onclick="reviewWebhook('+row.id+',\'reviewed\')">تأكيد المراجعة</button><button class="secondary" type="button" onclick="reviewWebhook('+row.id+',\'rejected\')">رفض الرسالة</button></div>':"";
+   const actions=row.status==="pending"?'<div class="actions"><button type="button" data-webhook-review="reviewed" data-webhook-id="'+row.id+'">تأكيد المراجعة</button><button class="secondary" type="button" data-webhook-review="rejected" data-webhook-id="'+row.id+'">رفض الرسالة</button></div>':"";
    return '<article class="alertItem"><b>رسالة واردة #'+row.id+'</b><div class="alertMeta"><span class="pill">'+esc(label)+'</span><span>وقت الاستلام: '+esc(row.received_at)+'</span><span>وقت المصدر: '+esc(new Date(row.source_timestamp*1000).toISOString())+'</span></div>'+reviewer+note+'<details><summary>عرض محتوى JSON</summary><pre class="webhookPayload">'+payload+'</pre></details>'+actions+'</article>';
   }).join("");
   if(append)list.insertAdjacentHTML("beforeend",html);

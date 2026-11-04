@@ -43,7 +43,7 @@ app.use(helmet({
    imgSrc: ["'self'", "data:", "blob:", "https://*.tile.openstreetmap.org", "https://unpkg.com"],
    objectSrc: ["'none'"],
    scriptSrc: ["'self'", "https://unpkg.com"],
-   scriptSrcAttr: ["'unsafe-inline'"],
+   scriptSrcAttr: ["'none'"],
    styleSrc: ["'self'", "'unsafe-inline'", "https://unpkg.com"]
   }
  }

@@ -46,8 +46,8 @@ test("rejects CAP messages without geographic geometry", () => {
   assert.throws(() => validateAlert(withoutArea), /requires polygon, circle or geocode geometry/);
 });
 
-test("accepts the CAP 1.2 Draft status", () => {
-  assert.equal(validateAlert({ ...valid, status: "Draft" }), true);
+test("rejects Draft as a CAP status because draft is an internal workflow state", () => {
+  assert.throws(() => validateAlert({ ...valid, status: "Draft" }), /Invalid CAP status/);
 });
 
 test("exports CAP 1.2 XML", () => {

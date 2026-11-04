@@ -77,7 +77,9 @@ The service listens on `127.0.0.1:8095` by default and stores SQLite data in the
 - Optional internal delivery worker for stale-lease recovery and due-retry/dead-letter maintenance (no outbound network delivery).
 - GitHub Actions runs Node 22 syntax checks, automated tests, official CAP 1.2 XSD validation, npm audit reporting, Docker image build and container health smoke test.
 - Scheduled CodeQL static analysis and Dependabot dependency updates.
-- Automated Node.js tests for identifiers, CAP validation, geometry, dates, XML export, audit immutability, API role separation, linked Update/Cancel references, public feed filtering, GeoJSON output, legacy lease migration and webhook replay protection.
+- Optional signed inbound webhook endpoint (disabled by default) verifies timestamped HMAC-SHA256 signatures, rejects replays, limits JSON bodies to 64 KB, and stores accepted messages in a persistent manual-review inbox without creating or publishing alerts.
+- Role-protected webhook inbox listing and one-way pending-to-reviewed/rejected review decisions for administrators and reviewers, with audit entries.
+- Automated Node.js tests for identifiers, CAP validation, geometry, dates, XML export, audit immutability, API role separation, linked Update/Cancel references, public feed filtering, GeoJSON output, legacy lease migration, webhook replay protection and inbound webhook review.
 
 ## API
 
@@ -98,6 +100,9 @@ The service listens on `127.0.0.1:8095` by default and stores SQLite data in the
 - `GET /api/alerts/:id/cap.xml`
 - `GET /api/public/alerts`
 - `GET /api/public/alerts.geojson`
+- `POST /api/webhooks/inbound` (optional; disabled unless `CAP_WEBHOOK_INGRESS_ENABLED=true` and a unique `CAP_WEBHOOK_SECRET` of at least 32 bytes is configured; requires `X-Webhook-Timestamp` and `X-Webhook-Signature`; accepted messages are stored for manual review only)
+- `GET /api/webhooks/inbox` (admin/reviewer only; optional `?status=pending|reviewed|rejected`)
+- `PATCH /api/webhooks/inbox/:id/review` (admin/reviewer only; changes a pending message to `reviewed` or `rejected`; no automatic alert creation or publication)
 - `GET /api/audit`
 - `GET /api/delivery/outbox` (admin/publisher only; filter with `?status=queued|sending|delivered|failed|dead_letter`)
 - `POST /api/delivery/outbox/:id/claim` (claims a queued job and returns its CAP XML payload; does not transmit externally)

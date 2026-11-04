@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import Database from "better-sqlite3";
+import { createHash } from "node:crypto";
 import { enqueueDelivery, claimDelivery, recordDeliveryReceipt, retryDelivery, recoverStaleDeliveries, processDueRetries } from "../src/delivery.js";
 
 function fixture() {
@@ -17,7 +18,7 @@ function fixture() {
    attempts INTEGER NOT NULL DEFAULT 0 CHECK(attempts>=0),
    external_id TEXT NOT NULL DEFAULT '',last_error TEXT NOT NULL DEFAULT '',
    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-   last_attempt_at TEXT,delivered_at TEXT,max_attempts INTEGER NOT NULL DEFAULT 5,next_attempt_at TEXT,dead_letter_at TEXT,lease_token TEXT,UNIQUE(alert_id,channel)
+   last_attempt_at TEXT,delivered_at TEXT,max_attempts INTEGER NOT NULL DEFAULT 5,next_attempt_at TEXT,dead_letter_at TEXT,lease_token TEXT,lease_token_hash TEXT,UNIQUE(alert_id,channel)
   );
  `);
  return database;
@@ -41,6 +42,9 @@ test("delivery state machine claims once, records receipt and rejects duplicate 
   const claimed=claimDelivery(db,queued.id);
   assert.equal(claimed.status,"sending");
   assert.equal(claimed.attempts,1);
+  const storedLease = db.prepare("SELECT lease_token,lease_token_hash FROM delivery_outbox WHERE id=?").get(queued.id);
+  assert.equal(storedLease.lease_token, null);
+  assert.equal(storedLease.lease_token_hash, createHash("sha256").update(claimed.lease_token).digest("hex"));
   assert.equal(claimDelivery(db,queued.id),null);
   const delivered=recordDeliveryReceipt(db,queued.id,{status:"delivered",leaseToken:claimed.lease_token,externalId:"provider-123"});
   assert.equal(delivered.status,"delivered");

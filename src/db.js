@@ -63,6 +63,24 @@ CREATE TABLE IF NOT EXISTS audit_log (
 CREATE INDEX IF NOT EXISTS idx_alert_workflow ON alerts(workflow);
 CREATE INDEX IF NOT EXISTS idx_alert_sent ON alerts(sent);
 
+CREATE TABLE IF NOT EXISTS delivery_outbox (
+ id INTEGER PRIMARY KEY AUTOINCREMENT,
+ alert_id INTEGER NOT NULL REFERENCES alerts(id),
+ channel TEXT NOT NULL CHECK(channel IN ('cap_feed','webhook','email','sms','push')),
+ payload TEXT NOT NULL,
+ status TEXT NOT NULL DEFAULT 'queued' CHECK(status IN ('queued','sending','delivered','failed')),
+ attempts INTEGER NOT NULL DEFAULT 0 CHECK(attempts >= 0),
+ external_id TEXT NOT NULL DEFAULT '',
+ last_error TEXT NOT NULL DEFAULT '',
+ created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ last_attempt_at TEXT,
+ delivered_at TEXT,
+ UNIQUE(alert_id,channel)
+);
+CREATE INDEX IF NOT EXISTS idx_delivery_status ON delivery_outbox(status, created_at);
+CREATE INDEX IF NOT EXISTS idx_delivery_alert ON delivery_outbox(alert_id);
+
 `);
 
  // Forward-compatible, idempotent SQLite migrations for existing installations.

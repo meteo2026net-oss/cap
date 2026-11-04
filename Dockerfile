@@ -21,7 +21,7 @@ COPY package.json ./
 COPY src ./src
 COPY public ./public
 
-RUN mkdir -p /app/storage \
+RUN mkdir -p /app/storage /app/backups \
  && chown -R node:node /app
 
 USER node

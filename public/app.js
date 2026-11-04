@@ -227,7 +227,7 @@ async function reviewWebhook(id,status){
   await loadWebhookInbox();
  }catch(error){alert(error.message)}
 }
-$("#webhookInboxRefreshBtn")?.addEventListener("click",loadWebhookInbox);
+$("#webhookInboxRefreshBtn")?.addEventListener("click",()=>loadWebhookInbox());
 $("#webhookInboxLoadMoreBtn")?.addEventListener("click",()=>loadWebhookInbox(true));
-$("#webhookInboxFilter")?.addEventListener("change",loadWebhookInbox);
+$("#webhookInboxFilter")?.addEventListener("change",()=>loadWebhookInbox());
 window.reviewWebhook=reviewWebhook;

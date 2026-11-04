@@ -28,11 +28,26 @@ export function installAuditLogGuards(database) {
       SELECT RAISE(ABORT, 'audit_log is append-only');
     END;
   `);
+  const columns = database.prepare("PRAGMA table_info(audit_log)").all().map(column => column.name);
+  if (columns.includes("entry_hash")) {
+    database.exec(`
+      CREATE TRIGGER IF NOT EXISTS audit_log_no_unhashed_tail
+      BEFORE INSERT ON audit_log
+      WHEN EXISTS (SELECT 1 FROM audit_log WHERE entry_hash IS NOT NULL)
+        AND NEW.entry_hash IS NULL
+      BEGIN
+        SELECT RAISE(ABORT, 'audit_log hash chain cannot accept unhashed entries');
+      END;
+    `);
+  }
 }
 
 export function appendAuditLog(database, { userId = null, alertId = null, action, details = "" }) {
-  if (typeof action !== "string" || !action.trim()) {
-    throw new TypeError("Audit action must be a non-empty string");
+  if (typeof action !== "string" || !action.trim() || action.trim().length > 128) {
+    throw new TypeError("Audit action must be a non-empty string up to 128 characters");
+  }
+  if (String(details ?? "").length > 4000) {
+    throw new TypeError("Audit details must not exceed 4000 characters");
   }
 
   const append = database.transaction(() => {

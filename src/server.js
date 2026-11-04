@@ -146,8 +146,8 @@ app.post("/api/alerts",auth,roles("admin","forecaster"),(req,res)=>{
   };
   validateAlert(alert);
   const result = db.prepare(`INSERT INTO alerts
-   (identifier,sender,sent,status,msg_type,scope,references_text,event,category,response_type,urgency,severity,certainty,effective,onset,expires,headline,description,instruction,area_desc,polygon,circle,language,workflow,created_by)
-   VALUES (@identifier,@sender,@sent,@status,@msg_type,@scope,@references_text,@event,@category,@response_type,@urgency,@severity,@certainty,@effective,@onset,@expires,@headline,@description,@instruction,@area_desc,@polygon,@circle,@language,@workflow,@created_by)`).run(alert);
+   (identifier,sender,sent,status,msg_type,scope,references_text,event,category,response_type,urgency,severity,certainty,effective,onset,expires,headline,description,instruction,area_desc,polygon,circle,language,info_json,workflow,created_by)
+   VALUES (@identifier,@sender,@sent,@status,@msg_type,@scope,@references_text,@event,@category,@response_type,@urgency,@severity,@certainty,@effective,@onset,@expires,@headline,@description,@instruction,@area_desc,@polygon,@circle,@language,@info_json,@workflow,@created_by)`).run(alert);
   audit(req.user.id,result.lastInsertRowid,"created","Draft created");
   res.status(201).json({id:result.lastInsertRowid,identifier:alert.identifier});
  } catch(e) { res.status(400).json({error:e.message}); }

@@ -11,3 +11,5 @@ header{padding:12px 0 24px;border-bottom:1px solid #26364b}.brand{justify-conten
 .leaflet-draw-toolbar a{background-color:#fff}.leaflet-draw-tooltip{direction:rtl;font-family:Tahoma,Arial,sans-serif}.leaflet-draw-actions{direction:ltr}
 
 #deliveryMonitor .stats{margin:12px 0}#deliveryMonitor .stat b{font-size:24px}#deliveryMonitor .sectionHead{align-items:flex-start}#deliveryMonitor .error{overflow-wrap:anywhere}
+
+.webhookPayload{white-space:pre-wrap;overflow-wrap:anywhere;max-height:260px;overflow:auto;background:#081321;border:1px solid #293d56;border-radius:9px;padding:12px;color:#dbeafe;font-size:11px;direction:ltr;text-align:left}

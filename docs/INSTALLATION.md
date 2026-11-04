@@ -47,6 +47,25 @@ After the first setup and dependency installation, use:
 npm start
 ```
 
+### Optional internal delivery queue worker
+
+The worker performs queue maintenance only; it does not send CAP messages to external systems.
+
+Direct mode (in a second terminal):
+
+```bash
+npm run worker
+```
+
+Docker Compose (enable the optional profile):
+
+```bash
+docker compose --profile worker up -d --build
+docker compose logs -f delivery-worker
+```
+
+Stop only the worker with `docker compose stop delivery-worker`. The worker shares the same persistent SQLite and backup volumes as the API service. The polling interval defaults to 30 seconds and can be adjusted with `CAP_DELIVERY_WORKER_INTERVAL_MS` (5,000–300,000 milliseconds).
+
 For development with automatic Node.js restart:
 
 ```bash
@@ -124,7 +143,7 @@ docker compose up -d
 | Health check | `GET /api/health` | Docker healthcheck + same endpoint |
 | Docker required | No | Yes |
 
-Both modes currently use the same application and database format. Do not run both modes against the same SQLite file at the same time. Keep the two data stores separate unless you deliberately perform a verified backup/restore migration.
+Both modes currently use the same application and database format. The delivery worker is optional in both modes and is not needed for ordinary dashboard/API use. Do not run both modes against the same SQLite file at the same time. Keep the two data stores separate unless you deliberately perform a verified backup/restore migration.
 
 ## Troubleshooting
 

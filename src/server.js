@@ -12,11 +12,11 @@ import { buildCapXml, makeIdentifier, validateAlert } from "./cap.js";
 const app = express();
 const port = Number(process.env.PORT || 8095);
 const secret = process.env.JWT_SECRET;
-if (!secret || secret.length < 32 || secret.startsWith("replace-with-")) {
+if (!secret || secret.length < 32 || /^REPLACE_WITH_/i.test(secret)) {
  console.error("FATAL: Set JWT_SECRET to a unique random value of at least 32 characters before starting the server.");
  process.exit(1);
 }
-if (!process.env.ADMIN_PASSWORD || process.env.ADMIN_PASSWORD.length < 14 || process.env.ADMIN_PASSWORD === "ChangeThisImmediately!123") {
+if (!process.env.ADMIN_PASSWORD || process.env.ADMIN_PASSWORD.length < 14 || /^REPLACE_WITH_/i.test(process.env.ADMIN_PASSWORD || "") || process.env.ADMIN_PASSWORD === "ChangeThisImmediately!123") {
  console.error("FATAL: Set ADMIN_PASSWORD to a unique password of at least 14 characters.");
  process.exit(1);
 }

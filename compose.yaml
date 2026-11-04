@@ -29,6 +29,27 @@ services:
       start_period: 20s
       retries: 3
 
+  delivery-worker:
+    image: meteo-cap-warning-system:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: meteo-cap-delivery-worker
+    profiles: ["worker"]
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      CAP_DELIVERY_WORKER_INTERVAL_MS: ${CAP_DELIVERY_WORKER_INTERVAL_MS:-30000}
+    command: ["node", "src/delivery-worker.js"]
+    volumes:
+      - cap-data:/app/storage
+      - cap-backups:/app/backups
+    depends_on:
+      cap:
+        condition: service_healthy
+
 volumes:
   cap-data:
   cap-backups:

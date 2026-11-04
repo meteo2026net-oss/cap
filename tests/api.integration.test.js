@@ -7,6 +7,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import Database from "better-sqlite3";
+import { createWebhookSignature } from "../src/webhook-signature.js";
 
 const serverEntry = fileURLToPath(new URL("../src/server.js", import.meta.url));
 
@@ -33,7 +34,9 @@ test("API enforces role separation, public-feed filtering and account deactivati
       HOST: "127.0.0.1",
       JWT_SECRET: "integration-test-secret-that-is-at-least-32-characters",
       ADMIN_PASSWORD: "Integration-Test-Admin-Password-2026",
-      CAP_DELIVERY_ENABLED: "true"
+      CAP_DELIVERY_ENABLED: "true",
+      CAP_WEBHOOK_INGRESS_ENABLED: "true",
+      CAP_WEBHOOK_SECRET: "integration-webhook-secret-that-is-at-least-32-bytes"
     },
     stdio: "ignore"
   });
@@ -59,6 +62,40 @@ test("API enforces role separation, public-feed filtering and account deactivati
     await new Promise(resolve => setTimeout(resolve, 100));
   }
   assert.equal(ready, true, "API server should become ready");
+
+  const webhookTimestamp = Math.floor(Date.now() / 1000);
+  const webhookBody = JSON.stringify({ provider: "synthetic-test", event: "inbound-test", alert: { headline: "Not an operational alert" } });
+  const webhookSecret = "integration-webhook-secret-that-is-at-least-32-bytes";
+  const webhookSignature = createWebhookSignature(webhookSecret, webhookTimestamp, webhookBody);
+  const sendWebhook = (body, timestamp = webhookTimestamp, signature = webhookSignature, contentType = "application/json") =>
+    fetch(base + "/api/webhooks/inbound", {
+      method: "POST",
+      headers: { "Content-Type": contentType, "X-Webhook-Timestamp": String(timestamp), "X-Webhook-Signature": signature },
+      body
+    });
+  const acceptedWebhook = await sendWebhook(webhookBody);
+  assert.equal(acceptedWebhook.status, 202, "valid signed webhook should be accepted into the inbox");
+  const acceptedWebhookData = await acceptedWebhook.json();
+  assert.equal(acceptedWebhookData.accepted, true);
+  assert.equal(acceptedWebhookData.status, "pending");
+  assert.equal(acceptedWebhookData.action, "manual_review_required");
+  assert.ok(Number.isInteger(acceptedWebhookData.inbox_id));
+  const duplicateWebhook = await sendWebhook(webhookBody);
+  assert.equal(duplicateWebhook.status, 401, "a replayed signed webhook must be rejected");
+  const tamperedBody = await sendWebhook(webhookBody + " ");
+  assert.equal(tamperedBody.status, 401, "body tampering must invalidate the signature");
+  const staleTimestamp = webhookTimestamp - 301;
+  const staleSignature = createWebhookSignature(webhookSecret, staleTimestamp, webhookBody);
+  const staleWebhook = await sendWebhook(webhookBody, staleTimestamp, staleSignature);
+  assert.equal(staleWebhook.status, 401, "stale signed webhooks must be rejected");
+  const malformedTimestamp = await sendWebhook(webhookBody, "not-a-time", webhookSignature);
+  assert.equal(malformedTimestamp.status, 400, "malformed timestamps must be rejected");
+  const malformedJsonBody = "{invalid-json";
+  const malformedJsonSignature = createWebhookSignature(webhookSecret, webhookTimestamp, malformedJsonBody);
+  const malformedJson = await sendWebhook(malformedJsonBody, webhookTimestamp, malformedJsonSignature);
+  assert.equal(malformedJson.status, 400, "signed non-JSON payloads must be rejected");
+  const unsupportedContentType = await sendWebhook(webhookBody, webhookTimestamp, webhookSignature, "text/plain");
+  assert.equal(unsupportedContentType.status, 415, "webhook ingress must require JSON content type");
 
   const request = async (url, { token, method = "GET", body } = {}) => {
     const response = await fetch(base + url, {
@@ -200,6 +237,19 @@ test("API enforces role separation, public-feed filtering and account deactivati
   });
   assert.equal(deliveredReceipt.status, 200);
   assert.equal(deliveredReceipt.data.delivery.status, "delivered");
+
+  const inboxDatabase = new Database(path.join(cwd, "storage", "cap.sqlite"));
+  try {
+    const inboxRow = inboxDatabase.prepare("SELECT source_timestamp,payload_json,status FROM webhook_inbox WHERE id=?").get(acceptedWebhookData.inbox_id);
+    assert.ok(inboxRow, "accepted webhook should be persisted in the inbox");
+    assert.equal(inboxRow.source_timestamp, webhookTimestamp);
+    assert.equal(inboxRow.status, "pending", "inbound webhook must await human review");
+    assert.equal(JSON.parse(inboxRow.payload_json).provider, "synthetic-test");
+    assert.equal(inboxDatabase.prepare("SELECT COUNT(*) AS count FROM webhook_inbox").get().count, 1,
+      "invalid, stale, tampered and replayed webhooks must not enter the inbox");
+  } finally {
+    inboxDatabase.close();
+  }
 
   const directDatabase = new Database(path.join(cwd, "storage", "cap.sqlite"));
   try {

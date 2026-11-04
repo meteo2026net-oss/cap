@@ -54,6 +54,7 @@ function validateArea(area) {
   }
   if (area.altitude !== undefined && !Number.isFinite(Number(area.altitude))) throw new Error("CAP altitude must be numeric.");
   if (area.ceiling !== undefined && !Number.isFinite(Number(area.ceiling))) throw new Error("CAP ceiling must be numeric.");
+  if (area.altitude !== undefined && area.ceiling !== undefined && Number(area.ceiling) < Number(area.altitude)) throw new Error("CAP ceiling cannot be lower than altitude.");
 }
 function normalizeArea(area) {
   const out = { areaDesc: area.areaDesc };
@@ -77,6 +78,10 @@ function normalizeResource(resource) {
   return out;
 }
 function normalizeInfo(info) {
+  if (!info.event?.trim()) throw new Error("Every CAP info block requires an event.");
+  if (info.language && !/^[A-Za-z]{1,8}(?:-[A-Za-z0-9]{1,8})*$/.test(info.language)) throw new Error("CAP language must use a valid RFC 3066-style language tag.");
+  if (info.headline && info.headline.length > 160) throw new Error("CAP headline must not exceed 160 characters.");
+  if (info.expires && info.onset && Date.parse(info.expires) <= Date.parse(info.onset)) throw new Error("Info expiry must be later than onset.");
   const cats = info.categories || [info.category || "Met"];
   if (!cats.length || cats.some(c => !categories.includes(c))) throw new Error("CAP info requires at least one valid category.");
   if (info.response_types?.some(x => !responseTypes.includes(x))) throw new Error("Invalid CAP responseType.");
@@ -100,7 +105,10 @@ function normalizeInfo(info) {
     ...(info.web ? { web: info.web } : {}),
     ...(info.contact ? { contact: info.contact } : {})
   };
-  if (info.parameters?.length) out.parameter = info.parameters.map(p => ({ valueName: p.valueName, value: p.value }));
+  if (info.parameters?.length) {
+    for (const parameter of info.parameters) if (!parameter.valueName?.trim() || parameter.value === undefined || parameter.value === null) throw new Error("CAP parameters require valueName and value.");
+    out.parameter = info.parameters.map(p => ({ valueName: p.valueName, value: p.value }));
+  }
   if (info.resources?.length) out.resource = info.resources.map(normalizeResource);
   const areas = info.areas?.length ? info.areas : (info.area ? [info.area] : []);
   if (areas.length) {

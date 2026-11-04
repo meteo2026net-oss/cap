@@ -17,7 +17,7 @@ function fixture() {
    attempts INTEGER NOT NULL DEFAULT 0 CHECK(attempts>=0),
    external_id TEXT NOT NULL DEFAULT '',last_error TEXT NOT NULL DEFAULT '',
    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-   last_attempt_at TEXT,delivered_at TEXT,max_attempts INTEGER NOT NULL DEFAULT 5,next_attempt_at TEXT,dead_letter_at TEXT,UNIQUE(alert_id,channel)
+   last_attempt_at TEXT,delivered_at TEXT,max_attempts INTEGER NOT NULL DEFAULT 5,next_attempt_at TEXT,dead_letter_at TEXT,lease_token TEXT,UNIQUE(alert_id,channel)
   );
  `);
  return database;
@@ -42,11 +42,11 @@ test("delivery state machine claims once, records receipt and rejects duplicate 
   assert.equal(claimed.status,"sending");
   assert.equal(claimed.attempts,1);
   assert.equal(claimDelivery(db,queued.id),null);
-  const delivered=recordDeliveryReceipt(db,queued.id,{status:"delivered",externalId:"provider-123"});
+  const delivered=recordDeliveryReceipt(db,queued.id,{status:"delivered",leaseToken:claimed.lease_token,externalId:"provider-123"});
   assert.equal(delivered.status,"delivered");
   assert.equal(delivered.external_id,"provider-123");
   assert.ok(delivered.delivered_at);
-  assert.equal(recordDeliveryReceipt(db,queued.id,{status:"delivered"}),null);
+  assert.equal(recordDeliveryReceipt(db,queued.id,{status:"delivered",leaseToken:claimed.lease_token}),null);
   assert.equal(retryDelivery(db,queued.id),null);
  } finally { db.close(); }
 });
@@ -55,8 +55,8 @@ test("failed delivery can be requeued and retains attempt history",()=>{
  const db=fixture();
  try {
   const queued=enqueueDelivery(db,{alertId:1,payload:"<alert/>"});
-  claimDelivery(db,queued.id);
-  const failed=recordDeliveryReceipt(db,queued.id,{status:"failed",details:"Synthetic provider timeout"});
+  const claimed=claimDelivery(db,queued.id);
+  const failed=recordDeliveryReceipt(db,queued.id,{status:"failed",leaseToken:claimed.lease_token,details:"Synthetic provider timeout"});
   assert.equal(failed.status,"failed");
   assert.equal(failed.last_error,"Synthetic provider timeout");
   const retried=retryDelivery(db,queued.id);
@@ -99,8 +99,8 @@ test("failed deliveries use exponential backoff and are automatically requeued w
  const db=fixture();
  try {
   const queued=enqueueDelivery(db,{alertId:1,payload:"<retry/>",maxAttempts:3});
-  claimDelivery(db,queued.id);
-  const failed=recordDeliveryReceipt(db,queued.id,{status:"failed",details:"Temporary failure"});
+  const claimed=claimDelivery(db,queued.id);
+  const failed=recordDeliveryReceipt(db,queued.id,{status:"failed",leaseToken:claimed.lease_token,details:"Temporary failure"});
   assert.equal(failed.status,"failed");
   assert.ok(failed.next_attempt_at);
   assert.equal(failed.dead_letter_at,null);
@@ -118,8 +118,8 @@ test("delivery is dead-lettered at the configured attempt limit and cannot be au
  const db=fixture();
  try {
   const queued=enqueueDelivery(db,{alertId:1,payload:"<terminal/>",maxAttempts:1});
-  claimDelivery(db,queued.id);
-  const failed=recordDeliveryReceipt(db,queued.id,{status:"failed",details:"Permanent synthetic failure"});
+  const claimed=claimDelivery(db,queued.id);
+  const failed=recordDeliveryReceipt(db,queued.id,{status:"failed",leaseToken:claimed.lease_token,details:"Permanent synthetic failure"});
   assert.equal(failed.status,"failed");
   assert.equal(failed.attempts,1);
   assert.ok(failed.dead_letter_at);
@@ -150,5 +150,21 @@ test("stale sending lease at maximum attempts is dead-lettered, not reported as 
   const row=db.prepare("SELECT status,dead_letter_at FROM delivery_outbox WHERE id=?").get(terminal.id);
   assert.equal(row.status,"failed");
   assert.ok(row.dead_letter_at);
+ } finally { db.close(); }
+});
+
+
+test("delivery receipts reject stale workers after lease recovery",()=>{
+ const db=fixture();
+ try {
+  const queued=enqueueDelivery(db,{alertId:1,payload:"<lease/>",maxAttempts:3});
+  const firstClaim=claimDelivery(db,queued.id);
+  assert.ok(firstClaim.lease_token);
+  db.prepare("UPDATE delivery_outbox SET last_attempt_at=datetime('now','-30 minutes') WHERE id=?").run(queued.id);
+  assert.deepEqual(recoverStaleDeliveries(db,10).recovered.map(row=>row.id),[queued.id]);
+  const secondClaim=claimDelivery(db,queued.id);
+  assert.notEqual(secondClaim.lease_token,firstClaim.lease_token);
+  assert.equal(recordDeliveryReceipt(db,queued.id,{status:"delivered",leaseToken:firstClaim.lease_token}),null);
+  assert.equal(recordDeliveryReceipt(db,queued.id,{status:"delivered",leaseToken:secondClaim.lease_token}).status,"delivered");
  } finally { db.close(); }
 });

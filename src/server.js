@@ -150,8 +150,9 @@ app.post("/api/auth/login", (req,res)=>{
 app.post("/api/auth/change-password",auth,rateLimit({windowMs:15*60*1000,limit:5}),(req,res)=>{
  const {currentPassword,newPassword}=req.body || {};
  if(typeof newPassword!=="string" || newPassword.length<14 || newPassword.length>200) return res.status(400).json({error:"New password must contain 14 to 200 characters"});
+ if(typeof currentPassword!=="string" || currentPassword.length>200) return res.status(401).json({error:"Current password is incorrect"});
  const row=db.prepare("SELECT password_hash FROM users WHERE id=?").get(req.user.id);
- if(!row || !bcrypt.compareSync(currentPassword || "",row.password_hash)) return res.status(401).json({error:"Current password is incorrect"});
+ if(!row || !bcrypt.compareSync(currentPassword,row.password_hash)) return res.status(401).json({error:"Current password is incorrect"});
  const hash=bcrypt.hashSync(newPassword,12);
  db.prepare("UPDATE users SET password_hash=?,token_version=token_version+1 WHERE id=?").run(hash,req.user.id);
  const tokenVersion=db.prepare("SELECT token_version FROM users WHERE id=?").get(req.user.id).token_version;

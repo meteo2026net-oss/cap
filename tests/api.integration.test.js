@@ -536,6 +536,15 @@ test("API enforces role separation, public-feed filtering and account deactivati
   assert.equal((await request("/api/me", { token: disabledOldSession })).status, 401,
     "reactivation must not revive a token issued before deactivation");
 
+  assert.equal((await request("/api/auth/change-password", {
+    token: forecaster, method: "POST",
+    body: { currentPassword: { malformed: true }, newPassword: "Updated-Temporary-Password-2026!" }
+  })).status, 401, "non-string current passwords must fail safely without throwing");
+  assert.equal((await request("/api/auth/change-password", {
+    token: forecaster, method: "POST",
+    body: { currentPassword: "x".repeat(201), newPassword: "Updated-Temporary-Password-2026!" }
+  })).status, 401, "oversized current passwords must be rejected before bcrypt comparison");
+
   const passwordChange = await request("/api/auth/change-password", {
     token: forecaster, method: "POST",
     body: {

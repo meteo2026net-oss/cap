@@ -104,6 +104,20 @@ CREATE INDEX IF NOT EXISTS idx_delivery_alert ON delivery_outbox(alert_id);
   const digest = createHash("sha256").update(lease.lease_token).digest("hex");
   migrateLeaseToken.run(digest, lease.id);
  }
+ db.exec(`
+  CREATE TRIGGER IF NOT EXISTS delivery_outbox_no_plaintext_lease_insert
+  BEFORE INSERT ON delivery_outbox
+  WHEN NEW.lease_token IS NOT NULL
+  BEGIN
+   SELECT RAISE(ABORT, 'Plaintext delivery lease tokens are forbidden');
+  END;
+  CREATE TRIGGER IF NOT EXISTS delivery_outbox_no_plaintext_lease_update
+  BEFORE UPDATE OF lease_token ON delivery_outbox
+  WHEN NEW.lease_token IS NOT NULL
+  BEGIN
+   SELECT RAISE(ABORT, 'Plaintext delivery lease tokens are forbidden');
+  END;
+ `);
  db.exec("CREATE INDEX IF NOT EXISTS idx_delivery_retry_due ON delivery_outbox(status,next_attempt_at,attempts)");
 
 

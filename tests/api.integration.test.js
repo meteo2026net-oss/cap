@@ -118,6 +118,13 @@ test("API enforces role separation, public-feed filtering and account deactivati
     return result.data.token;
   };
 
+  assert.equal((await request("/api/auth/login", {
+    method: "POST", body: { username: { malformed: true }, password: "anything" }
+  })).status, 401, "malformed usernames should receive a generic authentication failure");
+  assert.equal((await request("/api/auth/login", {
+    method: "POST", body: { username: "admin", password: "x".repeat(201) }
+  })).status, 401, "oversized login passwords should be rejected before password hashing");
+
   const admin = await login("admin", "Integration-Test-Admin-Password-2026");
   const initialUsers = await request("/api/users", { token: admin });
   assert.equal(initialUsers.status, 200);

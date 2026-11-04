@@ -132,8 +132,12 @@ function rowToCap(r) {
 app.get("/api/health", (_req,res)=>res.json({ok:true,service:"Meteo CAP Warning System",cap:"1.2"}));
 app.post("/api/auth/login", (req,res)=>{
  const {username,password} = req.body || {};
+ if (typeof username !== "string" || username.length < 1 || username.length > 64 ||
+     typeof password !== "string" || password.length > 200) {
+  return res.status(401).json({error:"Invalid credentials"});
+ }
  const user = db.prepare("SELECT * FROM users WHERE username=? AND active=1").get(username);
- if (!user || !bcrypt.compareSync(password || "", user.password_hash)) return res.status(401).json({error:"Invalid credentials"});
+ if (!user || !bcrypt.compareSync(password, user.password_hash)) return res.status(401).json({error:"Invalid credentials"});
  db.prepare("UPDATE users SET last_login_at=CURRENT_TIMESTAMP WHERE id=?").run(user.id);
  audit(user.id,null,"login_succeeded","Successful authentication");
  const token = jwt.sign({id:user.id,token_version:user.token_version}, secret, {expiresIn:"8h"});

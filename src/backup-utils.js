@@ -15,6 +15,10 @@ async function validateDatabaseFile(filePath) {
     if (integrity.length !== 1 || integrity[0].integrity_check !== "ok") {
       throw new Error("SQLite integrity_check failed");
     }
+    const foreignKeyViolations = database.pragma("foreign_key_check");
+    if (foreignKeyViolations.length) {
+      throw new Error(`SQLite foreign_key_check failed (${foreignKeyViolations.length} violation(s))`);
+    }
     const required = new Set(["users", "alerts", "audit_log"]);
     const actual = new Set(database.prepare(
       "SELECT name FROM sqlite_master WHERE type='table'"

@@ -199,6 +199,28 @@ test("backup and restore reject a database with a broken audit hash chain", asyn
   }
 });
 
+test("backup and restore reject databases with foreign-key violations", async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "cap-foreign-key-backup-test-"));
+  const source = path.join(directory, "source.sqlite");
+  const database = createFixtureDatabase(source);
+  try {
+    database.exec("CREATE TABLE child_records (id INTEGER PRIMARY KEY, user_id INTEGER REFERENCES users(id))");
+    database.pragma("foreign_keys = OFF");
+    database.prepare("INSERT INTO child_records(user_id) VALUES (999999)").run();
+    await assert.rejects(
+      () => createDatabaseBackup(database, path.join(directory, "backups")),
+      /foreign_key_check failed/
+    );
+    await assert.rejects(
+      () => restoreDatabaseBackup(source, path.join(directory, "restored.sqlite")),
+      /foreign_key_check failed/
+    );
+  } finally {
+    database.close();
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("restore refuses to proceed while SQLite WAL or SHM sidecars exist", async () => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), "cap-restore-sidecar-test-"));
   const source = path.join(directory, "source.sqlite");

@@ -135,6 +135,7 @@ app.post("/api/auth/login", (req,res)=>{
  const user = db.prepare("SELECT * FROM users WHERE username=? AND active=1").get(username);
  if (!user || !bcrypt.compareSync(password || "", user.password_hash)) return res.status(401).json({error:"Invalid credentials"});
  db.prepare("UPDATE users SET last_login_at=CURRENT_TIMESTAMP WHERE id=?").run(user.id);
+ audit(user.id,null,"login_succeeded","Successful authentication");
  const token = jwt.sign({id:user.id,token_version:user.token_version}, secret, {expiresIn:"8h"});
  res.json({token,user:{id:user.id,username:user.username,role:user.role}});
 });

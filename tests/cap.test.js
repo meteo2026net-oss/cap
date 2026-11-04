@@ -56,3 +56,57 @@ test("exports CAP 1.2 XML", () => {
   assert.match(xml, /<msgType>Alert<\/msgType>/);
   assert.match(xml, /<headline>Heavy rain warning<\/headline>/);
 });
+
+test("uses CAP numeric UTC offsets rather than the forbidden Z suffix", () => {
+  const xml = buildCapXml(valid);
+  assert.match(xml, /<sent>2026-11-04T00:00:00-00:00<\/sent>/);
+  assert.doesNotMatch(xml, /<sent>[^<]*Z<\/sent>/);
+});
+
+test("exports multiple language info blocks with resources and geocodes", () => {
+  const xml = buildCapXml({
+    ...valid,
+    info_blocks: [
+      {
+        language: "en-GB", category: "Met", event: "Heavy rainfall",
+        urgency: "Expected", severity: "Moderate", certainty: "Likely",
+        headline: "Heavy rain warning", description: "Heavy rain is possible.",
+        areas: [{ areaDesc: "Central district", geocodes: [{ valueName: "SAME", value: "012345" }] }],
+        resources: [{ resourceDesc: "Forecast map", mimeType: "image/png", uri: "https://example.org/map.png", size: 2048 }]
+      },
+      {
+        language: "ar", category: "Met", event: "أمطار غزيرة",
+        urgency: "Expected", severity: "Moderate", certainty: "Likely",
+        headline: "تحذير من أمطار غزيرة", description: "من المتوقع هطول أمطار غزيرة.",
+        area: { areaDesc: "المنطقة الوسطى", circle: "33.5,36.2 12" }
+      }
+    ]
+  });
+  assert.equal((xml.match(/<info>/g) || []).length, 2);
+  assert.match(xml, /<language>ar<\/language>/);
+  assert.match(xml, /<resourceDesc>Forecast map<\/resourceDesc>/);
+  assert.match(xml, /<geocode>/);
+  assert.match(xml, /<valueName>SAME<\/valueName>/);
+});
+
+test("creates CAP cancellation messages with references and no info block", () => {
+  const xml = buildCapXml({
+    ...valid, msg_type: "Cancel",
+    references_text: "alerts@example.test,urn:uuid:previous-id,2026-11-03T12:00:00-00:00"
+  });
+  assert.match(xml, /<msgType>Cancel<\/msgType>/);
+  assert.match(xml, /<references>/);
+  assert.doesNotMatch(xml, /<info>/);
+});
+
+test("rejects resources missing mandatory description or MIME type", () => {
+  assert.throws(() => buildCapXml({
+    ...valid,
+    info_blocks: [{
+      language: "en-GB", category: "Met", event: "Heavy rainfall",
+      urgency: "Expected", severity: "Moderate", certainty: "Likely",
+      resources: [{ resourceDesc: "Map" }],
+      area: { areaDesc: "Test district", circle: "51.5,-0.1 10" }
+    }]
+  }), /resourceDesc and mimeType/);
+});

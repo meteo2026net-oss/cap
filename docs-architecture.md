@@ -38,6 +38,6 @@
 ## Delivery operations and security helpers
 - The Arabic operations dashboard exposes the protected internal outbox to administrators and publishers, including queued, sending, failed, and dead-letter counts. The dead-letter filter is available through `GET /api/delivery/outbox?status=dead_letter`.
 - Retry scheduling uses exponential delays beginning at 30 seconds and capped at one hour. Each job has a maximum-attempt count (default 5, permitted range 1–20); exhausted jobs are retained with a `dead_letter_at` timestamp and excluded from automatic retry.
-- The optional `src/delivery-worker.js` process recovers stale sending leases and processes due retries. It does not claim jobs, open network connections, or transmit alerts.
+- The optional `src/delivery-worker.js` process recovers stale sending leases and processes due retries. Stale leases below their attempt limit return to the queue; leases at the limit are transitioned to dead-letter and audited as a distinct event. It does not claim jobs, open network connections, or transmit alerts.
 - `src/webhook-signature.js` provides HMAC-SHA256 signing and verification for timestamped raw webhook bodies, with constant-time signature comparison and a bounded replay window. It is a cryptographic helper only: no webhook sender, receiver, secret storage, or external adapter is enabled.
 - Both direct Node.js and Docker Compose installations support the optional maintenance worker. Docker uses the shared persistent SQLite volume; direct mode uses the local `storage/cap.sqlite` file.

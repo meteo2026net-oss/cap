@@ -231,7 +231,14 @@ app.get("/api/delivery/outbox",auth,roles("admin","publisher"),(req,res)=>{
  const rows=db.prepare(`SELECT d.id,d.alert_id,d.channel,CASE WHEN d.dead_letter_at IS NOT NULL THEN 'dead_letter' ELSE d.status END AS status,d.attempts,d.max_attempts,d.next_attempt_at,d.dead_letter_at,d.external_id,d.last_error,d.created_at,d.updated_at,d.last_attempt_at,d.delivered_at,a.identifier,a.headline
   FROM delivery_outbox d JOIN alerts a ON a.id=d.alert_id
   WHERE (? IS NULL OR (?='dead_letter' AND d.dead_letter_at IS NOT NULL) OR (?<>'dead_letter' AND d.status=? AND d.dead_letter_at IS NULL)) ORDER BY d.created_at DESC LIMIT 500`).all(status ?? null,status ?? null,status ?? null,status ?? null);
- res.json({deliveries:rows,external_adapters_enabled:false});
+ const counts=db.prepare(`SELECT
+  COALESCE(SUM(CASE WHEN dead_letter_at IS NOT NULL THEN 1 ELSE 0 END),0) AS dead_letter,
+  COALESCE(SUM(CASE WHEN dead_letter_at IS NULL AND status='queued' THEN 1 ELSE 0 END),0) AS queued,
+  COALESCE(SUM(CASE WHEN dead_letter_at IS NULL AND status='sending' THEN 1 ELSE 0 END),0) AS sending,
+  COALESCE(SUM(CASE WHEN dead_letter_at IS NULL AND status='failed' THEN 1 ELSE 0 END),0) AS failed,
+  COALESCE(SUM(CASE WHEN dead_letter_at IS NULL AND status='delivered' THEN 1 ELSE 0 END),0) AS delivered
+  FROM delivery_outbox`).get();
+ res.json({deliveries:rows,counts,external_adapters_enabled:false});
 });
 app.post("/api/delivery/process-retries",auth,roles("admin","publisher"),(req,res)=>{
  const result=processDueRetries(db);

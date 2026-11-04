@@ -231,7 +231,7 @@ app.get("/api/delivery/outbox",auth,roles("admin","publisher"),(req,res)=>{
  const rows=db.prepare(`SELECT d.id,d.alert_id,d.channel,d.status,d.attempts,d.external_id,d.last_error,d.created_at,d.updated_at,d.last_attempt_at,d.delivered_at,a.identifier,a.headline
   FROM delivery_outbox d JOIN alerts a ON a.id=d.alert_id
   WHERE (? IS NULL OR d.status=?) ORDER BY d.created_at DESC LIMIT 500`).all(status ?? null,status ?? null);
- res.json({deliveries:rows,external_adapters_enabled:process.env.CAP_DELIVERY_ENABLED==="true"});
+ res.json({deliveries:rows,external_adapters_enabled:false});
 });
 app.post("/api/delivery/recover-stale",auth,roles("admin","publisher"),(req,res)=>{
  const staleMinutes=req.body?.staleMinutes ?? 10;

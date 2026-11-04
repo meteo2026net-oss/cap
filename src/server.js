@@ -126,6 +126,21 @@ app.post("/api/users",auth,roles("admin"),(req,res)=>{
  }
 });
 
+app.patch("/api/users/:id/status",auth,roles("admin"),(req,res)=>{
+ const active=req.body?.active;
+ if(typeof active!=="boolean") return res.status(400).json({error:"active must be a boolean"});
+ const target=db.prepare("SELECT id,username,role,active FROM users WHERE id=?").get(req.params.id);
+ if(!target) return res.status(404).json({error:"User not found"});
+ if(target.id===req.user.id && !active) return res.status(409).json({error:"You cannot deactivate your own administrator account"});
+ if(!active && target.role==="admin") {
+  const activeAdmins=db.prepare("SELECT COUNT(*) AS count FROM users WHERE role='admin' AND active=1").get().count;
+  if(activeAdmins<=1) return res.status(409).json({error:"At least one active administrator must remain"});
+ }
+ db.prepare("UPDATE users SET active=? WHERE id=?").run(active?1:0,target.id);
+ audit(req.user.id,null,active?"user_activated":"user_deactivated",`${active?"Activated":"Deactivated"} user ${target.username}`);
+ res.json({ok:true,id:target.id,active});
+});
+
 app.get("/api/alerts",auth,(req,res)=>{
  const rows = db.prepare("SELECT id,identifier,event,urgency,severity,certainty,headline,area_desc,workflow,sent,expires,status,msg_type FROM alerts ORDER BY sent DESC LIMIT 500").all();
  res.json({alerts:rows});

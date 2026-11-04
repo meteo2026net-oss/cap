@@ -5,9 +5,9 @@ const loginPanel=$("#loginPanel"), appPanel=$("#appPanel");
 function headers(){return {"Content-Type":"application/json","Authorization":`Bearer ${token}`}}
 async function api(url,opts={}){const r=await fetch(url,{...opts,headers:{...headers(),...(opts.headers||{})}});const data=await r.json().catch(()=>({}));if(!r.ok)throw new Error(data.error||"Request failed");return data}
 function showApp(on){loginPanel.hidden=on;appPanel.hidden=!on}
-$("#loginForm").addEventListener("submit",async e=>{e.preventDefault();const f=new FormData(e.target);try{const d=await fetch("/api/auth/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(Object.fromEntries(f))}).then(r=>r.json());if(!d.token)throw new Error(d.error||"تعذر تسجيل الدخول");token=d.token;currentRole=d.user.role;$("#userBadge").textContent=`${d.user.username} • ${d.user.role}`;$("#deliveryMonitor").hidden=!["admin","publisher"].includes(currentRole);$("#userAdmin").hidden=d.user.role!=="admin";const canVerifyAudit=["admin","reviewer","approver"].includes(d.user.role);$("#auditIntegrity").hidden=!canVerifyAudit;showApp(true);await loadAlerts();initWarningMap();await refreshWarningMap();if(d.user.role==="admin")await loadUsers();if(canVerifyAudit)await loadAuditIntegrity();if(["admin","publisher"].includes(currentRole))await loadDeliveryOutbox()}catch(err){$("#loginError").textContent=err.message}});
+$("#loginForm").addEventListener("submit",async e=>{e.preventDefault();const f=new FormData(e.target);try{const d=await fetch("/api/auth/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(Object.fromEntries(f))}).then(r=>r.json());if(!d.token)throw new Error(d.error||"تعذر تسجيل الدخول");token=d.token;currentRole=d.user.role;$("#userBadge").textContent=`${d.user.username} • ${d.user.role}`;$("#deliveryMonitor").hidden=!["admin","publisher"].includes(currentRole);$("#webhookInboxMonitor").hidden=!["admin","reviewer"].includes(currentRole);$("#userAdmin").hidden=d.user.role!=="admin";const canVerifyAudit=["admin","reviewer","approver"].includes(d.user.role);$("#auditIntegrity").hidden=!canVerifyAudit;showApp(true);await loadAlerts();initWarningMap();await refreshWarningMap();if(d.user.role==="admin")await loadUsers();if(canVerifyAudit)await loadAuditIntegrity();if(["admin","publisher"].includes(currentRole))await loadDeliveryOutbox();if(["admin","reviewer"].includes(currentRole))await loadWebhookInbox()}catch(err){$("#loginError").textContent=err.message}});
 let warningMap=null, publishedGeoLayer=null, importedGeoLayer=null, drawnGeoLayer=null, drawControl=null;
-$("#logoutBtn").onclick=()=>{token="";currentRole="";showApp(false);$("#userAdmin").hidden=true;$("#auditIntegrity").hidden=true;$("#deliveryMonitor").hidden=true};
+$("#logoutBtn").onclick=()=>{token="";currentRole="";showApp(false);$("#userAdmin").hidden=true;$("#auditIntegrity").hidden=true;$("#deliveryMonitor").hidden=true;$("#webhookInboxMonitor").hidden=true};
 $("#passwordForm").addEventListener("submit",async e=>{
  e.preventDefault();
  const form=e.currentTarget, data=Object.fromEntries(new FormData(form));
@@ -186,3 +186,33 @@ $("#deliveryProcessBtn")?.addEventListener("click",async()=>{
   await loadDeliveryOutbox();
  }catch(error){status.textContent=error.message}
 });
+
+async function loadWebhookInbox(){
+ const status=$("#webhookInboxStatus"),list=$("#webhookInboxList");
+ if(!status||!list)return;
+ try{
+  const filter=$("#webhookInboxFilter")?.value||"";
+  const result=await api("/api/webhooks/inbox"+(filter?"?status="+encodeURIComponent(filter):""));
+  const rows=result.messages||[];
+  list.innerHTML=rows.map(row=>{
+   const label={pending:"بانتظار المراجعة",reviewed:"تمت المراجعة",rejected:"مرفوضة"}[row.status]||row.status;
+   const payload=esc(JSON.stringify(row.payload,null,2));
+   const note=row.review_note?'<p class="small muted">ملاحظة المراجع: '+esc(row.review_note)+'</p>':"";
+   const actions=row.status==="pending"?'<div class="actions"><button type="button" onclick="reviewWebhook('+row.id+',\'reviewed\')">تأكيد المراجعة</button><button class="secondary" type="button" onclick="reviewWebhook('+row.id+',\'rejected\')">رفض الرسالة</button></div>':"";
+   return '<article class="alertItem"><b>رسالة واردة #'+row.id+'</b><div class="alertMeta"><span class="pill">'+esc(label)+'</span><span>وقت الاستلام: '+esc(row.received_at)+'</span><span>وقت المصدر: '+esc(new Date(row.source_timestamp*1000).toISOString())+'</span></div>'+note+'<details><summary>عرض محتوى JSON</summary><pre class="webhookPayload">'+payload+'</pre></details>'+actions+'</article>';
+  }).join("")||'<p class="muted">لا توجد رسائل ضمن هذا التصنيف.</p>';
+  status.textContent="عدد الرسائل المعروضة: "+rows.length+" • الحد الأقصى 100 رسالة";
+ }catch(error){status.textContent=error.message}
+}
+async function reviewWebhook(id,status){
+ const label=status==="reviewed"?"تأكيد مراجعة الرسالة؟":"رفض الرسالة الواردة؟";
+ if(!confirm(label+" لا ينشئ هذا الإجراء تحذيراً جوياً."))return;
+ const note=prompt("ملاحظة المراجعة (اختياري):")??"";
+ try{
+  await api("/api/webhooks/inbox/"+id+"/review",{method:"PATCH",body:JSON.stringify({status,note})});
+  await loadWebhookInbox();
+ }catch(error){alert(error.message)}
+}
+$("#webhookInboxRefreshBtn")?.addEventListener("click",loadWebhookInbox);
+$("#webhookInboxFilter")?.addEventListener("change",loadWebhookInbox);
+window.reviewWebhook=reviewWebhook;

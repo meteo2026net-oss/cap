@@ -47,3 +47,29 @@ export function retryDelivery(database, id) {
   if (!result.changes) return null;
   return database.prepare("SELECT * FROM delivery_outbox WHERE id=?").get(id);
 }
+
+export function recoverStaleDeliveries(database, staleMinutes = 10) {
+  if (!Number.isInteger(staleMinutes) || staleMinutes < 1 || staleMinutes > 1440) {
+    throw new TypeError("staleMinutes must be an integer from 1 to 1440");
+  }
+  const recover = database.transaction(() => {
+    const stale = database.prepare(
+      `SELECT id, alert_id FROM delivery_outbox
+       WHERE status='sending' AND last_attempt_at IS NOT NULL
+         AND julianday(last_attempt_at) <= julianday('now', ?)
+       ORDER BY id ASC`
+    ).all(`-${staleMinutes} minutes`);
+    if (stale.length) {
+      const ids = stale.map(row => row.id);
+      const placeholders = ids.map(() => "?").join(",");
+      database.prepare(
+        `UPDATE delivery_outbox SET status='queued',
+           last_error=CASE WHEN last_error='' THEN 'Recovered stale sending lease' ELSE last_error || ' | Recovered stale sending lease' END,
+           updated_at=CURRENT_TIMESTAMP
+         WHERE id IN (${placeholders}) AND status='sending'`
+      ).run(...ids);
+    }
+    return stale;
+  });
+  return recover.immediate();
+}

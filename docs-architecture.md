@@ -12,7 +12,7 @@
 1. Foundation (partially implemented): app shell, SQLite database, JWT authentication, role provisioning, draft/review/approval/publish, XML export, basic tests and CI workflow. Remaining: migrations, robust session controls, and production hardening.
 2. CAP completeness: XSD validation, full CAP element coverage, references, resources, geocodes, multilingual info blocks, update/cancel chains.
 3. Geospatial: Leaflet map, polygon/circle drawing, GeoJSON import/export, administrative boundaries.
-4. Governance: administrator user provisioning, password change, and guarded account activation/deactivation are implemented; remaining work includes MFA, password reset/recovery, tamper-evident audit events, configurable approval policies, and tenant/institution profiles.
+4. Governance: administrator user provisioning, password change, and guarded account activation/deactivation are implemented; remaining work includes MFA, password reset/recovery, cryptographic tamper-evidence for audit events, configurable approval policies, and tenant/institution profiles. SQLite triggers now reject UPDATE and DELETE operations on audit records (application-level append-only protection, not a cryptographic integrity guarantee).
 5. Distribution: configurable CAP feed, HTTPS webhooks, email/SMS/push adapters, retry queue, delivery receipts.
 6. Integrations: embeddable public warning widget, API keys, webhooks, SDK examples, CORS allowlists.
 7. Operations: PostgreSQL, migrations, backups, monitoring, Docker, deployment profiles, automated tests and security review.

@@ -43,6 +43,7 @@ CREATE TABLE IF NOT EXISTS alerts (
  polygon TEXT,
  circle TEXT,
  language TEXT NOT NULL DEFAULT 'en-US',
+ info_json TEXT,
  workflow TEXT NOT NULL DEFAULT 'draft' CHECK(workflow IN ('draft','pending','approved','published','cancelled')),
  created_by INTEGER REFERENCES users(id),
  approved_by INTEGER REFERENCES users(id),
@@ -60,7 +61,11 @@ CREATE TABLE IF NOT EXISTS audit_log (
 );
 CREATE INDEX IF NOT EXISTS idx_alert_workflow ON alerts(workflow);
 CREATE INDEX IF NOT EXISTS idx_alert_sent ON alerts(sent);
-`);
+);
+
+// Forward-compatible, idempotent SQLite migration for existing installations.
+const alertColumns = db.prepare("PRAGMA table_info(alerts)").all().map(column => column.name);
+if (!alertColumns.includes("info_json")) db.exec("ALTER TABLE alerts ADD COLUMN info_json TEXT");
 
 export function ensureAdmin() {
  const username = process.env.ADMIN_USERNAME || "admin";

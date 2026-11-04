@@ -139,6 +139,38 @@ test("API enforces role separation, public-feed filtering and account deactivati
   };
 
   const actualIdentifier = await createAndPublish("Actual");
+  const original = await request("/api/alerts");
+  const actualRow = original.data.alerts.find(alert => alert.identifier === actualIdentifier);
+  assert.ok(actualRow, "published warning should remain in authenticated history");
+
+  const capXml = await fetch(base + "/api/alerts/" + actualRow.id + "/cap.xml", {
+    headers: { Authorization: "Bearer " + forecaster }
+  });
+  assert.equal(capXml.status, 200, "authorized CAP XML export should succeed");
+  assert.match(capXml.headers.get("content-type") || "", /application\\/xml/);
+  assert.match(await capXml.text(), /<alert xmlns=/);
+
+  for (const msg_type of ["Update", "Cancel"]) {
+    const derived = await request(`/api/alerts/${actualRow.id}/derive`, {
+      token: forecaster, method: "POST", body: { msg_type }
+    });
+    assert.equal(derived.status, 201, msg_type + " should create a new draft");
+    assert.equal(derived.data.status, "Test", "derived messages must remain in Test status");
+    assert.equal(derived.data.workflow, "draft");
+    assert.ok(derived.data.references.includes(actualIdentifier),
+      msg_type + " must reference the original CAP identifier");
+  }
+
+  assert.equal((await request("/api/audit", { token: forecaster })).status, 403,
+    "forecasters must not read restricted audit history");
+  assert.equal((await request("/api/audit", { token: reviewer })).status, 200,
+    "reviewers should be able to inspect audit history");
+
+  const geoFeed = await request("/api/public/alerts.geojson");
+  assert.equal(geoFeed.status, 200);
+  assert.ok(geoFeed.data.features.some(feature => feature.properties?.identifier === actualIdentifier),
+    "published Actual/Public warning should appear in public GeoJSON");
+
   const testIdentifier = await createAndPublish("Test");
   const publicFeed = await request("/api/public/alerts");
   assert.equal(publicFeed.status, 200);

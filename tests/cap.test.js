@@ -40,6 +40,16 @@ test("rejects invalid dates and expiry before onset", () => {
   assert.throws(() => validateAlert({ ...valid, onset: "2026-11-05T00:00:00Z", expires: "2026-11-04T00:00:00Z" }), /Expiry/);
 });
 
+
+test("rejects CAP messages without geographic geometry", () => {
+  const { circle, ...withoutArea } = valid;
+  assert.throws(() => validateAlert(withoutArea), /requires a polygon or circle/);
+});
+
+test("rejects non-standard CAP status values", () => {
+  assert.throws(() => validateAlert({ ...valid, status: "Draft" }), /Invalid CAP status/);
+});
+
 test("exports CAP 1.2 XML", () => {
   const xml = buildCapXml(valid);
   assert.match(xml, /urn:oasis:names:tc:emergency:cap:1\.2/);

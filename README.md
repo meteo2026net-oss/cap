@@ -14,6 +14,7 @@ Requirements: Node.js 20+ and npm.
 
 ```bash
 npm install
+npm test
 npm start
 ```
 
@@ -28,7 +29,8 @@ Open http://localhost:8095.
 - CAP XML export for saved alerts.
 - Public JSON feed for published Public-scope alerts.
 - Basic audit trail.
-- Basic validation of required fields, CAP enumerations, expiry/onset ordering, and coordinate ranges.
+- Basic validation of required fields, CAP enumerations, date ordering, closed polygons, and circle geometry.
+- Automated Node.js test suite for identifiers, CAP validation, geometry, dates, and XML export.
 
 ## API
 

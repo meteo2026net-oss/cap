@@ -33,7 +33,8 @@ export function validateImportedGeoJSON(input) {
     const first = value[0], last = value[value.length - 1];
     if (first[0] !== last[0] || first[1] !== last[1]) throw new Error("حلقة المضلع غير مغلقة.");
   };
-  const geometry = value => {
+  const geometry = (value, depth = 0) => {
+    if (depth > 8) throw new Error("تداخل GeometryCollection يتجاوز الحد المسموح.");
     if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("هندسة GeoJSON مفقودة.");
     const c = value.coordinates;
     switch (value.type) {
@@ -56,7 +57,7 @@ export function validateImportedGeoJSON(input) {
         }); break;
       case "GeometryCollection":
         if (!Array.isArray(value.geometries) || !value.geometries.length) throw new Error("GeometryCollection فارغ.");
-        value.geometries.forEach(geometry); break;
+        value.geometries.forEach(child => geometry(child, depth + 1)); break;
       default: throw new Error("نوع هندسة GeoJSON غير مدعوم.");
     }
   };
@@ -78,9 +79,36 @@ export function validateImportedGeoJSON(input) {
     if (feature.id !== undefined && !["string", "number"].includes(typeof feature.id)) {
       throw new Error("معرّف Feature يجب أن يكون نصاً أو رقماً.");
     }
-    return { type: "Feature", ...(feature.id === undefined ? {} : { id: feature.id }), geometry: feature.geometry, properties };
+    const id = typeof feature.id === "string" ? feature.id.slice(0, 128) : feature.id;
+    return { type: "Feature", ...(feature.id === undefined ? {} : { id }), geometry: feature.geometry, properties };
   });
   return { type: "FeatureCollection", features };
 }
 
-if (typeof window !== "undefined") window.validateImportedGeoJSON = validateImportedGeoJSON;
+export function polygonLatLngsToCap(points) {
+  if (!Array.isArray(points) || points.length < 3) throw new Error("يجب أن يحتوي المضلع على ثلاث نقاط على الأقل.");
+  const coords = points.map(point => {
+    if (!Number.isFinite(point?.lat) || !Number.isFinite(point?.lng) ||
+        Math.abs(point.lat) > 90 || Math.abs(point.lng) > 180) {
+      throw new Error("إحداثيات المضلع المرسوم غير صالحة.");
+    }
+    return point.lat.toFixed(6) + "," + point.lng.toFixed(6);
+  });
+  if (coords[0] !== coords[coords.length - 1]) coords.push(coords[0]);
+  return coords.join(" ");
+}
+
+export function circleToCap(latitude, longitude, radiusMeters) {
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude) ||
+      Math.abs(latitude) > 90 || Math.abs(longitude) > 180 ||
+      !Number.isFinite(radiusMeters) || radiusMeters <= 0 || radiusMeters > 1000000) {
+    throw new Error("مركز الدائرة أو نصف قطرها غير صالح.");
+  }
+  return latitude.toFixed(6) + "," + longitude.toFixed(6) + " " + (radiusMeters / 1000).toFixed(2);
+}
+
+if (typeof window !== "undefined") {
+  window.validateImportedGeoJSON = validateImportedGeoJSON;
+  window.polygonLatLngsToCap = polygonLatLngsToCap;
+  window.circleToCap = circleToCap;
+}

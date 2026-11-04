@@ -66,7 +66,7 @@ The service listens on `127.0.0.1:8095` by default and stores SQLite data in the
 - Dashboard advanced JSON editor for multilingual information blocks and supplemental resources.
 - Dashboard actions and API support for linked Update and Cancel drafts; derived messages remain in Test status pending independent review.
 - Administrator account activation/deactivation and role changes with safeguards against disabling/demoting the current or last active administrator; role changes revoke existing sessions.
-- Successful sign-ins update a persistent last-login timestamp, visible to administrators in the account-management panel; each successful sign-in is also recorded in the append-only, hash-chained audit history. Existing SQLite databases are upgraded automatically.
+- Successful sign-ins update a persistent last-login timestamp, visible to administrators in the account-management panel; each successful sign-in is also recorded in the append-only, hash-chained audit history. Restricted audit history supports bounded cursor pagination. Existing SQLite databases are upgraded automatically.
 - GitHub Actions downloads the official OASIS CAP 1.2 XSD and validates a generated multilingual XML example with xmllint.
 - Public JSON feed for published Public-scope `Actual` alerts, including multilingual `info_blocks`, geometry, references, and CAP metadata.
 - Public JSON and GeoJSON feeds automatically exclude alerts whose CAP `expires` timestamp has passed; alerts without an expiry remain available until administratively superseded or cancelled.

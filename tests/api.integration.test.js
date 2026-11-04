@@ -426,6 +426,20 @@ test("API enforces role separation, public-feed filtering and account deactivati
     "reviewers should be able to inspect audit history");
   assert.ok(auditHistory.data.entries.some(entry => entry.action === "login_succeeded" && entry.username === "admin"),
     "successful administrator sign-ins should be included in the audit history");
+  const firstAuditPage = await request("/api/audit?limit=1", { token: reviewer });
+  assert.equal(firstAuditPage.status, 200);
+  assert.equal(firstAuditPage.data.entries.length, 1);
+  assert.equal(firstAuditPage.data.has_more, true);
+  assert.ok(Number.isSafeInteger(firstAuditPage.data.next_before_id));
+  const secondAuditPage = await request("/api/audit?limit=1&before_id=" + firstAuditPage.data.next_before_id, { token: reviewer });
+  assert.equal(secondAuditPage.status, 200);
+  assert.equal(secondAuditPage.data.entries.length, 1);
+  assert.ok(secondAuditPage.data.entries[0].id < firstAuditPage.data.entries[0].id,
+    "audit cursor pagination must return strictly older entries without overlap");
+  assert.equal((await request("/api/audit?before_id=0", { token: reviewer })).status, 400,
+    "zero is not a valid audit cursor");
+  assert.equal((await request("/api/audit?limit=501", { token: reviewer })).status, 400,
+    "audit page size must be capped");
   const auditStatus = await request("/api/audit/verify", { token: reviewer });
   assert.equal(auditStatus.status, 200);
   assert.equal(auditStatus.data.valid, true, "API should verify the cryptographic audit chain");

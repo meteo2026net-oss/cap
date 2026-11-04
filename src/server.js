@@ -417,8 +417,26 @@ app.get("/api/audit/verify",auth,roles("admin","reviewer","approver"),(_req,res)
  res.json(verifyAuditChain(db));
 });
 
-app.get("/api/audit",auth,roles("admin","reviewer","approver"),(_req,res)=>{
- res.json({entries:db.prepare(`SELECT l.*,u.username FROM audit_log l LEFT JOIN users u ON u.id=l.user_id ORDER BY l.id DESC LIMIT 500`).all()});
+app.get("/api/audit",auth,roles("admin","reviewer","approver"),(req,res)=>{
+ const rawLimit=req.query.limit===undefined?"500":req.query.limit;
+ const limit=Number(rawLimit);
+ if(!/^[0-9]+$/.test(String(rawLimit)) || !Number.isSafeInteger(limit) || limit<1 || limit>500) {
+  return res.status(400).json({error:"limit must be an integer between 1 and 500"});
+ }
+ let beforeId=null;
+ if(req.query.before_id!==undefined) {
+  const rawCursor=String(req.query.before_id);
+  beforeId=Number(rawCursor);
+  if(!/^[0-9]+$/.test(rawCursor) || !Number.isSafeInteger(beforeId) || beforeId<1) {
+   return res.status(400).json({error:"before_id must be a positive safe integer"});
+  }
+ }
+ const rows=beforeId===null
+  ? db.prepare(`SELECT l.*,u.username FROM audit_log l LEFT JOIN users u ON u.id=l.user_id ORDER BY l.id DESC LIMIT ?`).all(limit+1)
+  : db.prepare(`SELECT l.*,u.username FROM audit_log l LEFT JOIN users u ON u.id=l.user_id WHERE l.id<? ORDER BY l.id DESC LIMIT ?`).all(beforeId,limit+1);
+ const hasMore=rows.length>limit;
+ const entries=rows.slice(0,limit);
+ res.json({entries,has_more:hasMore,next_before_id:hasMore?entries.at(-1).id:null});
 });
 
 app.get("*",(req,res)=>res.sendFile(process.cwd()+"/public/index.html"));

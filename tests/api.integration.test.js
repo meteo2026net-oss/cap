@@ -131,6 +131,7 @@ test("API enforces role separation, public-feed filtering and account deactivati
   await createUser("reviewer1", "reviewer");
   await createUser("publisher1", "publisher");
   const disabledId = await createUser("disabled1", "viewer");
+  const disabledOldSession = await login("disabled1", "Temporary-Password-2026!");
   const roleChangeId = await createUser("rolechange1", "viewer");
   const roleChangeOldSession = await login("rolechange1", "Temporary-Password-2026!");
   const roleChange = await request(`/api/users/${roleChangeId}/role`, {
@@ -441,12 +442,21 @@ test("API enforces role separation, public-feed filtering and account deactivati
   assert.ok(!geoAfterExpiry.data.features.some(feature => feature.properties?.identifier === expiredIdentifier),
     "expired Actual/Public warnings must be excluded from the public GeoJSON feed");
 
-  assert.equal((await request(`/api/users/${disabledId}/status`, {
+  const deactivated = await request(`/api/users/${disabledId}/status`, {
     token: admin, method: "PATCH", body: { active: false }
-  })).status, 200);
+  });
+  assert.equal(deactivated.status, 200);
+  assert.equal(deactivated.data.sessions_revoked, true, "deactivation should revoke all existing sessions");
+  assert.equal((await request("/api/me", { token: disabledOldSession })).status, 401,
+    "deactivation must invalidate an already-issued session");
   assert.equal((await request("/api/auth/login", {
     method: "POST", body: { username: "disabled1", password: "Temporary-Password-2026!" }
   })).status, 401, "deactivated users cannot log in");
+  assert.equal((await request(`/api/users/${disabledId}/status`, {
+    token: admin, method: "PATCH", body: { active: true }
+  })).status, 200, "administrator should be able to reactivate an account");
+  assert.equal((await request("/api/me", { token: disabledOldSession })).status, 401,
+    "reactivation must not revive a token issued before deactivation");
 
   const passwordChange = await request("/api/auth/change-password", {
     token: forecaster, method: "POST",

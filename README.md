@@ -89,7 +89,7 @@ The service listens on `127.0.0.1:8095` by default and stores SQLite data in the
 - `POST /api/auth/change-password`
 - `GET /api/users` (admin only)
 - `POST /api/users` (admin only; provisions admin/forecaster/reviewer/approver/publisher/viewer accounts)
-- `PATCH /api/users/:id/status` (admin only; activates/deactivates an account with last-admin safeguards)
+- `PATCH /api/users/:id/status` (admin only; activates/deactivates an account with last-admin safeguards and revokes existing sessions on state changes)
 - `PATCH /api/users/:id/role` (admin only; changes an account role, prevents self/last-admin demotion, and revokes existing sessions)
 - `GET /api/alerts`
 - `GET /api/alerts/:id`

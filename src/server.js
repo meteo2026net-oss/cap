@@ -199,18 +199,28 @@ app.patch("/api/users/:id/role",auth,roles("admin"),(req,res)=>{
 });
 
 app.patch("/api/users/:id/status",auth,roles("admin"),(req,res)=>{
+ const id=Number(req.params.id);
+ if(!Number.isSafeInteger(id) || id<1) return res.status(400).json({error:"Invalid user id"});
  const active=req.body?.active;
  if(typeof active!=="boolean") return res.status(400).json({error:"active must be a boolean"});
- const target=db.prepare("SELECT id,username,role,active FROM users WHERE id=?").get(req.params.id);
- if(!target) return res.status(404).json({error:"User not found"});
- if(target.id===req.user.id && !active) return res.status(409).json({error:"You cannot deactivate your own administrator account"});
- if(!active && target.role==="admin") {
-  const activeAdmins=db.prepare("SELECT COUNT(*) AS count FROM users WHERE role='admin' AND active=1").get().count;
-  if(activeAdmins<=1) return res.status(409).json({error:"At least one active administrator must remain"});
- }
- db.prepare("UPDATE users SET active=? WHERE id=?").run(active?1:0,target.id);
- audit(req.user.id,null,active?"user_activated":"user_deactivated",`${active?"Activated":"Deactivated"} user ${target.username}`);
- res.json({ok:true,id:target.id,active});
+ const updateStatus=db.transaction(()=>{
+  const target=db.prepare("SELECT id,username,role,active FROM users WHERE id=?").get(id);
+  if(!target) return {kind:"missing"};
+  if(target.active===(active?1:0)) return {kind:"unchanged",target};
+  if(target.id===req.user.id && !active) return {kind:"self"};
+  if(!active && target.role==="admin") {
+   const activeAdmins=db.prepare("SELECT COUNT(*) AS count FROM users WHERE role='admin' AND active=1").get().count;
+   if(activeAdmins<=1) return {kind:"last_admin"};
+  }
+  db.prepare("UPDATE users SET active=?,token_version=token_version+1 WHERE id=?").run(active?1:0,target.id);
+  audit(req.user.id,null,active?"user_activated":"user_deactivated",`${active?"Activated":"Deactivated"} user ${target.username}; existing sessions revoked`);
+  return {kind:"updated",target};
+ });
+ const result=updateStatus.immediate();
+ if(result.kind==="missing") return res.status(404).json({error:"User not found"});
+ if(result.kind==="self") return res.status(409).json({error:"You cannot deactivate your own administrator account"});
+ if(result.kind==="last_admin") return res.status(409).json({error:"At least one active administrator must remain"});
+ res.json({ok:true,id,active,changed:result.kind==="updated",sessions_revoked:result.kind==="updated"});
 });
 
 app.get("/api/alerts",auth,(req,res)=>{

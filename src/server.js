@@ -70,6 +70,28 @@ app.post("/api/auth/login", (req,res)=>{
 });
 app.get("/api/me",auth,(req,res)=>res.json({user:req.user}));
 
+const userSchema = z.object({
+ username: z.string().min(3).max(64).regex(/^[a-zA-Z0-9._-]+$/),
+ password: z.string().min(14).max(200),
+ role: z.enum(["admin","forecaster","reviewer","approver","publisher","viewer"])
+});
+app.get("/api/users",auth,roles("admin"),(_req,res)=>{
+ const users=db.prepare("SELECT id,username,role,active,created_at FROM users ORDER BY id").all();
+ res.json({users});
+});
+app.post("/api/users",auth,roles("admin"),(req,res)=>{
+ try {
+  const data=userSchema.parse(req.body);
+  const hash=bcrypt.hashSync(data.password,12);
+  const result=db.prepare("INSERT INTO users(username,password_hash,role) VALUES(?,?,?)").run(data.username,hash,data.role);
+  audit(req.user.id,null,"user_created",`Created user ${data.username} with role ${data.role}`);
+  res.status(201).json({id:result.lastInsertRowid,username:data.username,role:data.role});
+ } catch(e) {
+  if(e.code==="SQLITE_CONSTRAINT_UNIQUE") return res.status(409).json({error:"Username already exists"});
+  res.status(400).json({error:e.message});
+ }
+});
+
 app.get("/api/alerts",auth,(req,res)=>{
  const rows = db.prepare("SELECT id,identifier,event,urgency,severity,certainty,headline,area_desc,workflow,sent,expires,status,msg_type FROM alerts ORDER BY sent DESC LIMIT 500").all();
  res.json({alerts:rows});

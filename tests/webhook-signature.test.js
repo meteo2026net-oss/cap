@@ -18,7 +18,7 @@ test("HMAC signatures verify for the exact timestamp and raw body", () => {
 test("HMAC verification rejects modified bodies, signatures and secrets", () => {
   const signature = createWebhookSignature(secret, timestamp, body);
   assert.equal(verifyWebhookSignature(secret, timestamp, body + " ", signature, { nowSeconds: timestamp }), false);
-  assert.equal(verifyWebhookSignature(secret, timestamp, body, signature.slice(0, -1) + "0", { nowSeconds: timestamp }), false);
+  assert.equal(verifyWebhookSignature(secret, timestamp, body, "sha256=" + (signature[7] === "0" ? "1" : "0") + signature.slice(8), { nowSeconds: timestamp }), false);
   assert.equal(verifyWebhookSignature(secret + "x", timestamp, body, signature, { nowSeconds: timestamp }), false);
 });
 

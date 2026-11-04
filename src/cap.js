@@ -119,7 +119,7 @@ export function validateAlert(input) {
   }
   if (/[ ,<>]/.test(input.identifier) || /[ ,<>]/.test(input.sender)) throw new Error("CAP identifier and sender cannot contain spaces, commas or angle brackets.");
   capDateTime(input.sent, "sent");
-  const blocks = input.info_blocks?.length ? input.info_blocks : [{
+  const blocks = input.info_blocks?.length ? input.info_blocks : (["Cancel","Ack","Error"].includes(input.msg_type) ? [] : [{
     language: input.language, category: input.category, event: input.event, urgency: input.urgency,
     severity: input.severity, certainty: input.certainty, effective: input.effective, onset: input.onset,
     expires: input.expires, headline: input.headline, description: input.description,

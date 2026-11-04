@@ -1,4 +1,6 @@
 import "dotenv/config";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import express from "express";
 import helmet from "helmet";
 import cors from "cors";
@@ -15,6 +17,7 @@ import { createHash } from "node:crypto";
 import { verifyAndConsumeWebhook } from "./webhook-replay.js";
 
 const app = express();
+const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 // Use a real bcrypt hash for unknown/inactive accounts to reduce username-enumeration timing differences.
 const DUMMY_PASSWORD_HASH = bcrypt.hashSync("CAP-login-timing-equalization-only-not-a-user-password", 12);
 const port = Number(process.env.PORT || 8095);
@@ -88,7 +91,7 @@ app.post("/api/webhooks/inbound", webhookIngressLimiter, express.raw({ type: "ap
  }
 });
 app.use(express.json({ limit: "1mb" }));
-app.use(express.static("public"));
+app.use(express.static(path.join(appRoot, "public")));
 
 const areaSchema = z.object({
  areaDesc:z.string().min(2), polygon:z.string().optional(), circle:z.string().optional(),
@@ -485,5 +488,5 @@ app.get("/api/audit",auth,roles("admin","reviewer","approver"),(req,res)=>{
  res.json({entries,has_more:hasMore,next_before_id:hasMore?entries.at(-1).id:null});
 });
 
-app.get("*",(req,res)=>res.sendFile(process.cwd()+"/public/index.html"));
+app.get("*",(req,res)=>res.sendFile(path.join(appRoot, "public", "index.html")));
 app.listen(port,process.env.HOST || "127.0.0.1",()=>console.log(`Meteo CAP Warning System running at http://${process.env.HOST || "127.0.0.1"}:${port}`));

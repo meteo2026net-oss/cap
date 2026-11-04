@@ -65,12 +65,14 @@ test("API enforces role separation, public-feed filtering and account deactivati
   assert.equal(ready, true, "API server should become ready");
 
   const dashboard = await fetch(base + "/");
-  assert.equal(dashboard.status, 200);
+  assert.equal(dashboard.status, 200, "dashboard should be served independently of process.cwd()");
   const csp = dashboard.headers.get("content-security-policy") || "";
   assert.ok(csp.includes("frame-ancestors"));
   assert.ok(csp.includes("object-src"));
   assert.ok(csp.includes("script-src"));
   assert.ok(csp.includes("script-src-attr"));
+  const dashboardScript = await fetch(base + "/app.js");
+  assert.equal(dashboardScript.status, 200, "dashboard JavaScript should be served from the application root");
 
   const webhookTimestamp = Math.floor(Date.now() / 1000);
   const webhookBody = JSON.stringify({ provider: "synthetic-test", event: "inbound-test", alert: { headline: "Not an operational alert" } });

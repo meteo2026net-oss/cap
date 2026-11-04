@@ -72,9 +72,24 @@ export function verifyAuditChain(database) {
     WHERE entry_hash IS NOT NULL
     ORDER BY id ASC
   `).all();
-  const legacyEntries = database.prepare(
-    "SELECT COUNT(*) AS count FROM audit_log WHERE entry_hash IS NULL"
-  ).get().count;
+  const legacyRows = database.prepare(
+    "SELECT id FROM audit_log WHERE entry_hash IS NULL ORDER BY id ASC"
+  ).all();
+  const legacyEntries = legacyRows.length;
+  const firstHashedId = rows[0]?.id;
+  const unhashedAfterChain = firstHashedId === undefined
+    ? []
+    : legacyRows.filter(row => row.id > firstHashedId);
+  if (unhashedAfterChain.length) {
+    return {
+      valid: false,
+      verified_entries: 0,
+      total_hashed_entries: rows.length,
+      legacy_unhashed_entries: legacyEntries,
+      first_invalid_id: unhashedAfterChain[0].id,
+      reason: "unhashed_entry_after_chain"
+    };
+  }
 
   let previousHash = GENESIS_HASH;
   for (const row of rows) {

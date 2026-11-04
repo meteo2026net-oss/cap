@@ -67,7 +67,7 @@ const schema = z.object({
  expires:z.string().optional().default(""), language:z.string().default("en-US"),
  response_type:z.string().optional().default(""),
  info_blocks:z.array(infoBlockSchema).min(1).max(10).optional(),
- status:z.enum(["Actual","Exercise","System","Test","Draft"]).default("Test")
+ status:z.enum(["Actual","Exercise","System","Test"]).default("Test")
 });
 
 function auth(req,res,next) {

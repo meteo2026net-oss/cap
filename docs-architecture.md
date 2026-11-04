@@ -12,7 +12,7 @@
 1. Foundation (partially implemented): app shell, SQLite database, JWT authentication, role provisioning, draft/review/approval/publish, XML export, basic tests and CI workflow. Remaining: migrations, robust session controls, and production hardening.
 2. CAP completeness: XSD validation, full CAP element coverage, references, resources, geocodes, multilingual info blocks, update/cancel chains.
 3. Geospatial: Leaflet map, polygon/circle drawing, GeoJSON import/export, administrative boundaries.
-4. Governance: basic administrator user provisioning and password change are implemented; remaining work includes MFA, password reset/recovery, account deactivation, tamper-evident audit events, configurable approval policies, and tenant/institution profiles.
+4. Governance: administrator user provisioning, password change, and guarded account activation/deactivation are implemented; remaining work includes MFA, password reset/recovery, tamper-evident audit events, configurable approval policies, and tenant/institution profiles.
 5. Distribution: configurable CAP feed, HTTPS webhooks, email/SMS/push adapters, retry queue, delivery receipts.
 6. Integrations: embeddable public warning widget, API keys, webhooks, SDK examples, CORS allowlists.
 7. Operations: PostgreSQL, migrations, backups, monitoring, Docker, deployment profiles, automated tests and security review.
@@ -27,7 +27,7 @@
 
 ## Current implementation boundaries
 - The current public JSON feed includes only published alerts with CAP status `Actual` and scope `Public`; Test and Exercise messages are excluded.
-- The workflow prevents a creator from approving their own alert and prevents the approver from publishing that same alert.
+- The workflow prevents a creator from approving their own alert and prevents the approver from publishing that same alert. Administrators can activate/deactivate accounts, but cannot deactivate their own account or the last active administrator.
 - Geographic area validation supports closed polygons, circles, geocodes, multiple areas, altitude and ceiling. Interactive map drawing is not yet implemented.
 - XML generation supports multiple language-specific info blocks, multiple categories/response types, resources, parameters and alert references. Update/Cancel drafts reference the prior sender/identifier/sent triple and remain CAP status Test.
 - GitHub Actions downloads the official OASIS CAP 1.2 XSD and runs xmllint against a multilingual sample; the result must be checked in the Actions run before treating it as passed.

@@ -20,6 +20,22 @@ npm start
 
 Open http://localhost:8095. The interactive map uses Leaflet, OpenStreetMap tiles, and internet access; map tiles are provided by OpenStreetMap's public tile service.
 
+## Docker deployment
+
+Requirements: Docker Engine with the Compose plugin.
+
+1. Copy `.env.example` to `.env`.
+2. Replace `JWT_SECRET` and `ADMIN_PASSWORD` with unique secrets (32+ and 14+ characters respectively).
+3. Build and start the service:
+
+```bash
+docker compose up -d --build
+docker compose ps
+docker compose logs -f cap
+```
+
+The service listens on `127.0.0.1:8095` by default and stores SQLite data in the persistent `cap-data` volume. Put it behind a properly configured HTTPS reverse proxy before remote access; do not expose the container port directly to the public internet. Back up the Docker volume before upgrades. To stop the service without deleting data, run `docker compose down`.
+
 ## Current starter features
 
 - Arabic RTL dashboard.
@@ -36,8 +52,9 @@ Open http://localhost:8095. The interactive map uses Leaflet, OpenStreetMap tile
 - Interactive Leaflet map for published public alerts, severity-aware symbols, circle-radius rendering, local GeoJSON preview/import, and public GeoJSON download. Imported files are preview-only and are not persisted.
 - Basic audit trail.
 - Basic validation of required CAP fields, enumerations, date ordering, closed polygons, and circle geometry.
-- GitHub Actions workflow runs the automated test suite on pushes and pull requests.
-- Automated Node.js test suite for identifiers, CAP validation, geometry, dates, and XML export.
+- GitHub Actions runs Node 24 syntax checks, automated tests, official CAP 1.2 XSD validation, npm audit reporting, Docker image build and container health smoke test.
+- Scheduled CodeQL static analysis and Dependabot dependency updates.
+- Automated Node.js tests for identifiers, CAP validation, geometry, dates, XML export, audit immutability, API role separation, linked Update/Cancel references, public feed filtering and GeoJSON output.
 
 ## API
 
@@ -64,7 +81,7 @@ Open http://localhost:8095. The interactive map uses Leaflet, OpenStreetMap tile
 
 This repository is an initial development foundation, not a certified or production-ready public warning service. Publishing currently exposes approved alerts through the public JSON endpoint only when their CAP status is `Actual` and scope is `Public`; Test and Exercise messages are excluded. No external CAP distribution, email, SMS, push, or government alert gateway is configured. The dashboard includes an administrator-only account provisioning panel and an advanced JSON editor for multilingual CAP info blocks. MFA and administrator password-reset workflows are still pending; account activation/deactivation is available with last-administrator safeguards.
 
-Before operational use, implement and test official CAP 1.2 XSD validation, a complete conformance suite across all CAP message types, profiles, signatures, edge cases, and institutional interoperability scenarios, complete account lifecycle controls (including MFA and secure password recovery), HTTPS, backups, monitoring, security testing, and institution-specific authorization and approval procedures. Keep deployments private until these controls are completed. Use Test/Exercise messages during development, and configure unique non-placeholder `JWT_SECRET` and `ADMIN_PASSWORD` values before startup.
+Before operational use, expand the existing official CAP 1.2 XSD check into a complete conformance suite across all CAP message types, profiles, signatures, edge cases, and institutional interoperability scenarios, complete account lifecycle controls (including MFA and secure password recovery), HTTPS, backups, monitoring, security testing, and institution-specific authorization and approval procedures. Keep deployments private until these controls are completed. Use Test/Exercise messages during development, and configure unique non-placeholder `JWT_SECRET` and `ADMIN_PASSWORD` values before startup.
 
 ## Roadmap
 

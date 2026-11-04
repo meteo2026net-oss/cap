@@ -208,10 +208,17 @@ test("API enforces role separation, public-feed filtering and account deactivati
   assert.equal(recovery.data.recovered_count, 1, "stale sending jobs should be recovered to queued");
   const deadLetterDatabase = new Database(path.join(cwd, "storage", "cap.sqlite"));
   try {
-    deadLetterDatabase.prepare("UPDATE delivery_outbox SET status='failed',attempts=max_attempts,dead_letter_at=CURRENT_TIMESTAMP,next_attempt_at=NULL WHERE alert_id=? AND channel='cap_feed'").run(actualRow.id);
+    deadLetterDatabase.prepare("UPDATE delivery_outbox SET status='sending',attempts=max_attempts,dead_letter_at=NULL,last_attempt_at=datetime('now','-30 minutes'),next_attempt_at=NULL WHERE alert_id=? AND channel='cap_feed'").run(actualRow.id);
   } finally {
     deadLetterDatabase.close();
   }
+  const exhaustedLease = await request("/api/delivery/recover-stale", {
+    token: publisher, method: "POST", body: { staleMinutes: 10 }
+  });
+  assert.equal(exhaustedLease.status, 200);
+  assert.equal(exhaustedLease.data.recovered_count, 0);
+  assert.equal(exhaustedLease.data.dead_lettered_count, 1,
+    "stale leases at their maximum attempt count must be dead-lettered, not counted as recovered");
 
   assert.equal((await request("/api/delivery/process-retries", {
     token: forecaster, method: "POST", body: {}

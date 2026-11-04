@@ -97,6 +97,18 @@ test("API enforces role separation, public-feed filtering and account deactivati
   const reviewer = await login("reviewer1", "Temporary-Password-2026!");
   const publisher = await login("publisher1", "Temporary-Password-2026!");
 
+  const invalidCapStatus = await request("/api/alerts", {
+    token: forecaster, method: "POST",
+    body: {
+      event: "Invalid draft status", headline: "Invalid CAP status",
+      description: "Draft is an internal workflow state, not a CAP status.",
+      area_desc: "Synthetic test area", circle: "33.5,36.2 8",
+      status: "Draft"
+    }
+  });
+  assert.equal(invalidCapStatus.status, 400,
+    "Draft must not be accepted as a CAP status value");
+
   assert.equal((await request("/api/users", { token: forecaster })).status, 403,
     "forecasters must not administer users");
 

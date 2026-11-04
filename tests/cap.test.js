@@ -110,3 +110,24 @@ test("rejects resources missing mandatory description or MIME type", () => {
     }]
   }), /resourceDesc and mimeType/);
 });
+
+test("requires each warning language block to define a geographic area", () => {
+  assert.throws(() => buildCapXml({
+    ...valid,
+    info_blocks: [{
+      language: "en-GB", category: "Met", event: "Heavy rainfall",
+      urgency: "Expected", severity: "Moderate", certainty: "Likely",
+      headline: "Heavy rain warning", description: "Heavy rain is possible."
+    }]
+  }), /at least one affected area/);
+});
+
+test("exports update messages with a prior-message reference", () => {
+  const xml = buildCapXml({
+    ...valid, msg_type: "Update",
+    references_text: "alerts@example.test,urn:uuid:previous-id,2026-11-03T12:00:00-00:00"
+  });
+  assert.match(xml, /<msgType>Update<\/msgType>/);
+  assert.match(xml, /<references>/);
+  assert.match(xml, /<info>/);
+});

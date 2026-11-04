@@ -160,7 +160,7 @@ app.post("/api/alerts/:id/derive",auth,roles("admin","forecaster"),(req,res)=>{
  if(!["Update","Cancel"].includes(msgType)) return res.status(400).json({error:"msg_type must be Update or Cancel"});
  const sent=new Date().toISOString();
  const alert={...original,identifier:makeIdentifier(),sent,status:"Test",msg_type:msgType,
-  references_text:`${original.sender},${original.identifier},${original.sent}`,
+  references_text:`${original.sender},${original.identifier},${original.sent.replace(/\.\d{3}Z$/, "-00:00")}`,
   info_json:msgType==="Cancel"?null:original.info_json,workflow:"draft",created_by:req.user.id,approved_by:null,published_at:null};
  const result=db.prepare(`INSERT INTO alerts
  (identifier,sender,sent,status,msg_type,scope,references_text,event,category,response_type,urgency,severity,certainty,effective,onset,expires,headline,description,instruction,area_desc,polygon,circle,language,info_json,workflow,created_by)

@@ -18,7 +18,7 @@ function parsePolygon(value) {
 function areasForAlert(alert) {
   if (alert.info_json) {
     const blocks = JSON.parse(alert.info_json);
-    return blocks.flatMap(block => block.areas?.length ? block.areas : block.area ? [block.area] : []);
+    return blocks.flatMap(block => (block.areas?.length ? block.areas : block.area ? [block.area] : []).map(area => ({ ...area, language: block.language })));
   }
   return [{ areaDesc: alert.area_desc, polygons: alert.polygon ? [alert.polygon] : [], circles: alert.circle ? [alert.circle] : [] }];
 }
@@ -43,7 +43,7 @@ export function alertsToGeoJSON(alerts) {
             identifier: alert.identifier, event: alert.event, headline: alert.headline,
             sent: alert.sent, status: alert.status, msg_type: alert.msg_type,
             urgency: alert.urgency, severity: alert.severity, certainty: alert.certainty,
-            language: alert.language, area_description: area.areaDesc, geometry_kind: "polygon"
+            language: area.language || alert.language, area_description: area.areaDesc, geometry_kind: "polygon"
           }
         });
       }

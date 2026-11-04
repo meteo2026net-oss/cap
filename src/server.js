@@ -10,7 +10,7 @@ import { db, ensureAdmin } from "./db.js";
 import { buildCapXml, makeIdentifier, validateAlert } from "./cap.js";
 import { alertsToGeoJSON } from "./geojson.js";
 import { appendAuditLog, verifyAuditChain } from "./audit.js";
-import { enqueueDelivery, claimDelivery, recordDeliveryReceipt, retryDelivery } from "./delivery.js";
+import { enqueueDelivery, claimDelivery, recordDeliveryReceipt, retryDelivery, recoverStaleDeliveries } from "./delivery.js";
 
 const app = express();
 const port = Number(process.env.PORT || 8095);
@@ -233,6 +233,14 @@ app.get("/api/delivery/outbox",auth,roles("admin","publisher"),(req,res)=>{
   WHERE (? IS NULL OR d.status=?) ORDER BY d.created_at DESC LIMIT 500`).all(status ?? null,status ?? null);
  res.json({deliveries:rows,external_adapters_enabled:process.env.CAP_DELIVERY_ENABLED==="true"});
 });
+app.post("/api/delivery/recover-stale",auth,roles("admin","publisher"),(req,res)=>{
+ const staleMinutes=req.body?.staleMinutes ?? 10;
+ if(!Number.isInteger(staleMinutes) || staleMinutes<1 || staleMinutes>1440) return res.status(400).json({error:"staleMinutes must be an integer from 1 to 1440"});
+ const recovered=recoverStaleDeliveries(db,staleMinutes);
+ for(const item of recovered) audit(req.user.id,item.alert_id,"delivery_lease_recovered",`Recovered stale sending lease for outbox entry ${item.id}`);
+ res.json({ok:true,recovered_count:recovered.length,delivery_ids:recovered.map(item=>item.id),stale_minutes:staleMinutes});
+});
+
 app.post("/api/delivery/outbox/:id/claim",auth,roles("admin","publisher"),(req,res)=>{
  const deliveryId=Number(req.params.id);
  if(!Number.isSafeInteger(deliveryId) || deliveryId<1) return res.status(400).json({error:"Invalid delivery id"});

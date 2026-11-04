@@ -90,8 +90,9 @@ export async function restoreDatabaseBackup(source, destination, { force = false
     }
   }
 
-  const temporary = `${targetPath}.restore-${process.pid}.tmp`;
-  const rollback = `${targetPath}.pre-restore-${timestampSlug(new Date())}`;
+  const restoreId = randomUUID();
+  const temporary = `${targetPath}.restore-${process.pid}-${restoreId}.tmp`;
+  const rollback = `${targetPath}.pre-restore-${timestampSlug(new Date())}-${restoreId}`;
   let movedOriginal = false;
   try {
     await fs.copyFile(sourcePath, temporary);

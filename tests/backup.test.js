@@ -72,6 +72,7 @@ test("restore refuses overwrite without force and preserves the previous databas
     const result = await restoreDatabaseBackup(source, target, { force: true });
     assert.equal(result.target, target);
     assert.ok(result.previous_database);
+    assert.match(result.previous_database, /\.pre-restore-\d{8}T\d{6}\d{3}Z-[0-9a-f-]{36}$/);
     await fs.access(result.previous_database);
   } finally {
     database.close();

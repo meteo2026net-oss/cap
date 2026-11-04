@@ -243,9 +243,10 @@ app.post("/api/delivery/process-retries",auth,roles("admin","publisher"),(req,re
 app.post("/api/delivery/recover-stale",auth,roles("admin","publisher"),(req,res)=>{
  const staleMinutes=req.body?.staleMinutes ?? 10;
  if(!Number.isInteger(staleMinutes) || staleMinutes<1 || staleMinutes>1440) return res.status(400).json({error:"staleMinutes must be an integer from 1 to 1440"});
- const recovered=recoverStaleDeliveries(db,staleMinutes);
- for(const item of recovered) audit(req.user.id,item.alert_id,"delivery_lease_recovered",`Recovered stale sending lease for outbox entry ${item.id}`);
- res.json({ok:true,recovered_count:recovered.length,delivery_ids:recovered.map(item=>item.id),stale_minutes:staleMinutes});
+ const result=recoverStaleDeliveries(db,staleMinutes);
+ for(const item of result.recovered) audit(req.user.id,item.alert_id,"delivery_lease_recovered",`Recovered stale sending lease for outbox entry ${item.id}`);
+ for(const item of result.deadLettered) audit(req.user.id,item.alert_id,"delivery_lease_dead_lettered",`Dead-lettered stale sending lease after maximum attempts for outbox entry ${item.id}`);
+ res.json({ok:true,recovered_count:result.recovered.length,recovered_ids:result.recovered.map(item=>item.id),dead_lettered_count:result.deadLettered.length,dead_letter_ids:result.deadLettered.map(item=>item.id),stale_minutes:staleMinutes});
 });
 
 app.post("/api/delivery/outbox/:id/claim",auth,roles("admin","publisher"),(req,res)=>{

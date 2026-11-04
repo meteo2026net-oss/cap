@@ -32,7 +32,8 @@ test("API enforces role separation, public-feed filtering and account deactivati
       PORT: String(port),
       HOST: "127.0.0.1",
       JWT_SECRET: "integration-test-secret-that-is-at-least-32-characters",
-      ADMIN_PASSWORD: "Integration-Test-Admin-Password-2026"
+      ADMIN_PASSWORD: "Integration-Test-Admin-Password-2026",
+      CAP_DELIVERY_ENABLED: "true"
     },
     stdio: "ignore"
   });

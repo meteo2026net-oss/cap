@@ -18,7 +18,7 @@ npm test
 npm start
 ```
 
-Open http://localhost:8095.
+Open http://localhost:8095. The interactive map uses Leaflet, OpenStreetMap tiles, and internet access; map tiles are provided by OpenStreetMap's public tile service.
 
 ## Current starter features
 
@@ -33,6 +33,7 @@ Open http://localhost:8095.
 - GitHub Actions downloads the official OASIS CAP 1.2 XSD and validates a generated multilingual XML example with xmllint.
 - Public JSON feed for published Public-scope `Actual` alerts, including multilingual `info_blocks`, geometry, references, and CAP metadata.
 - Public GeoJSON feed for published Public-scope `Actual` alerts; CAP polygons are converted to GeoJSON longitude-latitude coordinate order and CAP circles are represented as points with `radius_km` metadata.
+- Interactive Leaflet map for published public alerts, severity-aware symbols, circle-radius rendering, local GeoJSON preview/import, and public GeoJSON download. Imported files are preview-only and are not persisted.
 - Basic audit trail.
 - Basic validation of required CAP fields, enumerations, date ordering, closed polygons, and circle geometry.
 - GitHub Actions workflow runs the automated test suite on pushes and pull requests.

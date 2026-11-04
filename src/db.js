@@ -94,6 +94,7 @@ CREATE INDEX IF NOT EXISTS idx_delivery_alert ON delivery_outbox(alert_id);
  if (!deliveryColumns.includes("max_attempts")) db.exec("ALTER TABLE delivery_outbox ADD COLUMN max_attempts INTEGER NOT NULL DEFAULT 5 CHECK(max_attempts BETWEEN 1 AND 20)");
  if (!deliveryColumns.includes("next_attempt_at")) db.exec("ALTER TABLE delivery_outbox ADD COLUMN next_attempt_at TEXT");
  if (!deliveryColumns.includes("dead_letter_at")) db.exec("ALTER TABLE delivery_outbox ADD COLUMN dead_letter_at TEXT");
+ if (!deliveryColumns.includes("lease_token")) db.exec("ALTER TABLE delivery_outbox ADD COLUMN lease_token TEXT");
  db.exec("CREATE INDEX IF NOT EXISTS idx_delivery_retry_due ON delivery_outbox(status,next_attempt_at,attempts)");
 
 

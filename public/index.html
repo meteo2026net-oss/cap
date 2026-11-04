@@ -10,6 +10,16 @@
  </section>
  <main id="appPanel" hidden>
   <div class="welcome"><div><p class="eyebrow">OPERATIONS CENTER</p><h1>مركز التحذيرات الجوية</h1><p class="muted">إدارة دورة حياة التحذير من المسودة حتى النشر.</p></div><button id="logoutBtn" class="secondary">تسجيل الخروج</button></div>
+  <section class="card" style="margin-bottom:18px">
+   <div class="sectionHead"><h2>تغيير كلمة المرور</h2><span class="tag">SECURITY</span></div>
+   <form id="passwordForm" class="formGrid">
+    <label>كلمة المرور الحالية<input name="currentPassword" type="password" autocomplete="current-password" required></label>
+    <label>كلمة المرور الجديدة (14 حرفاً على الأقل)<input name="newPassword" type="password" minlength="14" maxlength="200" autocomplete="new-password" required></label>
+    <label>تأكيد كلمة المرور الجديدة<input name="confirmPassword" type="password" minlength="14" maxlength="200" autocomplete="new-password" required></label>
+    <button type="submit">تحديث كلمة المرور</button>
+   </form>
+   <p id="passwordStatus" class="muted small" aria-live="polite"></p>
+  </section>
   <section id="userAdmin" class="card" hidden style="margin-bottom:18px"><div class="sectionHead"><h2>إدارة حسابات الفريق</h2><span class="tag">ADMIN</span></div><form id="userForm" class="formGrid"><label>اسم المستخدم<input name="username" minlength="3" maxlength="64" required></label><label>كلمة مرور مؤقتة (14 حرفاً على الأقل)<input name="password" type="password" minlength="14" required></label><label>الدور الوظيفي<select name="role"><option value="forecaster">متنبئ جوي</option><option value="reviewer">مراجع</option><option value="approver">معتمد</option><option value="publisher">ناشر</option><option value="viewer">مشاهد</option><option value="admin">مدير نظام</option></select></label><button>إنشاء الحساب</button></form><div id="usersList" class="alertsList" style="margin-top:14px"></div></section>
   <section id="auditIntegrity" class="card" hidden style="margin-bottom:18px">
    <div class="sectionHead"><h2>سلامة سجل التدقيق</h2><button id="auditRefreshBtn" class="secondary" type="button">التحقق الآن</button></div>

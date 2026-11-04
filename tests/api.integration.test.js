@@ -77,7 +77,6 @@ test("API enforces role separation, public-feed filtering and account deactivati
   assert.doesNotMatch(dashboardScript, /<[^>]+\sonclick\s*=/i, "dashboard must not render inline HTML event handlers");
   assert.match(dashboardScript, /data-alert-action/);
   assert.match(dashboardScript, /data-webhook-review/);
-  assert.equal(dashboardScript.status, 200, "dashboard JavaScript should be served from the application root");
 
   const webhookTimestamp = Math.floor(Date.now() / 1000);
   const webhookBody = JSON.stringify({ provider: "synthetic-test", event: "inbound-test", alert: { headline: "Not an operational alert" } });

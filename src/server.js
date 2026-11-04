@@ -8,6 +8,7 @@ import jwt from "jsonwebtoken";
 import { z } from "zod";
 import { db, ensureAdmin } from "./db.js";
 import { buildCapXml, makeIdentifier, validateAlert } from "./cap.js";
+import { alertsToGeoJSON } from "./geojson.js";
 
 const app = express();
 const port = Number(process.env.PORT || 8095);
@@ -221,6 +222,15 @@ app.get("/api/alerts/:id/cap.xml",auth,(req,res)=>{
   const xml=buildCapXml(rowToCap(a));
   res.type("application/xml").attachment(`${a.identifier.replace(/[^a-z0-9-]/gi,"_")}.xml`).send(xml);
  } catch(e) { res.status(400).json({error:e.message}); }
+});
+app.get("/api/public/alerts.geojson", (req,res)=>{
+ try {
+  const rows=db.prepare("SELECT identifier,sender,sent,status,msg_type,scope,references_text,event,category,response_type,urgency,severity,certainty,effective,onset,expires,headline,description,instruction,area_desc,polygon,circle,language,info_json FROM alerts WHERE workflow='published' AND scope='Public' AND status='Actual' ORDER BY sent DESC LIMIT 100").all();
+  res.type("application/geo+json").json(alertsToGeoJSON(rows));
+ } catch(error) {
+  console.error("Public GeoJSON export failed:",error);
+  res.status(500).json({error:"Unable to generate the public GeoJSON feed"});
+ }
 });
 app.get("/api/public/alerts", (req,res)=>{
  const rows=db.prepare("SELECT identifier,sender,sent,status,msg_type,scope,references_text,event,category,response_type,urgency,severity,certainty,effective,onset,expires,headline,description,instruction,area_desc,polygon,circle,language,info_json FROM alerts WHERE workflow='published' AND scope='Public' AND status='Actual' ORDER BY sent DESC LIMIT 100").all();

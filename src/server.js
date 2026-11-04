@@ -148,7 +148,7 @@ app.post("/api/alerts",auth,roles("admin","forecaster"),(req,res)=>{
   const { info_blocks: _infoBlocks, ...alertParams } = alert;
   const result = db.prepare(`INSERT INTO alerts
    (identifier,sender,sent,status,msg_type,scope,references_text,event,category,response_type,urgency,severity,certainty,effective,onset,expires,headline,description,instruction,area_desc,polygon,circle,language,info_json,workflow,created_by)
-   VALUES (@identifier,@sender,@sent,@status,@msg_type,@scope,@references_text,@event,@category,@response_type,@urgency,@severity,@certainty,@effective,@onset,@expires,@headline,@description,@instruction,@area_desc,@polygon,@circle,@language,@info_json,@workflow,@created_by)`).run(alert);
+   VALUES (@identifier,@sender,@sent,@status,@msg_type,@scope,@references_text,@event,@category,@response_type,@urgency,@severity,@certainty,@effective,@onset,@expires,@headline,@description,@instruction,@area_desc,@polygon,@circle,@language,@info_json,@workflow,@created_by )`).run(alertParams);
   audit(req.user.id,result.lastInsertRowid,"created","Draft created");
   res.status(201).json({id:result.lastInsertRowid,identifier:alert.identifier});
  } catch(e) { res.status(400).json({error:e.message}); }
@@ -163,7 +163,7 @@ app.post("/api/alerts/:id/derive",auth,roles("admin","forecaster"),(req,res)=>{
  const {id:_id,approved_by:_approvedBy,published_at:_publishedAt,created_at:_createdAt,updated_at:_updatedAt,...sourceFields}=original;
  const alert={...sourceFields,identifier:makeIdentifier(),sent,status:"Test",msg_type:msgType,
   references_text:`${original.sender},${original.identifier},${original.sent.replace(/\.\d{3}Z$/, "-00:00")}`,
-  info_json:msgType==="Cancel"?null:original.info_json,workflow:"draft",created_by:req.user.id,approved_by:null,published_at:null};
+  info_json:msgType==="Cancel"?null:original.info_json,workflow:"draft",created_by:req.user.id};
  const result=db.prepare(`INSERT INTO alerts
  (identifier,sender,sent,status,msg_type,scope,references_text,event,category,response_type,urgency,severity,certainty,effective,onset,expires,headline,description,instruction,area_desc,polygon,circle,language,info_json,workflow,created_by)
  VALUES (@identifier,@sender,@sent,@status,@msg_type,@scope,@references_text,@event,@category,@response_type,@urgency,@severity,@certainty,@effective,@onset,@expires,@headline,@description,@instruction,@area_desc,@polygon,@circle,@language,@info_json,@workflow,@created_by)`).run(alert);

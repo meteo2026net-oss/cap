@@ -51,8 +51,10 @@ $("#clearImportBtn")?.addEventListener("click",()=>{clearImportedGeo();$("#mapSt
 $("#geoImport")?.addEventListener("change",async event=>{
  const file=event.target.files?.[0];if(!file)return;
  try{
+  if(file.size>5*1024*1024)throw new Error("حجم ملف GeoJSON يتجاوز الحد المسموح (5 MB).");
   const data=JSON.parse(await file.text());
   if(data.type!=="FeatureCollection"||!Array.isArray(data.features))throw new Error("يجب أن يكون الملف GeoJSON من نوع FeatureCollection.");
+  if(data.features.length>5000)throw new Error("يحتوي الملف على أكثر من 5000 معلم؛ قسّمه إلى ملفات أصغر للمعاينة.");
   if(importedGeoLayer)warningMap.removeLayer(importedGeoLayer);
   importedGeoLayer=addGeoFeatures(L.featureGroup(),data);
   importedGeoLayer.addTo(warningMap);

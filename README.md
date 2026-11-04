@@ -2,23 +2,20 @@
 
 Standalone Arabic-first weather-warning management starter based on the OASIS Common Alerting Protocol (CAP) 1.2.
 
-## Run locally
+## Run locally (without Docker)
 
-Requirements: Node.js 20+ and npm.
-
-1. Clone this repository.
-2. Copy `.env.example` to `.env`.
-3. Set a unique random `JWT_SECRET` (at least 32 characters).
-4. Change `ADMIN_PASSWORD` before starting.
-5. Install and run:
+Requirements: Node.js 20+ and npm. Docker is **not required** for this mode. From the repository root, run:
 
 ```bash
+npm run setup:local
 npm install
 npm test
 npm start
 ```
 
-Open http://localhost:8095. The interactive map uses Leaflet, OpenStreetMap tiles, and internet access; map tiles are provided by OpenStreetMap's public tile service.
+The setup command creates `.env` (without overwriting an existing file), generates a unique JWT secret and initial administrator password, and creates local data folders. Save the displayed initial password. Open http://localhost:8095. Stop with Ctrl+C. The interactive map uses Leaflet and OpenStreetMap tiles and therefore needs internet access.
+
+For full Windows PowerShell, Linux/macOS, Docker Compose, backup, restore, and troubleshooting instructions, see [Installation guide](docs/INSTALLATION.md).
 
 ## Database backup and restore
 

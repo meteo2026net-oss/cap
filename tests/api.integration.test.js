@@ -233,6 +233,14 @@ test("API enforces role separation, public-feed filtering and account deactivati
   assert.ok(Array.isArray(deadLetterRow.data.deliveries));
   assert.ok(deadLetterRow.data.deliveries.some(item => item.alert_id === actualRow.id),
     "dead-letter filter should expose exhausted entries without leaking them into other status filters");
+  assert.ok(deadLetterRow.data.counts && Number.isInteger(deadLetterRow.data.counts.dead_letter),
+    "outbox API should expose database-wide status counts");
+  assert.ok(deadLetterRow.data.counts.dead_letter >= 1,
+    "database-wide dead-letter count should include exhausted stale leases");
+  const allOutbox = await request("/api/delivery/outbox", { token: publisher });
+  assert.equal(allOutbox.status, 200);
+  assert.ok(Number.isInteger(allOutbox.data.counts.delivered),
+    "outbox summary should include delivered receipts separately");
 
   assert.equal((await request("/api/delivery/recover-stale", {
     token: forecaster, method: "POST", body: { staleMinutes: 10 }

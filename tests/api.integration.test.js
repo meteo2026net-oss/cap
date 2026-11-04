@@ -246,18 +246,31 @@ test("API enforces role separation, public-feed filtering and account deactivati
     assert.equal((await request(`/api/alerts/${id}/submit`, {
       token: forecaster, method: "POST", body: {}
     })).status, 200);
+    assert.equal((await request(`/api/alerts/${id}/submit`, {
+      token: forecaster, method: "POST", body: {}
+    })).status, 409, "a submitted warning must not be submitted twice");
     assert.equal((await request(`/api/alerts/${id}/approve`, {
       token: forecaster, method: "POST", body: {}
     })).status, 403, "creator cannot approve their own warning");
     assert.equal((await request(`/api/alerts/${id}/approve`, {
       token: reviewer, method: "POST", body: {}
     })).status, 200);
+    assert.equal((await request(`/api/alerts/${id}/approve`, {
+      token: reviewer, method: "POST", body: {}
+    })).status, 409, "an approved warning must not be approved twice");
     assert.equal((await request(`/api/alerts/${id}/publish`, {
       token: reviewer, method: "POST", body: {}
     })).status, 403, "approver cannot publish the same warning");
     assert.equal((await request(`/api/alerts/${id}/publish`, {
       token: publisher, method: "POST", body: {}
     })).status, 200);
+    assert.equal((await request(`/api/alerts/${id}/publish`, {
+      token: publisher, method: "POST", body: {}
+    })).status, 409, "a published warning must not be published twice");
+    const outboxAfterPublish = await request("/api/delivery/outbox", { token: publisher });
+    assert.equal(outboxAfterPublish.status, 200);
+    assert.equal(outboxAfterPublish.data.deliveries.filter(item => item.alert_id === id && item.channel === "cap_feed").length, 1,
+      "publishing the same warning twice must not create duplicate outbox entries");
     return created.data.identifier;
   };
 

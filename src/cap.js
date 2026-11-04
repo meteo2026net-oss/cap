@@ -128,6 +128,9 @@ export function validateAlert(input) {
   }]);
   if (input.msg_type === "Alert" && !blocks.length) throw new Error("CAP Alert messages require at least one info block.");
   if (input.msg_type !== "Cancel" && input.msg_type !== "Ack" && input.msg_type !== "Error" && !blocks.length) throw new Error("This CAP message type requires an info block.");
+  if (!["Cancel","Ack","Error"].includes(input.msg_type)) {
+    for (const block of blocks) if (!(block.areas?.length || block.area)) throw new Error("Each warning info block must identify at least one affected area.");
+  }
   blocks.forEach(normalizeInfo);
   if (input.expires && input.onset && Date.parse(input.expires) <= Date.parse(input.onset)) throw new Error("Expiry must be later than onset.");
   return true;

@@ -5,13 +5,58 @@ function headers(){return {"Content-Type":"application/json","Authorization":`Be
 async function api(url,opts={}){const r=await fetch(url,{...opts,headers:{...headers(),...(opts.headers||{})}});const data=await r.json().catch(()=>({}));if(!r.ok)throw new Error(data.error||"Request failed");return data}
 function showApp(on){loginPanel.hidden=on;appPanel.hidden=!on}
 $("#loginForm").addEventListener("submit",async e=>{e.preventDefault();const f=new FormData(e.target);try{const d=await fetch("/api/auth/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(Object.fromEntries(f))}).then(r=>r.json());if(!d.token)throw new Error(d.error||"تعذر تسجيل الدخول");token=d.token;$("#userBadge").textContent=`${d.user.username} • ${d.user.role}`;$("#userAdmin").hidden=d.user.role!=="admin";showApp(true);await loadAlerts();initWarningMap();await refreshWarningMap();if(d.user.role==="admin")await loadUsers()}catch(err){$("#loginError").textContent=err.message}});
-let warningMap=null, publishedGeoLayer=null, importedGeoLayer=null;
+let warningMap=null, publishedGeoLayer=null, importedGeoLayer=null, drawnGeoLayer=null, drawControl=null;
 $("#logoutBtn").onclick=()=>{token="";showApp(false);$("#userAdmin").hidden=true};
 function initWarningMap(){
  if(warningMap||!window.L)return;
  warningMap=L.map("warningMap").setView([34.8,38.5],5);
  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:18,attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'}).addTo(warningMap);
  publishedGeoLayer=L.featureGroup().addTo(warningMap);
+ drawnGeoLayer=L.featureGroup().addTo(warningMap);
+ if(L.Control.Draw){
+  drawControl=new L.Control.Draw({
+   position:"topleft",
+   draw:{polyline:false,rectangle:false,marker:false,circlemarker:false,polygon:{allowIntersection:false,showArea:true},circle:{showRadius:true}},
+   edit:{featureGroup:drawnGeoLayer,remove:true}
+  });
+  warningMap.addControl(drawControl);
+  warningMap.on(L.Draw.Event.CREATED,event=>{
+   drawnGeoLayer.clearLayers();
+   const layer=event.layer;drawnGeoLayer.addLayer(layer);
+   applyDrawnGeometryToForm(layer);
+  });
+  warningMap.on(L.Draw.Event.EDITED,event=>{
+   event.layers.eachLayer(layer=>applyDrawnGeometryToForm(layer));
+  });
+  warningMap.on(L.Draw.Event.DELETED,()=>{
+   $("#polygon")?.value && ($("#polygon").value="");
+   const polygonField=document.querySelector('[name="polygon"]');
+   const circleField=document.querySelector('[name="circle"]');
+   if(polygonField)polygonField.value="";
+   if(circleField)circleField.value="";
+   $("#mapStatus").textContent="تم حذف الشكل المرسوم وإزالة هندسته من نموذج التحذير.";
+  });
+ }
+}
+function applyDrawnGeometryToForm(layer){
+ const polygonField=document.querySelector('[name="polygon"]');
+ const circleField=document.querySelector('[name="circle"]');
+ if(layer instanceof L.Circle){
+  const center=layer.getLatLng(),radiusKm=layer.getRadius()/1000;
+  if(polygonField)polygonField.value="";
+  if(circleField)circleField.value=center.lat.toFixed(6)+","+center.lng.toFixed(6)+" "+radiusKm.toFixed(2);
+  $("#mapStatus").textContent="تم نقل مركز الدائرة ونصف قطرها إلى نموذج CAP.";
+  return;
+ }
+ if(layer instanceof L.Polygon){
+  const rings=layer.getLatLngs();
+  const points=Array.isArray(rings[0])?rings[0]:rings;
+  const coords=points.map(p=>p.lat.toFixed(6)+","+p.lng.toFixed(6));
+  if(coords.length && coords[0]!==coords[coords.length-1])coords.push(coords[0]);
+  if(polygonField)polygonField.value=coords.join(" ");
+  if(circleField)circleField.value="";
+  $("#mapStatus").textContent="تم نقل إحداثيات المضلع إلى نموذج CAP ("+coords.length+" نقطة مع نقطة الإغلاق).";
+ }
 }
 function featureStyle(feature){
  const severity=feature?.properties?.severity;

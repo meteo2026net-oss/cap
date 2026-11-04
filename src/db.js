@@ -4,6 +4,7 @@ import path from "node:path";
 import bcrypt from "bcryptjs";
 import { installAuditLogGuards } from "./audit.js";
 import { migrateLeaseTokenStorage } from "./lease-migration.js";
+import { initializeWebhookReplayStore } from "./webhook-replay.js";
 
 const storage = path.resolve("storage");
 fs.mkdirSync(storage, { recursive: true });
@@ -96,6 +97,7 @@ CREATE INDEX IF NOT EXISTS idx_delivery_alert ON delivery_outbox(alert_id);
  if (!deliveryColumns.includes("next_attempt_at")) db.exec("ALTER TABLE delivery_outbox ADD COLUMN next_attempt_at TEXT");
  if (!deliveryColumns.includes("dead_letter_at")) db.exec("ALTER TABLE delivery_outbox ADD COLUMN dead_letter_at TEXT");
  migrateLeaseTokenStorage(db);
+ initializeWebhookReplayStore(db);
  db.exec("CREATE INDEX IF NOT EXISTS idx_delivery_retry_due ON delivery_outbox(status,next_attempt_at,attempts)");
 
 

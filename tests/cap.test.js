@@ -151,3 +151,8 @@ test("rejects invalid expiry windows and altitude ranges in info blocks", () => 
   assert.throws(() => buildCapXml({ ...valid, info_blocks: [{ ...base, onset: "2026-11-05T00:00:00Z", expires: "2026-11-04T00:00:00Z" }] }), /expiry must be later/);
   assert.throws(() => buildCapXml({ ...valid, info_blocks: [{ ...base, area: { areaDesc: "Test district", circle: "51.5,-0.1 10", altitude: 2000, ceiling: 1000 } }] }), /ceiling cannot be lower/);
 });
+
+test("requires references for CAP Update and Cancel messages", () => {
+  assert.throws(() => buildCapXml({ ...valid, msg_type: "Cancel" }), /must reference the related message/);
+  assert.throws(() => buildCapXml({ ...valid, msg_type: "Update" }), /must reference the related message/);
+});

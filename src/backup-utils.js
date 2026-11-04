@@ -4,7 +4,7 @@ import path from "node:path";
 import { verifyAuditChain } from "./audit.js";
 
 function timestampSlug(date) {
-  return date.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
+  return date.toISOString().replace(/[-:]/g, "").replace(/\.(\d{3})Z$/, "$1Z");
 }
 
 async function validateDatabaseFile(filePath) {
@@ -55,7 +55,7 @@ export async function pruneDatabaseBackups(directory, { retentionDays = 30, now 
   const cutoff = now.getTime() - retentionDays * 24 * 60 * 60 * 1000;
   const removed = [];
   for (const name of names) {
-    if (!/^cap-\d{8}T\d{6}Z\.sqlite$/.test(name)) continue;
+    if (!/^cap-\d{8}T\d{6}(?:\d{3})?Z\.sqlite$/.test(name)) continue;
     const filePath = path.join(directory, name);
     const stat = await fs.stat(filePath);
     if (stat.isFile() && stat.mtimeMs < cutoff) {

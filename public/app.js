@@ -153,9 +153,9 @@ let auditHistoryLoading=false;
 function formatAuditTimestamp(value){
  if(!value)return "وقت غير متاح";
  const raw=String(value).trim();
- const normalized=/^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?$/.test(raw)
+ const normalized=/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?$/.test(raw)
   ?raw.replace(" ","T")+"Z"
-  :/^\\d{4}-\\d{2}-\\d{2}T.*$/.test(raw)&&!/(?:Z|[+-]\\d{2}:?\\d{2})$/i.test(raw)
+  :/^\d{4}-\d{2}-\d{2}T.*$/.test(raw)&&!/(?:Z|[+-]\d{2}:?\d{2})$/i.test(raw)
    ?raw+"Z":raw;
  const date=new Date(normalized);
  return Number.isNaN(date.getTime())?"وقت غير متاح":date.toLocaleString("ar");

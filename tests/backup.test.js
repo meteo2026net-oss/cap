@@ -34,7 +34,7 @@ test("SQLite backup is consistent and can be restored with hash-chain validation
     const backup = await createDatabaseBackup(database, path.join(directory, "backups"), {
       now: new Date("2026-11-04T12:30:00.000Z")
     });
-    assert.match(path.basename(backup), /^cap-20261104T123000\d{3}Z\.sqlite$/);
+    assert.match(path.basename(backup), /^cap-20261104T123000\d{3}Z-[0-9a-f-]{36}\.sqlite$/);
     const sameSecondBackup = await createDatabaseBackup(database, path.join(directory, "backups"), {
       now: new Date("2026-11-04T12:30:00.500Z")
     });

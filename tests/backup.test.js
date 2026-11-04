@@ -93,3 +93,59 @@ test("backup pruning removes only old CAP backup files", async () => {
     await fs.rm(directory, { recursive: true, force: true });
   }
 });
+
+test("backup and restore reject a database with a broken audit hash chain", async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "cap-corrupt-backup-test-"));
+  const source = path.join(directory, "source.sqlite");
+  const database = createFixtureDatabase(source);
+  try {
+    database.exec("DROP TRIGGER audit_log_no_update");
+    database.prepare("UPDATE audit_log SET details='tampered' WHERE id=1").run();
+    await assert.rejects(
+      () => createDatabaseBackup(database, path.join(directory, "backups")),
+      /Audit hash chain verification failed/
+    );
+    assert.deepEqual(await fs.readdir(path.join(directory, "backups")), [],
+      "an invalid backup artifact must be removed after validation fails");
+    await assert.rejects(
+      () => restoreDatabaseBackup(source, path.join(directory, "restored.sqlite")),
+      /Audit hash chain verification failed/
+    );
+  } finally {
+    database.close();
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("restore refuses to proceed while SQLite WAL or SHM sidecars exist", async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "cap-restore-sidecar-test-"));
+  const source = path.join(directory, "source.sqlite");
+  const target = path.join(directory, "target.sqlite");
+  const database = createFixtureDatabase(source);
+  try {
+    await fs.writeFile(target + "-wal", "active sidecar");
+    await assert.rejects(
+      () => restoreDatabaseBackup(source, target),
+      /WAL\/SHM sidecar exists/
+    );
+    await fs.rm(target + "-wal", { force: true });
+    await fs.writeFile(target + "-shm", "active sidecar");
+    await assert.rejects(
+      () => restoreDatabaseBackup(source, target),
+      /WAL\/SHM sidecar exists/
+    );
+  } finally {
+    database.close();
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("backup retention rejects invalid retention windows", async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "cap-retention-test-"));
+  try {
+    await assert.rejects(() => pruneDatabaseBackups(directory, { retentionDays: 0 }), /at least one day/);
+    await assert.rejects(() => pruneDatabaseBackups(directory, { retentionDays: Number.NaN }), /at least one day/);
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});

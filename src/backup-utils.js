@@ -35,9 +35,14 @@ export async function createDatabaseBackup(database, directory, { now = new Date
   await fs.mkdir(directory, { recursive: true });
   const destination = path.join(directory, `cap-${timestampSlug(now)}.sqlite`);
   await database.backup(destination);
-  await fs.chmod(destination, 0o600);
-  await validateDatabaseFile(destination);
-  return destination;
+  try {
+    await fs.chmod(destination, 0o600);
+    await validateDatabaseFile(destination);
+    return destination;
+  } catch (error) {
+    await fs.rm(destination, { force: true }).catch(() => {});
+    throw error;
+  }
 }
 
 export async function pruneDatabaseBackups(directory, { retentionDays = 30, now = new Date() } = {}) {

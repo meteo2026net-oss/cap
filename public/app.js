@@ -190,7 +190,7 @@ async function loadAuditHistory(append=false){
    card.append(heading,meta,details);
    if(entry.entry_hash){
     const hash=document.createElement("details");const summary=document.createElement("summary");summary.textContent="تفاصيل سلامة السجل";
-    const code=document.createElement("code");code.className="auditHash";code.textContent="SHA-256: "+entry.entry_hash+"\\nالسابق: "+(entry.previous_hash||"غير متاح");
+    const code=document.createElement("code");code.className="auditHash";code.textContent="SHA-256: "+entry.entry_hash+"\nالسابق: "+(entry.previous_hash||"غير متاح");
     hash.append(summary,code);card.append(hash);
    }
    return card;

@@ -230,7 +230,7 @@ app.get("/api/alerts/:id/cap.xml",auth,(req,res)=>{
 });
 app.get("/api/public/alerts.geojson", (req,res)=>{
  try {
-  const rows=db.prepare("SELECT identifier,sender,sent,status,msg_type,scope,references_text,event,category,response_type,urgency,severity,certainty,effective,onset,expires,headline,description,instruction,area_desc,polygon,circle,language,info_json FROM alerts WHERE workflow='published' AND scope='Public' AND status='Actual' ORDER BY sent DESC LIMIT 100").all();
+  const rows=db.prepare("SELECT identifier,sender,sent,status,msg_type,scope,references_text,event,category,response_type,urgency,severity,certainty,effective,onset,expires,headline,description,instruction,area_desc,polygon,circle,language,info_json FROM alerts WHERE workflow='published' AND scope='Public' AND status='Actual' AND (expires IS NULL OR expires='' OR julianday(expires)>julianday('now')) ORDER BY sent DESC LIMIT 100").all();
   res.type("application/geo+json").json(alertsToGeoJSON(rows));
  } catch(error) {
   console.error("Public GeoJSON export failed:",error);
@@ -238,7 +238,7 @@ app.get("/api/public/alerts.geojson", (req,res)=>{
  }
 });
 app.get("/api/public/alerts", (req,res)=>{
- const rows=db.prepare("SELECT identifier,sender,sent,status,msg_type,scope,references_text,event,category,response_type,urgency,severity,certainty,effective,onset,expires,headline,description,instruction,area_desc,polygon,circle,language,info_json FROM alerts WHERE workflow='published' AND scope='Public' AND status='Actual' ORDER BY sent DESC LIMIT 100").all();
+ const rows=db.prepare("SELECT identifier,sender,sent,status,msg_type,scope,references_text,event,category,response_type,urgency,severity,certainty,effective,onset,expires,headline,description,instruction,area_desc,polygon,circle,language,info_json FROM alerts WHERE workflow='published' AND scope='Public' AND status='Actual' AND (expires IS NULL OR expires='' OR julianday(expires)>julianday('now')) ORDER BY sent DESC LIMIT 100").all();
  res.json({alerts:rows.map(row=>{const {info_json,...alert}=row;return {...alert,info_blocks:info_json?JSON.parse(info_json):[]};})});
 });
 app.get("/api/audit/verify",auth,roles("admin","reviewer","approver"),(_req,res)=>{

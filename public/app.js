@@ -5,8 +5,8 @@ function headers(){return {"Content-Type":"application/json","Authorization":`Be
 async function api(url,opts={}){const r=await fetch(url,{...opts,headers:{...headers(),...(opts.headers||{})}});const data=await r.json().catch(()=>({}));if(!r.ok)throw new Error(data.error||"Request failed");return data}
 function showApp(on){loginPanel.hidden=on;appPanel.hidden=!on}
 $("#loginForm").addEventListener("submit",async e=>{e.preventDefault();const f=new FormData(e.target);try{const d=await fetch("/api/auth/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(Object.fromEntries(f))}).then(r=>r.json());if(!d.token)throw new Error(d.error||"تعذر تسجيل الدخول");token=d.token;$("#userBadge").textContent=`${d.user.username} • ${d.user.role}`;$("#userAdmin").hidden=d.user.role!=="admin";showApp(true);await loadAlerts();initWarningMap();await refreshWarningMap();if(d.user.role==="admin")await loadUsers()}catch(err){$("#loginError").textContent=err.message}});
-$("#logoutBtn").onclick=()=>{token="";
 let warningMap=null, publishedGeoLayer=null, importedGeoLayer=null;
+$("#logoutBtn").onclick=()=>{token="";showApp(false);$("#userAdmin").hidden=true};
 function initWarningMap(){
  if(warningMap||!window.L)return;
  warningMap=L.map("warningMap").setView([34.8,38.5],5);
@@ -68,7 +68,6 @@ $("#exportGeoBtn")?.addEventListener("click",async()=>{
  }catch(error){alert(error.message)}
 });
 
-showApp(false);$("#userAdmin").hidden=true};
 $("#refreshBtn").onclick=loadAlerts;
 $("#userForm").addEventListener("submit",async e=>{e.preventDefault();const data=Object.fromEntries(new FormData(e.target));try{await api("/api/users",{method:"POST",body:JSON.stringify(data)});e.target.reset();await loadUsers();alert("تم إنشاء الحساب بنجاح.")}catch(err){alert(err.message)}});
 async function toggleUser(id,active){const action=active?'تفعيل':'إيقاف';if(!confirm('هل تريد '+action+' هذا الحساب؟'))return;try{await api('/api/users/'+id+'/status',{method:'PATCH',body:JSON.stringify({active:!!active})});await loadUsers()}catch(e){alert(e.message)}}

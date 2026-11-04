@@ -136,6 +136,33 @@ test("API enforces role separation, public-feed filtering and account deactivati
   const reviewer = await login("reviewer1", "Temporary-Password-2026!");
   const publisher = await login("publisher1", "Temporary-Password-2026!");
 
+  assert.equal((await request("/api/webhooks/inbox", { token: forecaster })).status, 403,
+    "forecasters must not inspect inbound webhook messages");
+  const webhookInbox = await request("/api/webhooks/inbox?status=pending", { token: reviewer });
+  assert.equal(webhookInbox.status, 200, "reviewers should inspect pending inbound webhook messages");
+  assert.ok(webhookInbox.data.messages.some(item => item.id === acceptedWebhookData.inbox_id));
+  const inboxMessage = webhookInbox.data.messages.find(item => item.id === acceptedWebhookData.inbox_id);
+  assert.equal(inboxMessage.payload.provider, "synthetic-test");
+  const reviewedInboxMessage = await request(`/api/webhooks/inbox/${acceptedWebhookData.inbox_id}/review`, {
+    token: reviewer, method: "PATCH", body: { status: "reviewed", note: "Synthetic integration test reviewed" }
+  });
+  assert.equal(reviewedInboxMessage.status, 200);
+  assert.equal(reviewedInboxMessage.data.status, "reviewed");
+  const repeatedReview = await request(`/api/webhooks/inbox/${acceptedWebhookData.inbox_id}/review`, {
+    token: reviewer, method: "PATCH", body: { status: "rejected" }
+  });
+  assert.equal(repeatedReview.status, 409, "reviewed webhook messages must not be silently reclassified");
+  const secondWebhookBody = JSON.stringify({ provider: "synthetic-test", event: "second-inbound-test" });
+  const secondWebhookSignature = createWebhookSignature(webhookSecret, webhookTimestamp, secondWebhookBody);
+  const secondWebhookResponse = await sendWebhook(secondWebhookBody, webhookTimestamp, secondWebhookSignature);
+  assert.equal(secondWebhookResponse.status, 202);
+  const secondWebhookData = await secondWebhookResponse.json();
+  const rejectedInboxMessage = await request(`/api/webhooks/inbox/${secondWebhookData.inbox_id}/review`, {
+    token: reviewer, method: "PATCH", body: { status: "rejected", note: "Synthetic test rejection" }
+  });
+  assert.equal(rejectedInboxMessage.status, 200);
+  assert.equal(rejectedInboxMessage.data.status, "rejected");
+
   const invalidCapStatus = await request("/api/alerts", {
     token: forecaster, method: "POST",
     body: {

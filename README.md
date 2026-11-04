@@ -101,6 +101,8 @@ The service listens on `127.0.0.1:8095` by default and stores SQLite data in the
 - `GET /api/delivery/outbox` (admin/publisher only; filter with `?status=queued|sending|delivered|failed`)
 - `POST /api/delivery/outbox/:id/claim` (claims a queued job and returns its CAP XML payload; does not transmit externally)
 - `POST /api/delivery/recover-stale` (admin/publisher only; recovers claims older than `staleMinutes`, default 10, maximum 1440)
+- `POST /api/delivery/process-retries` (admin/publisher only; requeues failed jobs whose exponential-backoff delay has elapsed and marks exhausted jobs as dead-letter)
+- `GET /api/delivery/outbox?status=dead_letter` (admin/publisher only; lists exhausted jobs)
 - `POST /api/delivery/outbox/:id/receipt` (records a delivered/failed receipt for a claimed job)
 - `POST /api/delivery/outbox/:id/retry` (requeues a failed job for controlled retry)
 

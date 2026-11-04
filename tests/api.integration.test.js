@@ -148,6 +148,7 @@ test("API enforces role separation, public-feed filtering and account deactivati
   });
   assert.equal(reviewedInboxMessage.status, 200);
   assert.equal(reviewedInboxMessage.data.status, "reviewed");
+  assert.equal(reviewedInboxMessage.data.reviewer_username, "reviewer1", "review response should identify the authenticated reviewer");
   const repeatedReview = await request(`/api/webhooks/inbox/${acceptedWebhookData.inbox_id}/review`, {
     token: reviewer, method: "PATCH", body: { status: "rejected" }
   });
@@ -271,6 +272,8 @@ test("API enforces role separation, public-feed filtering and account deactivati
     assert.ok(inboxRow, "accepted webhook should be persisted in the inbox");
     assert.equal(inboxRow.source_timestamp, webhookTimestamp);
     assert.equal(inboxRow.status, "reviewed", "review decision should be persisted after reviewer action");
+    assert.equal(inboxRow.reviewed_by, (await inboxDatabase.prepare("SELECT id FROM users WHERE username=?").get("reviewer1")).id,
+      "reviewer identity should be persisted with the inbox decision");
     assert.equal(JSON.parse(inboxRow.payload_json).provider, "synthetic-test");
     assert.equal(inboxDatabase.prepare("SELECT COUNT(*) AS count FROM webhook_inbox").get().count, 2,
       "only the two valid unique webhooks should enter the inbox");

@@ -27,6 +27,7 @@ Open http://localhost:8095.
 - JWT login, authenticated password changes, and administrator provisioning for institutional roles.
 - Draft -> pending review -> approved -> internal publication workflow with independent creator/reviewer/publisher separation.
 - CAP 1.2 XML export with numeric-offset timestamps, multiple language blocks, multiple categories/response types, multiple affected areas, geocodes, altitude/ceiling, parameters and supplemental resources.
+- Dashboard advanced JSON editor for multilingual information blocks and supplemental resources.
 - API support for linked Update and Cancel drafts; derived messages remain in Test status pending independent review.
 - GitHub Actions downloads the official OASIS CAP 1.2 XSD and validates a generated multilingual XML example with xmllint.
 - Public JSON feed for published Public-scope alerts.
@@ -56,7 +57,7 @@ Open http://localhost:8095.
 
 ## Important safety and deployment notes
 
-This repository is an initial development foundation, not a certified or production-ready public warning service. Publishing currently exposes approved alerts through the public JSON endpoint only when their CAP status is `Actual` and scope is `Public`; Test and Exercise messages are excluded. No external CAP distribution, email, SMS, push, or government alert gateway is configured. The dashboard includes an administrator-only account provisioning panel. User deactivation, MFA, and password-reset workflows are still pending.
+This repository is an initial development foundation, not a certified or production-ready public warning service. Publishing currently exposes approved alerts through the public JSON endpoint only when their CAP status is `Actual` and scope is `Public`; Test and Exercise messages are excluded. No external CAP distribution, email, SMS, push, or government alert gateway is configured. The dashboard includes an administrator-only account provisioning panel and an advanced JSON editor for multilingual CAP info blocks. User deactivation, MFA, and password-reset workflows are still pending.
 
 Before operational use, implement and test official CAP 1.2 XSD validation, a complete conformance suite across all CAP message types, profiles, signatures, edge cases, and institutional interoperability scenarios, account administration and MFA, HTTPS, backups, monitoring, security testing, and institution-specific authorization and approval procedures. Keep deployments private until these controls are completed. Use Test/Exercise messages during development, and configure unique non-placeholder `JWT_SECRET` and `ADMIN_PASSWORD` values before startup.
 

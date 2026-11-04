@@ -194,9 +194,18 @@ test("API enforces role separation, public-feed filtering and account deactivati
   try {
     assert.throws(() => directDatabase.prepare("UPDATE alerts SET status='Draft' WHERE id=?").run(actualRow.id),
       /Invalid CAP 1.2 status/, "database triggers must reject non-standard CAP status values");
+    directDatabase.prepare("UPDATE delivery_outbox SET status='sending',last_attempt_at=datetime('now','-30 minutes') WHERE alert_id=? AND channel='cap_feed'").run(actualRow.id);
   } finally {
     directDatabase.close();
   }
+  const recovery = await request("/api/delivery/recover-stale", {
+    token: publisher, method: "POST", body: { staleMinutes: 10 }
+  });
+  assert.equal(recovery.status, 200);
+  assert.equal(recovery.data.recovered_count, 1, "stale sending jobs should be recovered to queued");
+  assert.equal((await request("/api/delivery/recover-stale", {
+    token: forecaster, method: "POST", body: { staleMinutes: 10 }
+  })).status, 403, "forecasters must not run delivery recovery");
 
   const capXml = await fetch(base + "/api/alerts/" + actualRow.id + "/cap.xml", {
     headers: { Authorization: "Bearer " + forecaster }

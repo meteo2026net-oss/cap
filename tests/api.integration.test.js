@@ -8,6 +8,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import Database from "better-sqlite3";
 import { createWebhookSignature } from "../src/webhook-signature.js";
+import { appendAuditLog } from "../src/audit.js";
 
 const serverEntry = fileURLToPath(new URL("../src/server.js", import.meta.url));
 
@@ -440,6 +441,46 @@ test("API enforces role separation, public-feed filtering and account deactivati
     "zero is not a valid audit cursor");
   assert.equal((await request("/api/audit?limit=501", { token: reviewer })).status, 400,
     "audit page size must be capped");
+
+  const auditPaginationDatabase = new Database(path.join(cwd, "storage", "cap.sqlite"));
+  try {
+    for (let index = 0; index < 105; index++) {
+      appendAuditLog(auditPaginationDatabase, {
+        action: "pagination_fixture",
+        details: "cursor fixture " + index
+      });
+    }
+  } finally {
+    auditPaginationDatabase.close();
+  }
+  const auditPageOne = await request("/api/audit?limit=50", { token: reviewer });
+  assert.equal(auditPageOne.status, 200);
+  assert.equal(auditPageOne.data.entries.length, 50);
+  assert.equal(auditPageOne.data.has_more, true);
+  const auditPageTwo = await request(
+    "/api/audit?limit=50&before_id=" + auditPageOne.data.next_before_id,
+    { token: reviewer }
+  );
+  assert.equal(auditPageTwo.status, 200);
+  assert.equal(auditPageTwo.data.entries.length, 50);
+  assert.equal(auditPageTwo.data.has_more, true);
+  const auditPageThree = await request(
+    "/api/audit?limit=50&before_id=" + auditPageTwo.data.next_before_id,
+    { token: reviewer }
+  );
+  assert.equal(auditPageThree.status, 200);
+  assert.equal(auditPageThree.data.entries.length, 5);
+  assert.equal(auditPageThree.data.has_more, true,
+    "cursor should continue to older audit records after fixture rows");
+  const fixtureIds = [
+    ...auditPageOne.data.entries,
+    ...auditPageTwo.data.entries,
+    ...auditPageThree.data.entries
+  ].map(entry => entry.id);
+  assert.equal(new Set(fixtureIds).size, 105, "three audit pages must not overlap");
+  assert.ok(fixtureIds.every((id, index) => index === 0 || id < fixtureIds[index - 1]),
+    "audit pages must preserve strict descending ID order");
+
   const auditStatus = await request("/api/audit/verify", { token: reviewer });
   assert.equal(auditStatus.status, 200);
   assert.equal(auditStatus.data.valid, true, "API should verify the cryptographic audit chain");

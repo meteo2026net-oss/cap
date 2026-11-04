@@ -149,17 +149,32 @@ async function loadAuditIntegrity(){
 $("#auditRefreshBtn")?.addEventListener("click",loadAuditIntegrity);
 
 let auditHistoryCursor=null;
+let auditHistoryLoading=false;
+function formatAuditTimestamp(value){
+ if(!value)return "وقت غير متاح";
+ const raw=String(value).trim();
+ const normalized=/^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?$/.test(raw)
+  ?raw.replace(" ","T")+"Z"
+  :/^\\d{4}-\\d{2}-\\d{2}T.*$/.test(raw)&&!/(?:Z|[+-]\\d{2}:?\\d{2})$/i.test(raw)
+   ?raw+"Z":raw;
+ const date=new Date(normalized);
+ return Number.isNaN(date.getTime())?"وقت غير متاح":date.toLocaleString("ar");
+}
 async function loadAuditHistory(append=false){
  const list=$("#auditHistoryList"),status=$("#auditHistoryStatus"),more=$("#auditHistoryLoadMoreBtn");
- if(!list||!status)return;
- if(!append){auditHistoryCursor=null;if(more)more.hidden=true;}
+ const refresh=$("#auditHistoryRefreshBtn");
+ if(!list||!status||auditHistoryLoading)return;
  if(append&&!auditHistoryCursor)return;
+ auditHistoryLoading=true;
+ if(more)more.disabled=true;
+ if(refresh)refresh.disabled=true;
  status.textContent=append?"جارٍ تحميل السجلات الأقدم...":"جارٍ تحميل سجل التدقيق...";
  try{
   const params=new URLSearchParams({limit:"50"});
-  if(append&&auditHistoryCursor)params.set("before_id",String(auditHistoryCursor));
+  const requestedCursor=append?auditHistoryCursor:null;
+  if(requestedCursor!==null)params.set("before_id",String(requestedCursor));
   const result=await api("/api/audit?"+params.toString());
-  const rows=result.entries||[];
+  const rows=Array.isArray(result.entries)?result.entries:[];
   const cards=rows.map(entry=>{
    const card=document.createElement("article");card.className="alertItem auditEntry";
    const heading=document.createElement("div");heading.className="userHeading";
@@ -167,23 +182,28 @@ async function loadAuditHistory(append=false){
    const id=document.createElement("span");id.className="pill";id.textContent="#"+entry.id;
    heading.append(action,id);
    const meta=document.createElement("p");meta.className="small muted";
-   const timestamp=entry.created_at?new Date(entry.created_at).toLocaleString("ar"):"وقت غير متاح";
-   meta.textContent=(entry.username||"النظام")+" • "+timestamp+(entry.alert_id?" • التحذير #"+entry.alert_id:"");
+   meta.textContent=(entry.username||"النظام")+" • "+formatAuditTimestamp(entry.created_at)+(entry.alert_id?" • التحذير #"+entry.alert_id:"");
    const details=document.createElement("p");details.className="small auditDetails";details.textContent=entry.details||"لا توجد تفاصيل إضافية.";
    card.append(heading,meta,details);
    if(entry.entry_hash){
     const hash=document.createElement("details");const summary=document.createElement("summary");summary.textContent="تفاصيل سلامة السجل";
-    const code=document.createElement("code");code.className="auditHash";code.textContent="SHA-256: "+entry.entry_hash+"\nالسابق: "+(entry.previous_hash||"غير متاح");
+    const code=document.createElement("code");code.className="auditHash";code.textContent="SHA-256: "+entry.entry_hash+"\\nالسابق: "+(entry.previous_hash||"غير متاح");
     hash.append(summary,code);card.append(hash);
    }
    return card;
   });
   if(append)list.append(...cards);else list.replaceChildren(...cards);
-  auditHistoryCursor=result.next_before_id;
+  auditHistoryCursor=result.next_before_id??null;
   if(more)more.hidden=!result.has_more;
   status.textContent="السجلات المعروضة: "+list.querySelectorAll(".auditEntry").length+(result.has_more?" • توجد سجلات أقدم":" • وصلت إلى نهاية السجل");
   if(!rows.length&&!append){const empty=document.createElement("p");empty.className="muted";empty.textContent="لا توجد أحداث مسجلة بعد.";list.append(empty);}
- }catch(error){status.textContent="تعذر تحميل سجل التدقيق: "+error.message;if(!append)list.replaceChildren();}
+ }catch(error){
+  status.textContent="تعذر تحميل سجل التدقيق: "+error.message;
+ }finally{
+  auditHistoryLoading=false;
+  if(more)more.disabled=false;
+  if(refresh)refresh.disabled=false;
+ }
 }
 $("#auditHistoryRefreshBtn")?.addEventListener("click",()=>loadAuditHistory());
 $("#auditHistoryLoadMoreBtn")?.addEventListener("click",()=>loadAuditHistory(true));

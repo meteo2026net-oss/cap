@@ -51,7 +51,7 @@ test("audit hash chain verifies append order and detects modified entries", () =
     assert.equal(verified.verified_entries, 2);
     assert.equal(verified.legacy_unhashed_entries, 0);
 
-    database.exec("DROP TRIGGER audit_log_no_update");\n    database.exec("DROP TRIGGER audit_log_no_unhashed_tail");
+    database.exec("DROP TRIGGER audit_log_no_update");
     database.exec("DROP TRIGGER audit_log_no_unhashed_tail");
     database.prepare("UPDATE audit_log SET details=? WHERE id=?").run("tampered", first.id);
 

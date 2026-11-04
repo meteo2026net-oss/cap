@@ -117,7 +117,7 @@ jobs:
             --pids-limit 100 \
             --tmpfs /tmp:rw,noexec,nosuid,size=16m \
             meteo-cap-warning-system:ci \
-            sh -ec 'node --input-type=module -e "import Database from \"better-sqlite3\"; const db = new Database(\"/app/storage/cap.sqlite\"); try { const checkpoint = db.pragma(\"wal_checkpoint(TRUNCATE)\")[0]; if (checkpoint.busy !== 0) throw new Error(\"SQLite WAL checkpoint remained busy\"); } finally { db.close(); }" && rm -f /app/storage/cap.sqlite-wal /app/storage/cap.sqlite-shm && node src/restore.js "/app/backups/'"$backup_name"'" --force'
+            sh -ec 'node --input-type=module -e "import Database from \"better-sqlite3\"; const db = new Database(\"/app/storage/cap.sqlite\"); try { const checkpoint = db.pragma(\"wal_checkpoint(TRUNCATE)\")[0]; if (checkpoint.busy !== 0) throw new Error(\"SQLite WAL checkpoint remained busy\"); } finally { db.close(); }" && rm -f /app/storage/cap.sqlite-wal /app/storage/cap.sqlite-shm && node src/restore.js "/app/backups/'"$backup_name"'" --force && node --input-type=module -e "import Database from \"better-sqlite3\"; const db = new Database(\"/app/storage/cap.sqlite\", { readonly: true }); try { const admin = db.prepare(\"SELECT username, role, active FROM users WHERE username = ?\").get(\"admin\"); if (!admin || admin.role !== \"admin\" || admin.active !== 1) throw new Error(\"Restored database is missing the expected active administrator record\"); console.log(\"Restored database content verified: active admin record is present.\"); } finally { db.close(); }"'
           echo "Checkpointed the stopped database, removed only closed SQLite sidecars, and restored the validated backup."
 
           docker start cap-smoke

@@ -92,3 +92,33 @@ test("legacy audit rows remain intact and are reported as unhashed", () => {
     database.close();
   }
 });
+
+
+test("audit verification flags unhashed records appended after hash-chain activation", () => {
+  const database = new Database(":memory:");
+  try {
+    database.exec(`
+      CREATE TABLE audit_log (
+        id INTEGER PRIMARY KEY,
+        user_id INTEGER,
+        alert_id INTEGER,
+        action TEXT NOT NULL,
+        details TEXT,
+        created_at TEXT NOT NULL,
+        previous_hash TEXT,
+        entry_hash TEXT
+      )
+    `);
+    installAuditLogGuards(database);
+    appendAuditLog(database, { action: "first_hashed_event" });
+    database.exec("DROP TRIGGER audit_log_no_update");
+    database.prepare("INSERT INTO audit_log(action,created_at) VALUES ('unhashed_tail','2026-11-04T12:00:00.000Z')").run();
+
+    const result = verifyAuditChain(database);
+    assert.equal(result.valid, false);
+    assert.equal(result.reason, "unhashed_entry_after_chain");
+    assert.equal(result.legacy_unhashed_entries, 1);
+  } finally {
+    database.close();
+  }
+});

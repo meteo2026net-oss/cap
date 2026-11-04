@@ -1,0 +1,163 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
+import { createServer } from "node:net";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const serverEntry = fileURLToPath(new URL("../src/server.js", import.meta.url));
+
+async function reservePort() {
+  const server = createServer();
+  await new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  const port = server.address().port;
+  await new Promise(resolve => server.close(resolve));
+  return port;
+}
+
+test("API enforces role separation, public-feed filtering and account deactivation", { timeout: 30000 }, async t => {
+  const cwd = await mkdtemp(path.join(tmpdir(), "meteo-cap-api-"));
+  const port = await reservePort();
+  const base = "http://127.0.0.1:" + port;
+  const child = spawn(process.execPath, [serverEntry], {
+    cwd,
+    env: {
+      ...process.env,
+      PORT: String(port),
+      HOST: "127.0.0.1",
+      JWT_SECRET: "integration-test-secret-that-is-at-least-32-characters",
+      ADMIN_PASSWORD: "Integration-Test-Admin-Password-2026"
+    },
+    stdio: "ignore"
+  });
+
+  t.after(async () => {
+    if (child.exitCode === null && child.signalCode === null) child.kill("SIGTERM");
+    if (child.exitCode === null && child.signalCode === null) {
+      await new Promise(resolve => {
+        child.once("exit", resolve);
+        setTimeout(resolve, 2000);
+      });
+    }
+    await rm(cwd, { recursive: true, force: true });
+  });
+
+  let ready = false;
+  for (let attempt = 0; attempt < 100; attempt++) {
+    if (child.exitCode !== null) throw new Error("API server exited before becoming ready.");
+    try {
+      const response = await fetch(base + "/api/health");
+      if (response.ok) { ready = true; break; }
+    } catch {}
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  assert.equal(ready, true, "API server should become ready");
+
+  const request = async (url, { token, method = "GET", body } = {}) => {
+    const response = await fetch(base + url, {
+      method,
+      headers: {
+        ...(token ? { Authorization: "Bearer " + token } : {}),
+        ...(body ? { "Content-Type": "application/json" } : {})
+      },
+      ...(body ? { body: JSON.stringify(body) } : {})
+    });
+    return { status: response.status, data: await response.json().catch(() => ({})) };
+  };
+
+  const login = async (username, password) => {
+    const result = await request("/api/auth/login", {
+      method: "POST", body: { username, password }
+    });
+    assert.equal(result.status, 200, "login should succeed for " + username);
+    return result.data.token;
+  };
+
+  const admin = await login("admin", "Integration-Test-Admin-Password-2026");
+  const createUser = async (username, role) => {
+    const result = await request("/api/users", {
+      token: admin, method: "POST",
+      body: { username, role, password: "Temporary-Password-2026!" }
+    });
+    assert.equal(result.status, 201, "user should be created: " + username);
+    return result.data.id;
+  };
+
+  await createUser("forecaster1", "forecaster");
+  await createUser("reviewer1", "reviewer");
+  await createUser("publisher1", "publisher");
+  const disabledId = await createUser("disabled1", "viewer");
+
+  const forecaster = await login("forecaster1", "Temporary-Password-2026!");
+  const reviewer = await login("reviewer1", "Temporary-Password-2026!");
+  const publisher = await login("publisher1", "Temporary-Password-2026!");
+
+  assert.equal((await request("/api/users", { token: forecaster })).status, 403,
+    "forecasters must not administer users");
+
+  const createAndPublish = async status => {
+    const created = await request("/api/alerts", {
+      token: forecaster, method: "POST",
+      body: {
+        event: "Integration test rainfall",
+        headline: "Synthetic test warning",
+        description: "Synthetic integration test data only",
+        area_desc: "Synthetic test area",
+        circle: "33.5,36.2 8",
+        category: "Met",
+        urgency: "Expected",
+        severity: "Moderate",
+        certainty: "Likely",
+        status,
+        scope: "Public"
+      }
+    });
+    assert.equal(created.status, 201, "forecaster should create a draft");
+    const id = created.data.id;
+
+    assert.equal((await request(`/api/alerts/${id}/submit`, {
+      token: forecaster, method: "POST", body: {}
+    })).status, 200);
+    assert.equal((await request(`/api/alerts/${id}/approve`, {
+      token: forecaster, method: "POST", body: {}
+    })).status, 403, "creator cannot approve their own warning");
+    assert.equal((await request(`/api/alerts/${id}/approve`, {
+      token: reviewer, method: "POST", body: {}
+    })).status, 200);
+    assert.equal((await request(`/api/alerts/${id}/publish`, {
+      token: reviewer, method: "POST", body: {}
+    })).status, 403, "approver cannot publish the same warning");
+    assert.equal((await request(`/api/alerts/${id}/publish`, {
+      token: publisher, method: "POST", body: {}
+    })).status, 200);
+    return created.data.identifier;
+  };
+
+  const actualIdentifier = await createAndPublish("Actual");
+  const testIdentifier = await createAndPublish("Test");
+  const publicFeed = await request("/api/public/alerts");
+  assert.equal(publicFeed.status, 200);
+  assert.ok(publicFeed.data.alerts.some(alert => alert.identifier === actualIdentifier),
+    "published Actual/Public warning should be visible in the public feed");
+  assert.ok(!publicFeed.data.alerts.some(alert => alert.identifier === testIdentifier),
+    "published Test warning must not appear in the public feed");
+
+  assert.equal((await request(`/api/users/${disabledId}/status`, {
+    token: admin, method: "PATCH", body: { active: false }
+  })).status, 200);
+  assert.equal((await request("/api/auth/login", {
+    method: "POST", body: { username: "disabled1", password: "Temporary-Password-2026!" }
+  })).status, 401, "deactivated users cannot log in");
+
+  const users = await request("/api/users", { token: admin });
+  const adminUser = users.data.users.find(user => user.username === "admin");
+  assert.ok(adminUser);
+  assert.equal((await request(`/api/users/${adminUser.id}/status`, {
+    token: admin, method: "PATCH", body: { active: false }
+  })).status, 409, "the active administrator cannot deactivate itself");
+});

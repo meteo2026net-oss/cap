@@ -131,3 +131,23 @@ test("exports update messages with a prior-message reference", () => {
   assert.match(xml, /<references>/);
   assert.match(xml, /<info>/);
 });
+
+test("validates CAP language tags and headline length", () => {
+  const base = {
+    language: "en-GB", category: "Met", event: "Heavy rainfall",
+    urgency: "Expected", severity: "Moderate", certainty: "Likely",
+    area: { areaDesc: "Test district", circle: "51.5,-0.1 10" }
+  };
+  assert.throws(() => buildCapXml({ ...valid, info_blocks: [{ ...base, language: "bad_tag!" }] }), /language tag/);
+  assert.throws(() => buildCapXml({ ...valid, info_blocks: [{ ...base, headline: "x".repeat(161) }] }), /160 characters/);
+});
+
+test("rejects invalid expiry windows and altitude ranges in info blocks", () => {
+  const base = {
+    language: "en-GB", category: "Met", event: "Heavy rainfall",
+    urgency: "Expected", severity: "Moderate", certainty: "Likely",
+    area: { areaDesc: "Test district", circle: "51.5,-0.1 10" }
+  };
+  assert.throws(() => buildCapXml({ ...valid, info_blocks: [{ ...base, onset: "2026-11-05T00:00:00Z", expires: "2026-11-04T00:00:00Z" }] }), /expiry must be later/);
+  assert.throws(() => buildCapXml({ ...valid, info_blocks: [{ ...base, area: { areaDesc: "Test district", circle: "51.5,-0.1 10", altitude: 2000, ceiling: 1000 } }] }), /ceiling cannot be lower/);
+});

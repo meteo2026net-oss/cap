@@ -14,7 +14,8 @@ const app = express();
 const port = Number(process.env.PORT || 8095);
 const secret = process.env.JWT_SECRET;
 if (!secret || secret.length < 32) {
- console.warn("WARNING: Set JWT_SECRET to a unique random value of at least 32 characters.");
+ console.error("FATAL: Set JWT_SECRET to a unique random value of at least 32 characters before starting the server.");
+ process.exit(1);
 }
 app.use(helmet({ contentSecurityPolicy: false }));
 const origins = (process.env.CORS_ORIGINS || "").split(",").map(s=>s.trim()).filter(Boolean);

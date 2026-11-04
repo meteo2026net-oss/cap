@@ -207,7 +207,7 @@ async function loadWebhookInbox(append=false){
    const payload=esc(JSON.stringify(row.payload,null,2));
    const reviewer=row.reviewer_username?'<p class="small muted">راجع الرسالة: '+esc(row.reviewer_username)+' • '+esc(row.reviewed_at||"")+"</p>":"";
    const note=row.review_note?'<p class="small muted">ملاحظة المراجعة: '+esc(row.review_note)+'</p>':"";
-   const actions=row.status==="pending"?'<div class="actions"><button type="button" onclick="reviewWebhook('+row.id+',\\'reviewed\\')">تأكيد المراجعة</button><button class="secondary" type="button" onclick="reviewWebhook('+row.id+',\\'rejected\\')">رفض الرسالة</button></div>':"";
+   const actions=row.status==="pending"?'<div class="actions"><button type="button" onclick="reviewWebhook('+row.id+',\'reviewed\')">تأكيد المراجعة</button><button class="secondary" type="button" onclick="reviewWebhook('+row.id+',\'rejected\')">رفض الرسالة</button></div>':"";
    return '<article class="alertItem"><b>رسالة واردة #'+row.id+'</b><div class="alertMeta"><span class="pill">'+esc(label)+'</span><span>وقت الاستلام: '+esc(row.received_at)+'</span><span>وقت المصدر: '+esc(new Date(row.source_timestamp*1000).toISOString())+'</span></div>'+reviewer+note+'<details><summary>عرض محتوى JSON</summary><pre class="webhookPayload">'+payload+'</pre></details>'+actions+'</article>';
   }).join("");
   if(append)list.insertAdjacentHTML("beforeend",html);

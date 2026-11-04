@@ -268,8 +268,20 @@ app.post("/api/alerts/:id/publish",auth,roles("admin","publisher"),(req,res)=>{
 app.get("/api/webhooks/inbox",auth,roles("admin","reviewer"),(req,res)=>{
  const status=req.query.status;
  if(status!==undefined && !["pending","reviewed","rejected"].includes(status)) return res.status(400).json({error:"Invalid webhook inbox status"});
- const rows=db.prepare(`SELECT w.id,w.received_at,w.source_timestamp,w.payload_json,w.status,w.reviewed_at,w.review_note,w.reviewed_by,u.username AS reviewer_username FROM webhook_inbox w LEFT JOIN users u ON u.id=w.reviewed_by WHERE (? IS NULL OR w.status=?) ORDER BY w.received_at DESC LIMIT 100`).all(status ?? null,status ?? null);
- res.json({messages:rows.map(row=>({...row,payload:JSON.parse(row.payload_json),payload_json:undefined}))});
+ const beforeRaw=req.query.before_id;
+ let beforeId=null;
+ if(beforeRaw!==undefined) {
+  if(!/^[1-9]\\d*$/.test(beforeRaw) || !Number.isSafeInteger(Number(beforeRaw))) return res.status(400).json({error:"Invalid webhook inbox cursor"});
+  beforeId=Number(beforeRaw);
+ }
+ const rows=db.prepare(`SELECT w.id,w.received_at,w.source_timestamp,w.payload_json,w.status,w.reviewed_at,w.review_note,w.reviewed_by,u.username AS reviewer_username FROM webhook_inbox w LEFT JOIN users u ON u.id=w.reviewed_by WHERE (? IS NULL OR w.status=?) AND (? IS NULL OR w.id < ?) ORDER BY w.id DESC LIMIT 101`).all(status ?? null,status ?? null,beforeId,beforeId);
+ const hasMore=rows.length>100;
+ const page=rows.slice(0,100);
+ res.json({
+  messages:page.map(row=>({...row,payload:JSON.parse(row.payload_json),payload_json:undefined})),
+  has_more:hasMore,
+  next_before_id:hasMore?page[page.length-1].id:null
+ });
 });
 app.patch("/api/webhooks/inbox/:id/review",auth,roles("admin","reviewer"),(req,res)=>{
  const id=Number(req.params.id);

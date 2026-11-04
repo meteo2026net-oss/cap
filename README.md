@@ -101,7 +101,7 @@ The service listens on `127.0.0.1:8095` by default and stores SQLite data in the
 - `GET /api/public/alerts`
 - `GET /api/public/alerts.geojson`
 - `POST /api/webhooks/inbound` (optional; disabled unless `CAP_WEBHOOK_INGRESS_ENABLED=true` and a unique `CAP_WEBHOOK_SECRET` of at least 32 bytes is configured; requires `X-Webhook-Timestamp` and `X-Webhook-Signature`; accepted messages are stored for manual review only)
-- `GET /api/webhooks/inbox` (admin/reviewer only; optional `?status=pending|reviewed|rejected`)
+- `GET /api/webhooks/inbox` (admin/reviewer only; optional `status` filter and `before_id` cursor for bounded 100-message pages)
 - `PATCH /api/webhooks/inbox/:id/review` (admin/reviewer only; changes a pending message to `reviewed` or `rejected`; no automatic alert creation or publication)
 - `GET /api/audit`
 - `GET /api/delivery/outbox` (admin/publisher only; filter with `?status=queued|sending|delivered|failed|dead_letter`)

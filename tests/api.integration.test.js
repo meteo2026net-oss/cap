@@ -281,6 +281,40 @@ test("API enforces role separation, public-feed filtering and account deactivati
     inboxDatabase.close();
   }
 
+  assert.equal((await request("/api/webhooks/inbox?before_id=0", { token: reviewer })).status, 400,
+    "zero is not a valid inbox cursor");
+  assert.equal((await request("/api/webhooks/inbox?before_id=1.5", { token: reviewer })).status, 400,
+    "fractional inbox cursors must be rejected");
+  const paginationDatabase = new Database(path.join(cwd, "storage", "cap.sqlite"));
+  try {
+    const addInboxRow = paginationDatabase.prepare(
+      "INSERT INTO webhook_inbox (source_timestamp,signature_hash,payload_json,status) VALUES (?,?,?,'pending')"
+    );
+    const addPageRows = paginationDatabase.transaction(() => {
+      for (let index = 0; index < 101; index++) {
+        addInboxRow.run(webhookTimestamp, "pagination-test-" + index, JSON.stringify({ page_test: index }));
+      }
+    });
+    addPageRows();
+  } finally {
+    paginationDatabase.close();
+  }
+  const firstInboxPage = await request("/api/webhooks/inbox?status=pending", { token: reviewer });
+  assert.equal(firstInboxPage.status, 200);
+  assert.equal(firstInboxPage.data.messages.length, 100);
+  assert.equal(firstInboxPage.data.has_more, true);
+  assert.ok(Number.isSafeInteger(firstInboxPage.data.next_before_id));
+  const secondInboxPage = await request(
+    "/api/webhooks/inbox?status=pending&before_id=" + firstInboxPage.data.next_before_id,
+    { token: reviewer }
+  );
+  assert.equal(secondInboxPage.status, 200);
+  assert.equal(secondInboxPage.data.messages.length, 1);
+  assert.equal(secondInboxPage.data.has_more, false);
+  assert.equal(secondInboxPage.data.next_before_id, null);
+  assert.ok(secondInboxPage.data.messages[0].id < firstInboxPage.data.messages.at(-1).id,
+    "cursor pagination must return only older inbox rows");
+
   const directDatabase = new Database(path.join(cwd, "storage", "cap.sqlite"));
   try {
     assert.throws(() => directDatabase.prepare("UPDATE delivery_outbox SET lease_token='00000000-0000-4000-8000-000000000000' WHERE alert_id=?").run(actualRow.id),

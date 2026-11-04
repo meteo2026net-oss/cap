@@ -187,22 +187,35 @@ $("#deliveryProcessBtn")?.addEventListener("click",async()=>{
  }catch(error){status.textContent=error.message}
 });
 
-async function loadWebhookInbox(){
+let webhookInboxNextCursor=null;
+async function loadWebhookInbox(append=false){
  const status=$("#webhookInboxStatus"),list=$("#webhookInboxList");
  if(!status||!list)return;
+ const moreButton=$("#webhookInboxLoadMoreBtn");
+ if(!append){webhookInboxNextCursor=null;if(moreButton)moreButton.hidden=true;}
+ if(append&&!webhookInboxNextCursor)return;
  try{
+  const params=new URLSearchParams();
   const filter=$("#webhookInboxFilter")?.value||"";
-  const result=await api("/api/webhooks/inbox"+(filter?"?status="+encodeURIComponent(filter):""));
+  if(filter)params.set("status",filter);
+  if(append&&webhookInboxNextCursor)params.set("before_id",String(webhookInboxNextCursor));
+  const query=params.toString();
+  const result=await api("/api/webhooks/inbox"+(query?"?"+query:""));
   const rows=result.messages||[];
-  list.innerHTML=rows.map(row=>{
+  const html=rows.map(row=>{
    const label={pending:"بانتظار المراجعة",reviewed:"تمت المراجعة",rejected:"مرفوضة"}[row.status]||row.status;
    const payload=esc(JSON.stringify(row.payload,null,2));
    const reviewer=row.reviewer_username?'<p class="small muted">راجع الرسالة: '+esc(row.reviewer_username)+' • '+esc(row.reviewed_at||"")+"</p>":"";
    const note=row.review_note?'<p class="small muted">ملاحظة المراجعة: '+esc(row.review_note)+'</p>':"";
-   const actions=row.status==="pending"?'<div class="actions"><button type="button" onclick="reviewWebhook('+row.id+',\'reviewed\')">تأكيد المراجعة</button><button class="secondary" type="button" onclick="reviewWebhook('+row.id+',\'rejected\')">رفض الرسالة</button></div>':"";
+   const actions=row.status==="pending"?'<div class="actions"><button type="button" onclick="reviewWebhook('+row.id+',\\'reviewed\\')">تأكيد المراجعة</button><button class="secondary" type="button" onclick="reviewWebhook('+row.id+',\\'rejected\\')">رفض الرسالة</button></div>':"";
    return '<article class="alertItem"><b>رسالة واردة #'+row.id+'</b><div class="alertMeta"><span class="pill">'+esc(label)+'</span><span>وقت الاستلام: '+esc(row.received_at)+'</span><span>وقت المصدر: '+esc(new Date(row.source_timestamp*1000).toISOString())+'</span></div>'+reviewer+note+'<details><summary>عرض محتوى JSON</summary><pre class="webhookPayload">'+payload+'</pre></details>'+actions+'</article>';
-  }).join("")||'<p class="muted">لا توجد رسائل ضمن هذا التصنيف.</p>';
-  status.textContent="عدد الرسائل المعروضة: "+rows.length+" • الحد الأقصى 100 رسالة";
+  }).join("");
+  if(append)list.insertAdjacentHTML("beforeend",html);
+  else list.innerHTML=html||'<p class="muted">لا توجد رسائل ضمن هذا التصنيف.</p>';
+  webhookInboxNextCursor=result.next_before_id;
+  if(moreButton)moreButton.hidden=!result.has_more;
+  const displayed=list.querySelectorAll(".alertItem").length;
+  status.textContent="عدد الرسائل المعروضة: "+displayed+(result.has_more?" • توجد رسائل أقدم":" • وصلت إلى نهاية النتائج");
  }catch(error){status.textContent=error.message}
 }
 async function reviewWebhook(id,status){
@@ -215,5 +228,6 @@ async function reviewWebhook(id,status){
  }catch(error){alert(error.message)}
 }
 $("#webhookInboxRefreshBtn")?.addEventListener("click",loadWebhookInbox);
+$("#webhookInboxLoadMoreBtn")?.addEventListener("click",()=>loadWebhookInbox(true));
 $("#webhookInboxFilter")?.addEventListener("change",loadWebhookInbox);
 window.reviewWebhook=reviewWebhook;

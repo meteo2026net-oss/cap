@@ -1,7 +1,7 @@
 # Architecture and delivery roadmap
 
 ## Chosen architecture
-- Standalone Node.js 20+ service.
+- Standalone Node.js 20+ service (CI and Docker runtime use Node.js 22).
 - Express REST API.
 - SQLite for the first portable deployment; PostgreSQL adapter planned for multi-instance deployments.
 - CAP 1.2 XML generation.
@@ -9,13 +9,13 @@
 - Public read-only JSON feed plus authenticated management API.
 
 ## Delivery phases
-1. Foundation (partially implemented): app shell, SQLite database, JWT authentication, role provisioning, draft/review/approval/publish, XML export, basic tests and CI workflow. Remaining: migrations, robust session controls, and production hardening.
+1. Foundation (partially implemented): app shell, SQLite database, JWT authentication, role provisioning, draft/review/approval/publish, XML export, basic tests and CI workflow. Remaining: PostgreSQL support for multi-instance deployments and production hardening.
 2. CAP completeness: XSD validation, full CAP element coverage, references, resources, geocodes, multilingual info blocks, update/cancel chains.
 3. Geospatial: Leaflet map, polygon/circle drawing, GeoJSON import/export, administrative boundaries.
-4. Governance: administrator user provisioning, password change, per-user token-version session revocation, guarded account activation/deactivation, append-only audit triggers, and SHA-256 chained audit entries with an authenticated verification endpoint are implemented. Historical pre-migration audit rows remain unchanged and are identified as unhashed. Database triggers also enforce CAP 1.2 status values independently of API validation. Remaining: MFA, password reset/recovery, externally anchored audit signatures, configurable approval policies, and tenant/institution profiles. API requests are rate-limited globally, with a stricter login limit.
-5. Distribution: internal transactional CAP feed outbox, idempotent enqueue, controlled claim/receipt/retry endpoints, and audit events are implemented. External HTTPS webhook, email/SMS/push adapters, scheduled workers, exponential backoff, dead-letter handling, and provider interoperability tests remain pending. No outbound transport is enabled.
+4. Governance: administrator user provisioning, password change, per-user token-version session revocation, guarded account activation/deactivation, append-only audit triggers, and SHA-256 chained audit entries with an authenticated verification endpoint are implemented. Historical pre-migration audit rows remain unchanged and are identified as unhashed. Database triggers also enforce CAP 1.2 status values independently of API validation. Remaining: MFA, password reset/recovery, externally anchored signed audit checkpoints, configurable approval policies, and tenant/institution profiles. The local SHA-256 chain detects changes within the retained chain but cannot prove that the entire database or complete chain was not replaced or deleted by an attacker with database-level control. API requests are rate-limited globally, with a stricter login limit.
+5. Distribution: internal transactional CAP feed outbox, idempotent enqueue, controlled claim/receipt/retry endpoints, and audit events are implemented. The optional maintenance worker, exponential backoff, maximum-attempt handling, dead-letter retention, lease-token receipt binding, and provider-neutral HMAC helper are implemented. External HTTPS webhook, email/SMS/push adapters, replay-cache enforcement, and provider interoperability tests remain pending. No outbound transport is enabled.
 6. Integrations: embeddable public warning widget, API keys, webhooks, SDK examples, CORS allowlists.
-7. Operations: a non-root Node 24 Docker image, localhost-bound Docker Compose deployment, persistent SQLite and backup volumes, environment template, health check, verified SQLite backup/restore commands and backup retention are implemented. Remaining: PostgreSQL, scheduled off-host backups, monitoring, deployment profiles and external security review.
+7. Operations: a non-root Node 22 Docker image, localhost-bound Docker Compose deployment, persistent SQLite and backup volumes, environment template, health check, verified SQLite backup/restore commands and backup retention are implemented. Remaining: PostgreSQL, scheduled off-host backups, monitoring/alerting, deployment profiles and external security review.
 
 ## CAP workflow policy
 - Drafts are never publicly visible.

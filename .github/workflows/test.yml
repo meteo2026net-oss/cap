@@ -27,7 +27,7 @@ jobs:
       - name: Report dependency vulnerabilities
         run: |
           npm audit --json > npm-audit.json || true
-          node -e "const a=require('./npm-audit.json'); for (const [name,v] of Object.entries(a.vulnerabilities||{})) console.log(name+': '+v.severity+' (direct: '+v.isDirect+')'); console.log('Total vulnerabilities: '+JSON.stringify(a.metadata?.vulnerabilities||{}))"
+          node -e "const a=require('./npm-audit.json'); for (const [name,v] of Object.entries(a.vulnerabilities||{})) console.log(JSON.stringify({name,severity:v.severity,isDirect:v.isDirect,range:v.range,via:v.via,fixAvailable:v.fixAvailable})); console.log('Total vulnerabilities: '+JSON.stringify(a.metadata?.vulnerabilities||{}))"
       - name: Check JavaScript syntax
         run: |
           node --check src/server.js

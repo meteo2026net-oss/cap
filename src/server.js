@@ -133,7 +133,8 @@ app.get("/api/alerts",auth,(req,res)=>{
 app.get("/api/alerts/:id",auth,(req,res)=>{
  const row = db.prepare("SELECT * FROM alerts WHERE id=?").get(req.params.id);
  if (!row) return res.status(404).json({error:"Alert not found"});
- res.json({alert:row});
+ const {info_json,...alert}=row;
+ res.json({alert:{...alert,info_blocks:info_json?JSON.parse(info_json):[]}});
 });
 app.post("/api/alerts",auth,roles("admin","forecaster"),(req,res)=>{
  try {

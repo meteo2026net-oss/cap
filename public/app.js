@@ -29,7 +29,6 @@ function initWarningMap(){
    event.layers.eachLayer(layer=>applyDrawnGeometryToForm(layer));
   });
   warningMap.on(L.Draw.Event.DELETED,()=>{
-   $("#polygon")?.value && ($("#polygon").value="");
    const polygonField=document.querySelector('[name="polygon"]');
    const circleField=document.querySelector('[name="circle"]');
    if(polygonField)polygonField.value="";
@@ -42,18 +41,18 @@ function applyDrawnGeometryToForm(layer){
  const polygonField=document.querySelector('[name="polygon"]');
  const circleField=document.querySelector('[name="circle"]');
  if(layer instanceof L.Circle){
-  const center=layer.getLatLng(),radiusKm=layer.getRadius()/1000;
+  const center=layer.getLatLng();
   if(polygonField)polygonField.value="";
-  if(circleField)circleField.value=center.lat.toFixed(6)+","+center.lng.toFixed(6)+" "+radiusKm.toFixed(2);
+  if(circleField)circleField.value=window.circleToCap(center.lat,center.lng,layer.getRadius());
   $("#mapStatus").textContent="تم نقل مركز الدائرة ونصف قطرها إلى نموذج CAP.";
   return;
  }
  if(layer instanceof L.Polygon){
   const rings=layer.getLatLngs();
   const points=Array.isArray(rings[0])?rings[0]:rings;
-  const coords=points.map(p=>p.lat.toFixed(6)+","+p.lng.toFixed(6));
-  if(coords.length && coords[0]!==coords[coords.length-1])coords.push(coords[0]);
-  if(polygonField)polygonField.value=coords.join(" ");
+  const capPolygon=window.polygonLatLngsToCap(points);
+  const coords=capPolygon.split(" ");
+  if(polygonField)polygonField.value=capPolygon;
   if(circleField)circleField.value="";
   $("#mapStatus").textContent="تم نقل إحداثيات المضلع إلى نموذج CAP ("+coords.length+" نقطة مع نقطة الإغلاق).";
  }

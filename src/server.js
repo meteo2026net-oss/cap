@@ -140,7 +140,7 @@ app.post("/api/alerts",auth,roles("admin","forecaster"),(req,res)=>{
   const data = schema.parse(req.body);
   const sent = new Date().toISOString();
   const alert = {
-   ...data, identifier:makeIdentifier(), sender:process.env.CAP_SENDER || "alerts@example.org",
+   ...data, event:data.event || data.info_blocks?.[0]?.event || "Weather event", headline:data.headline || data.info_blocks?.[0]?.headline || data.info_blocks?.[0]?.event || "Weather alert", description:data.description || data.info_blocks?.[0]?.description || data.info_blocks?.[0]?.event || "Weather alert details", area_desc:data.area_desc || data.info_blocks?.[0]?.areas?.[0]?.areaDesc || data.info_blocks?.[0]?.area?.areaDesc || "Affected area", category:data.category || data.info_blocks?.[0]?.category || "Met", identifier:makeIdentifier(), sender:process.env.CAP_SENDER || "alerts@example.org",
    sent, msg_type:"Alert", status:data.status, workflow:"draft",
    references_text:"", info_json:data.info_blocks ? JSON.stringify(data.info_blocks) : null, created_by:req.user.id
   };

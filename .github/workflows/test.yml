@@ -39,6 +39,10 @@ jobs:
           node --check src/cap.js
           node --check src/geojson.js
           node --check src/audit.js
+          node --check src/backup-utils.js
+          node --check src/backup.js
+          node --check src/restore.js
+          node --check tests/backup.test.js
           node --check public/geojson-validation.js
           node --check public/app.js
           node --check tests/cap.test.js

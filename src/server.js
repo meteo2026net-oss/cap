@@ -74,8 +74,9 @@ function auth(req,res,next) {
  const token = (req.headers.authorization || "").replace(/^Bearer\s+/i,"");
  try {
    req.user = jwt.verify(token, secret);
-   const user = db.prepare("SELECT id,username,role,active FROM users WHERE id=?").get(req.user.id);
+   const user = db.prepare("SELECT id,username,role,active,token_version FROM users WHERE id=?").get(req.user.id);
    if (!user || !user.active) return res.status(401).json({error:"Account unavailable"});
+   if (req.user.token_version !== user.token_version) return res.status(401).json({error:"Session expired; please sign in again"});
    req.user = user; next();
  } catch { return res.status(401).json({error:"Authentication required"}); }
 }
@@ -92,7 +93,7 @@ app.post("/api/auth/login", (req,res)=>{
  const {username,password} = req.body || {};
  const user = db.prepare("SELECT * FROM users WHERE username=? AND active=1").get(username);
  if (!user || !bcrypt.compareSync(password || "", user.password_hash)) return res.status(401).json({error:"Invalid credentials"});
- const token = jwt.sign({id:user.id}, secret, {expiresIn:"8h"});
+ const token = jwt.sign({id:user.id,token_version:user.token_version}, secret, {expiresIn:"8h"});
  res.json({token,user:{id:user.id,username:user.username,role:user.role}});
 });
 app.post("/api/auth/change-password",auth,rateLimit({windowMs:15*60*1000,limit:5}),(req,res)=>{
@@ -101,9 +102,11 @@ app.post("/api/auth/change-password",auth,rateLimit({windowMs:15*60*1000,limit:5
  const row=db.prepare("SELECT password_hash FROM users WHERE id=?").get(req.user.id);
  if(!row || !bcrypt.compareSync(currentPassword || "",row.password_hash)) return res.status(401).json({error:"Current password is incorrect"});
  const hash=bcrypt.hashSync(newPassword,12);
- db.prepare("UPDATE users SET password_hash=? WHERE id=?").run(hash,req.user.id);
- audit(req.user.id,null,"password_changed","User changed their password");
- res.json({ok:true});
+ db.prepare("UPDATE users SET password_hash=?,token_version=token_version+1 WHERE id=?").run(hash,req.user.id);
+ const tokenVersion=db.prepare("SELECT token_version FROM users WHERE id=?").get(req.user.id).token_version;
+ const token=jwt.sign({id:req.user.id,token_version:tokenVersion},secret,{expiresIn:"8h"});
+ audit(req.user.id,null,"password_changed","Password changed; all previous sessions revoked");
+ res.json({ok:true,token,session_revoked_for_other_devices:true});
 });
 app.get("/api/me",auth,(req,res)=>res.json({user:req.user}));
 

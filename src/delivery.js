@@ -1,7 +1,11 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 
 const CHANNELS = new Set(["cap_feed", "webhook", "email", "sms", "push"]);
 const MAX_BACKOFF_SECONDS = 3600;
+
+function hashLeaseToken(token) {
+  return createHash("sha256").update(token, "utf8").digest("hex");
+}
 
 export function enqueueDelivery(database, { alertId, channel = "cap_feed", payload, maxAttempts = 5 }) {
   if (!Number.isInteger(Number(alertId)) || Number(alertId) < 1) throw new TypeError("A valid alertId is required");
@@ -20,14 +24,17 @@ export function enqueueDelivery(database, { alertId, channel = "cap_feed", paylo
 }
 
 export function claimDelivery(database, id) {
+  const leaseToken = randomUUID();
   const result = database.prepare(
     `UPDATE delivery_outbox
        SET status='sending', attempts=attempts+1, last_attempt_at=CURRENT_TIMESTAMP,
-           lease_token=?, next_attempt_at=NULL, updated_at=CURRENT_TIMESTAMP
+           lease_token=NULL, lease_token_hash=?, next_attempt_at=NULL, updated_at=CURRENT_TIMESTAMP
      WHERE id=? AND status='queued' AND attempts < max_attempts AND dead_letter_at IS NULL`
-  ).run(randomUUID(), id);
+  ).run(hashLeaseToken(leaseToken), id);
   if (!result.changes) return null;
-  return database.prepare("SELECT * FROM delivery_outbox WHERE id=?").get(id);
+  const row = database.prepare("SELECT * FROM delivery_outbox WHERE id=?").get(id);
+  const { lease_token_hash: _leaseTokenHash, ...safeRow } = row;
+  return { ...safeRow, lease_token: leaseToken };
 }
 
 export function recordDeliveryReceipt(database, id, { status, leaseToken, externalId = "", details = "" }) {
@@ -35,20 +42,23 @@ export function recordDeliveryReceipt(database, id, { status, leaseToken, extern
   if (typeof leaseToken !== "string" || !/^[0-9a-f-]{36}$/i.test(leaseToken)) throw new TypeError("A valid delivery lease token is required");
   if (typeof externalId !== "string" || externalId.length > 256) throw new TypeError("externalId is too long");
   if (typeof details !== "string" || details.length > 2000) throw new TypeError("Receipt details are too long");
-  const row = database.prepare("SELECT attempts,max_attempts FROM delivery_outbox WHERE id=? AND status='sending' AND lease_token=?").get(id, leaseToken);
-  if (!row) return null;
+  const row = database.prepare("SELECT attempts,max_attempts,lease_token_hash FROM delivery_outbox WHERE id=? AND status='sending'").get(id);
+  if (!row || typeof row.lease_token_hash !== "string") return null;
+  const suppliedHash = Buffer.from(hashLeaseToken(leaseToken), "hex");
+  const storedHash = Buffer.from(row.lease_token_hash, "hex");
+  if (suppliedHash.length !== storedHash.length || !timingSafeEqual(suppliedHash, storedHash)) return null;
   const delaySeconds = Math.min(MAX_BACKOFF_SECONDS, 30 * (2 ** Math.max(0, row.attempts - 1)));
   const terminal = status === "failed" && row.attempts >= row.max_attempts;
   const result = database.prepare(
     `UPDATE delivery_outbox
-       SET status=?, external_id=?, last_error=?, lease_token=NULL,
+       SET status=?, external_id=?, last_error=?, lease_token=NULL, lease_token_hash=NULL,
            next_attempt_at=CASE WHEN ?='failed' AND ?=0 THEN datetime('now', '+' || ? || ' seconds') ELSE NULL END,
            dead_letter_at=CASE WHEN ?=1 THEN CURRENT_TIMESTAMP ELSE dead_letter_at END,
            delivered_at=CASE WHEN ?='delivered' THEN CURRENT_TIMESTAMP ELSE delivered_at END,
            updated_at=CURRENT_TIMESTAMP
-     WHERE id=? AND status='sending' AND lease_token=?`
+     WHERE id=? AND status='sending' AND lease_token_hash=?`
   ).run(status, externalId, status === "failed" ? details : "", status, terminal ? 1 : 0,
-        delaySeconds, terminal ? 1 : 0, status, id, leaseToken);
+        delaySeconds, terminal ? 1 : 0, status, id, row.lease_token_hash);
   if (!result.changes) return null;
   return database.prepare("SELECT * FROM delivery_outbox WHERE id=?").get(id);
 }
@@ -56,7 +66,7 @@ export function recordDeliveryReceipt(database, id, { status, leaseToken, extern
 export function retryDelivery(database, id) {
   const result = database.prepare(
     `UPDATE delivery_outbox
-       SET status='queued', lease_token=NULL, last_error='', next_attempt_at=NULL, updated_at=CURRENT_TIMESTAMP
+       SET status='queued', lease_token=NULL, lease_token_hash=NULL, last_error='', next_attempt_at=NULL, updated_at=CURRENT_TIMESTAMP
      WHERE id=? AND status='failed' AND dead_letter_at IS NULL AND attempts < max_attempts`
   ).run(id);
   if (!result.changes) return null;
@@ -114,13 +124,13 @@ export function recoverStaleDeliveries(database, staleMinutes = 10) {
       const ids = stale.map(row => row.id);
       const placeholders = ids.map(() => "?").join(",");
       database.prepare(
-        `UPDATE delivery_outbox SET status='queued', lease_token=NULL,
+        `UPDATE delivery_outbox SET status='queued', lease_token=NULL, lease_token_hash=NULL,
            last_error=CASE WHEN last_error='' THEN 'Recovered stale sending lease' ELSE last_error || ' | Recovered stale sending lease' END,
            updated_at=CURRENT_TIMESTAMP
          WHERE id IN (${placeholders}) AND status='sending' AND attempts < max_attempts`
       ).run(...ids);
       database.prepare(
-        `UPDATE delivery_outbox SET status='failed', lease_token=NULL, dead_letter_at=CURRENT_TIMESTAMP,
+        `UPDATE delivery_outbox SET status='failed', lease_token=NULL, lease_token_hash=NULL, dead_letter_at=CURRENT_TIMESTAMP,
            last_error=CASE WHEN last_error='' THEN 'Maximum attempts reached after stale lease' ELSE last_error || ' | Maximum attempts reached after stale lease' END,
            updated_at=CURRENT_TIMESTAMP
          WHERE id IN (${placeholders}) AND status='sending' AND attempts >= max_attempts`

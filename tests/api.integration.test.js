@@ -158,6 +158,38 @@ test("API enforces role separation, public-feed filtering and account deactivati
   const actualRow = original.data.alerts.find(alert => alert.identifier === actualIdentifier);
   assert.ok(actualRow, "published warning should remain in authenticated history");
 
+  assert.equal((await request("/api/delivery/outbox", { token: forecaster })).status, 403,
+    "forecasters must not access the delivery outbox");
+  const outbox = await request("/api/delivery/outbox", { token: publisher });
+  assert.equal(outbox.status, 200);
+  const queuedDelivery = outbox.data.deliveries.find(item => item.alert_id === actualRow.id && item.channel === "cap_feed");
+  assert.ok(queuedDelivery, "publishing must atomically enqueue an internal CAP feed delivery");
+  assert.equal(queuedDelivery.status, "queued");
+  const claimedDelivery = await request(`/api/delivery/outbox/${queuedDelivery.id}/claim`, {
+    token: publisher, method: "POST", body: {}
+  });
+  assert.equal(claimedDelivery.status, 200);
+  assert.equal(claimedDelivery.data.delivery.status, "sending");
+  assert.match(claimedDelivery.data.delivery.payload, /<alert xmlns=/);
+  const failedReceipt = await request(`/api/delivery/outbox/${queuedDelivery.id}/receipt`, {
+    token: publisher, method: "POST", body: { status: "failed", details: "Synthetic test failure" }
+  });
+  assert.equal(failedReceipt.status, 200);
+  assert.equal(failedReceipt.data.delivery.status, "failed");
+  assert.equal((await request(`/api/delivery/outbox/${queuedDelivery.id}/retry`, {
+    token: publisher, method: "POST", body: {}
+  })).status, 200);
+  const retryClaim = await request(`/api/delivery/outbox/${queuedDelivery.id}/claim`, {
+    token: publisher, method: "POST", body: {}
+  });
+  assert.equal(retryClaim.status, 200);
+  assert.equal(retryClaim.data.delivery.attempts, 2);
+  const deliveredReceipt = await request(`/api/delivery/outbox/${queuedDelivery.id}/receipt`, {
+    token: publisher, method: "POST", body: { status: "delivered", externalId: "synthetic-provider-id" }
+  });
+  assert.equal(deliveredReceipt.status, 200);
+  assert.equal(deliveredReceipt.data.delivery.status, "delivered");
+
   const directDatabase = new Database(path.join(cwd, "storage", "cap.sqlite"));
   try {
     assert.throws(() => directDatabase.prepare("UPDATE alerts SET status='Draft' WHERE id=?").run(actualRow.id),

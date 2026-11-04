@@ -40,6 +40,8 @@ jobs:
           node --check src/delivery-worker.js
           node --check src/server.js
           node --check src/db.js
+          node --check src/lease-migration.js
+          node --check tests/lease-migration.test.js
           node --check src/cap.js
           node --check src/geojson.js
           node --check src/audit.js

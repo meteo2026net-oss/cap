@@ -118,7 +118,7 @@ export async function restoreDatabaseBackup(source, destination, { force = false
       } catch (rollbackError) {
         throw new AggregateError(
           [error, rollbackError],
-          Restore failed and the previous database could not be moved back into place. The preserved rollback file is: ${rollback}
+          `Restore failed and the previous database could not be moved back into place. The preserved rollback file is: ${rollback}`
         );
       }
     }

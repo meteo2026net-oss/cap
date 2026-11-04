@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import Database from "better-sqlite3";
-import { enqueueDelivery, claimDelivery, recordDeliveryReceipt, retryDelivery, recoverStaleDeliveries } from "../src/delivery.js";
+import { enqueueDelivery, claimDelivery, recordDeliveryReceipt, retryDelivery, recoverStaleDeliveries, processDueRetries } from "../src/delivery.js";
 
 function fixture() {
  const database=new Database(":memory:");
@@ -17,7 +17,7 @@ function fixture() {
    attempts INTEGER NOT NULL DEFAULT 0 CHECK(attempts>=0),
    external_id TEXT NOT NULL DEFAULT '',last_error TEXT NOT NULL DEFAULT '',
    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-   last_attempt_at TEXT,delivered_at TEXT,UNIQUE(alert_id,channel)
+   last_attempt_at TEXT,delivered_at TEXT,max_attempts INTEGER NOT NULL DEFAULT 5,next_attempt_at TEXT,dead_letter_at TEXT,UNIQUE(alert_id,channel)
   );
  `);
  return database;
@@ -90,5 +90,49 @@ test("stale sending leases are safely returned to the queue",()=>{
   assert.equal(db.prepare("SELECT status FROM delivery_outbox WHERE id=?").get(recent.id).status,"sending");
   assert.match(db.prepare("SELECT last_error FROM delivery_outbox WHERE id=?").get(stale.id).last_error,/Recovered stale sending lease/);
   assert.throws(()=>recoverStaleDeliveries(db,0),/from 1 to 1440/);
+ } finally { db.close(); }
+});
+
+
+test("failed deliveries use exponential backoff and are automatically requeued when due",()=>{
+ const db=fixture();
+ try {
+  const queued=enqueueDelivery(db,{alertId:1,payload:"<retry/>",maxAttempts:3});
+  claimDelivery(db,queued.id);
+  const failed=recordDeliveryReceipt(db,queued.id,{status:"failed",details:"Temporary failure"});
+  assert.equal(failed.status,"failed");
+  assert.ok(failed.next_attempt_at);
+  assert.equal(failed.dead_letter_at,null);
+  const notDue=processDueRetries(db);
+  assert.equal(notDue.requeued.length,0);
+  db.prepare("UPDATE delivery_outbox SET next_attempt_at=datetime('now','-1 second') WHERE id=?").run(queued.id);
+  const due=processDueRetries(db);
+  assert.deepEqual(due.requeued.map(row=>row.id),[queued.id]);
+  assert.equal(db.prepare("SELECT status FROM delivery_outbox WHERE id=?").get(queued.id).status,"queued");
+  assert.equal(claimDelivery(db,queued.id).attempts,2);
+ } finally { db.close(); }
+});
+
+test("delivery is dead-lettered at the configured attempt limit and cannot be auto-retried",()=>{
+ const db=fixture();
+ try {
+  const queued=enqueueDelivery(db,{alertId:1,payload:"<terminal/>",maxAttempts:1});
+  claimDelivery(db,queued.id);
+  const failed=recordDeliveryReceipt(db,queued.id,{status:"failed",details:"Permanent synthetic failure"});
+  assert.equal(failed.status,"failed");
+  assert.equal(failed.attempts,1);
+  assert.ok(failed.dead_letter_at);
+  assert.equal(failed.next_attempt_at,null);
+  assert.equal(retryDelivery(db,queued.id),null);
+  assert.equal(processDueRetries(db).deadLettered.length,0);
+  assert.equal(claimDelivery(db,queued.id),null);
+ } finally { db.close(); }
+});
+
+test("delivery retry policy validates max attempts",()=>{
+ const db=fixture();
+ try {
+  assert.throws(()=>enqueueDelivery(db,{alertId:1,payload:"x",maxAttempts:0}),/maxAttempts/);
+  assert.throws(()=>enqueueDelivery(db,{alertId:1,payload:"x",maxAttempts:21}),/maxAttempts/);
  } finally { db.close(); }
 });

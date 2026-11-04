@@ -30,7 +30,7 @@ Open http://localhost:8095.
 - Dashboard advanced JSON editor for multilingual information blocks and supplemental resources.
 - API support for linked Update and Cancel drafts; derived messages remain in Test status pending independent review.
 - GitHub Actions downloads the official OASIS CAP 1.2 XSD and validates a generated multilingual XML example with xmllint.
-- Public JSON feed for published Public-scope alerts.
+- Public JSON feed for published Public-scope `Actual` alerts, including multilingual `info_blocks`, geometry, references, and CAP metadata.
 - Basic audit trail.
 - Basic validation of required CAP fields, enumerations, date ordering, closed polygons, and circle geometry.
 - GitHub Actions workflow runs the automated test suite on pushes and pull requests.

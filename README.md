@@ -20,6 +20,24 @@ npm start
 
 Open http://localhost:8095. The interactive map uses Leaflet, OpenStreetMap tiles, and internet access; map tiles are provided by OpenStreetMap's public tile service.
 
+## Database backup and restore
+
+A verified SQLite backup can be created from the project directory:
+
+```bash
+npm run backup
+```
+
+Backups are written to `backups/` by default, validated with SQLite integrity checks and audit-chain verification, and old generated backup files are pruned after 30 days. Set `BACKUP_DIR` and `BACKUP_RETENTION_DAYS` to change these defaults.
+
+To restore, stop the service first, then run:
+
+```bash
+npm run restore -- backups/cap-YYYYMMDDTHHMMSSZ.sqlite
+```
+
+The restore command refuses to overwrite an existing database unless `--force` is supplied. With `--force`, the previous database is retained beside the restored file as a pre-restore copy. Confirm the restored service and its data before removing that copy. In Docker, the backup volume is persistent and the commands can be run with `docker compose exec cap node src/backup.js`; for restore, stop the app container and run a one-off container with the same volumes, or perform the restore before starting the service. Keep a separate off-host copy; a backup stored on the same host is not disaster recovery.
+
 ## Audit integrity
 
 New audit entries are linked with SHA-256 hashes. Administrators, reviewers, and approvers can check the chain through the authenticated `GET /api/audit/verify` endpoint. Existing audit entries from before this migration are preserved and reported separately as legacy unhashed entries. A local hash chain detects accidental or partial tampering; it is not a substitute for externally anchored signatures or immutable off-host storage.

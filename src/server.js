@@ -265,6 +265,24 @@ app.post("/api/alerts/:id/publish",auth,roles("admin","publisher"),(req,res)=>{
  audit(req.user.id,a.id,"published","Published to internal CAP feed; distribution outbox entry "+delivery.id+" queued");
  res.json({ok:true,workflow:"published",delivery:{id:delivery.id,status:delivery.status,channel:delivery.channel},note:"Internal publication only. External delivery adapters remain disabled; the outbox entry is queued for controlled processing."});
 });
+app.get("/api/webhooks/inbox",auth,roles("admin","reviewer"),(req,res)=>{
+ const status=req.query.status;
+ if(status!==undefined && !["pending","reviewed","rejected"].includes(status)) return res.status(400).json({error:"Invalid webhook inbox status"});
+ const rows=db.prepare(`SELECT id,received_at,source_timestamp,payload_json,status,reviewed_at,review_note FROM webhook_inbox WHERE (? IS NULL OR status=?) ORDER BY received_at DESC LIMIT 100`).all(status ?? null,status ?? null);
+ res.json({messages:rows.map(row=>({...row,payload:JSON.parse(row.payload_json),payload_json:undefined}))});
+});
+app.patch("/api/webhooks/inbox/:id/review",auth,roles("admin","reviewer"),(req,res)=>{
+ const id=Number(req.params.id);
+ if(!Number.isSafeInteger(id) || id<1) return res.status(400).json({error:"Invalid inbox id"});
+ try {
+  const data=z.object({status:z.enum(["reviewed","rejected"]),note:z.string().max(2000).optional().default("")}).parse(req.body);
+  const result=db.prepare("UPDATE webhook_inbox SET status=?,reviewed_at=CURRENT_TIMESTAMP,review_note=? WHERE id=? AND status='pending'").run(data.status,data.note,id);
+  if(!result.changes) return res.status(409).json({error:"Webhook message is missing or no longer pending"});
+  audit(req.user.id,null,"webhook_inbox_"+data.status,`Reviewed inbound webhook message ${id}`);
+  res.json({ok:true,id,status:data.status});
+ } catch(error) { res.status(400).json({error:error.message}); }
+});
+
 app.get("/api/delivery/outbox",auth,roles("admin","publisher"),(req,res)=>{
  const status=req.query.status;
  if(status!==undefined && !["queued","sending","delivered","failed","dead_letter"].includes(status)) return res.status(400).json({error:"Invalid delivery status filter"});

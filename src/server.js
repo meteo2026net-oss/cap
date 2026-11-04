@@ -28,19 +28,43 @@ app.use(express.json({ limit: "1mb" }));
 app.use("/api/auth", rateLimit({ windowMs: 15*60*1000, limit: 30 }));
 app.use(express.static("public"));
 
+const areaSchema = z.object({
+ areaDesc:z.string().min(2), polygon:z.string().optional(), circle:z.string().optional(),
+ polygons:z.array(z.string()).optional(), circles:z.array(z.string()).optional(),
+ geocodes:z.array(z.object({valueName:z.string().min(1),value:z.string().min(1)})).optional(),
+ altitude:z.number().optional(), ceiling:z.number().optional()
+});
+const resourceSchema = z.object({
+ resourceDesc:z.string().min(1), mimeType:z.string().min(1), size:z.number().int().nonnegative().optional(),
+ uri:z.string().url().optional(), derefUri:z.string().optional(), digest:z.string().optional()
+});
+const infoBlockSchema = z.object({
+ language:z.string().optional(), category:z.string().optional(), categories:z.array(z.string()).optional(),
+ event:z.string().min(2), response_type:z.string().optional(), response_types:z.array(z.string()).optional(),
+ urgency:z.enum(["Immediate","Expected","Future","Past","Unknown"]).default("Unknown"),
+ severity:z.enum(["Extreme","Severe","Moderate","Minor","Unknown"]).default("Unknown"),
+ certainty:z.enum(["Observed","Likely","Possible","Unlikely","Unknown"]).default("Unknown"),
+ effective:z.string().optional(), onset:z.string().optional(), expires:z.string().optional(),
+ senderName:z.string().optional(), headline:z.string().optional(), description:z.string().optional(),
+ instruction:z.string().optional(), web:z.string().url().optional(), contact:z.string().optional(),
+ area:areaSchema.optional(), areas:z.array(areaSchema).optional(),
+ resources:z.array(resourceSchema).optional(),
+ parameters:z.array(z.object({valueName:z.string().min(1),value:z.string()})).optional()
+});
 const schema = z.object({
- event:z.string().min(2), category:z.string().default("Met"),
+ event:z.string().min(2).optional(), category:z.string().default("Met"),
  urgency:z.enum(["Immediate","Expected","Future","Past","Unknown"]).default("Unknown"),
  severity:z.enum(["Extreme","Severe","Moderate","Minor","Unknown"]).default("Unknown"),
  certainty:z.enum(["Observed","Likely","Possible","Unlikely","Unknown"]).default("Unknown"),
  scope:z.enum(["Public","Restricted","Private"]).default("Public"),
- headline:z.string().min(3), description:z.string().min(3),
- instruction:z.string().optional().default(""), area_desc:z.string().min(2),
+ headline:z.string().min(3).optional(), description:z.string().min(3).optional(),
+ instruction:z.string().optional().default(""), area_desc:z.string().min(2).optional(),
  polygon:z.string().optional().default(""), circle:z.string().optional().default(""),
  effective:z.string().optional().default(""), onset:z.string().optional().default(""),
  expires:z.string().optional().default(""), language:z.string().default("en-US"),
  response_type:z.string().optional().default(""),
- status:z.enum(["Actual","Exercise","System","Test"]).default("Test")
+ info_blocks:z.array(infoBlockSchema).min(1).max(10).optional(),
+ status:z.enum(["Actual","Exercise","System","Test","Draft"]).default("Test")
 });
 
 function auth(req,res,next) {
@@ -57,7 +81,7 @@ function audit(userId, alertId, action, details="") {
  db.prepare("INSERT INTO audit_log(user_id,alert_id,action,details) VALUES(?,?,?,?)").run(userId,alertId,action,details);
 }
 function rowToCap(r) {
- return {...r, msg_type:r.msg_type, area_desc:r.area_desc, response_type:r.response_type};
+ return {...r, msg_type:r.msg_type, area_desc:r.area_desc, response_type:r.response_type, info_blocks:r.info_json ? JSON.parse(r.info_json) : undefined};
 }
 
 app.get("/api/health", (_req,res)=>res.json({ok:true,service:"Meteo CAP Warning System",cap:"1.2"}));
@@ -118,7 +142,7 @@ app.post("/api/alerts",auth,roles("admin","forecaster"),(req,res)=>{
   const alert = {
    ...data, identifier:makeIdentifier(), sender:process.env.CAP_SENDER || "alerts@example.org",
    sent, msg_type:"Alert", status:data.status, workflow:"draft",
-   references_text:"", created_by:req.user.id
+   references_text:"", info_json:data.info_blocks ? JSON.stringify(data.info_blocks) : null, created_by:req.user.id
   };
   validateAlert(alert);
   const result = db.prepare(`INSERT INTO alerts
@@ -128,6 +152,23 @@ app.post("/api/alerts",auth,roles("admin","forecaster"),(req,res)=>{
   res.status(201).json({id:result.lastInsertRowid,identifier:alert.identifier});
  } catch(e) { res.status(400).json({error:e.message}); }
 });
+app.post("/api/alerts/:id/derive",auth,roles("admin","forecaster"),(req,res)=>{
+ const original=db.prepare("SELECT * FROM alerts WHERE id=?").get(req.params.id);
+ if(!original) return res.status(404).json({error:"Source alert not found"});
+ if(!["approved","published"].includes(original.workflow)) return res.status(409).json({error:"Only reviewed alerts can be used as the source of an update or cancellation"});
+ const msgType=req.body?.msg_type;
+ if(!["Update","Cancel"].includes(msgType)) return res.status(400).json({error:"msg_type must be Update or Cancel"});
+ const sent=new Date().toISOString();
+ const alert={...original,identifier:makeIdentifier(),sent,status:"Test",msg_type:msgType,
+  references_text:`${original.sender},${original.identifier},${original.sent}`,
+  info_json:msgType==="Cancel"?null:original.info_json,workflow:"draft",created_by:req.user.id,approved_by:null,published_at:null};
+ const result=db.prepare(`INSERT INTO alerts
+ (identifier,sender,sent,status,msg_type,scope,references_text,event,category,response_type,urgency,severity,certainty,effective,onset,expires,headline,description,instruction,area_desc,polygon,circle,language,info_json,workflow,created_by)
+ VALUES (@identifier,@sender,@sent,@status,@msg_type,@scope,@references_text,@event,@category,@response_type,@urgency,@severity,@certainty,@effective,@onset,@expires,@headline,@description,@instruction,@area_desc,@polygon,@circle,@language,@info_json,@workflow,@created_by)`).run(alert);
+ audit(req.user.id,result.lastInsertRowid,msgType.toLowerCase(),`Created ${msgType} referencing ${original.identifier}; held as Test pending review`);
+ res.status(201).json({id:result.lastInsertRowid,identifier:alert.identifier,msg_type:msgType,status:"Test",workflow:"draft",references:alert.references_text});
+});
+
 app.post("/api/alerts/:id/submit",auth,roles("admin","forecaster"),(req,res)=>{
  const a=db.prepare("SELECT * FROM alerts WHERE id=?").get(req.params.id);
  if(!a) return res.status(404).json({error:"Alert not found"});

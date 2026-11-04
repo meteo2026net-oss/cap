@@ -125,6 +125,10 @@ test("API enforces role separation, public-feed filtering and account deactivati
     method: "POST", body: { username: "admin", password: "x".repeat(201) }
   })).status, 401, "oversized login passwords should be rejected before password hashing");
 
+  assert.equal((await request("/api/auth/login", {
+    method: "POST", body: { username: "account-that-does-not-exist", password: "Wrong-Password-2026!" }
+  })).status, 401, "unknown accounts must receive the same generic authentication failure");
+
   const admin = await login("admin", "Integration-Test-Admin-Password-2026");
   const initialUsers = await request("/api/users", { token: admin });
   assert.equal(initialUsers.status, 200);

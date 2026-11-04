@@ -15,6 +15,8 @@ import { createHash } from "node:crypto";
 import { verifyAndConsumeWebhook } from "./webhook-replay.js";
 
 const app = express();
+// Use a real bcrypt hash for unknown/inactive accounts to reduce username-enumeration timing differences.
+const DUMMY_PASSWORD_HASH = bcrypt.hashSync("CAP-login-timing-equalization-only-not-a-user-password", 12);
 const port = Number(process.env.PORT || 8095);
 const secret = process.env.JWT_SECRET;
 if (!secret || secret.length < 32 || /^REPLACE_WITH_/i.test(secret)) {
@@ -136,8 +138,10 @@ app.post("/api/auth/login", (req,res)=>{
      typeof password !== "string" || password.length > 200) {
   return res.status(401).json({error:"Invalid credentials"});
  }
- const user = db.prepare("SELECT * FROM users WHERE username=? AND active=1").get(username);
- if (!user || !bcrypt.compareSync(password, user.password_hash)) return res.status(401).json({error:"Invalid credentials"});
+ const user = db.prepare("SELECT * FROM users WHERE username=?").get(username);
+ const passwordHash = user?.active ? user.password_hash : DUMMY_PASSWORD_HASH;
+ const passwordMatches = bcrypt.compareSync(password, passwordHash);
+ if (!user || !user.active || !passwordMatches) return res.status(401).json({error:"Invalid credentials"});
  db.prepare("UPDATE users SET last_login_at=CURRENT_TIMESTAMP WHERE id=?").run(user.id);
  audit(user.id,null,"login_succeeded","Successful authentication");
  const token = jwt.sign({id:user.id,token_version:user.token_version}, secret, {expiresIn:"8h"});

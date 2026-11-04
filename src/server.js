@@ -134,6 +134,7 @@ app.post("/api/auth/login", (req,res)=>{
  const {username,password} = req.body || {};
  const user = db.prepare("SELECT * FROM users WHERE username=? AND active=1").get(username);
  if (!user || !bcrypt.compareSync(password || "", user.password_hash)) return res.status(401).json({error:"Invalid credentials"});
+ db.prepare("UPDATE users SET last_login_at=CURRENT_TIMESTAMP WHERE id=?").run(user.id);
  const token = jwt.sign({id:user.id,token_version:user.token_version}, secret, {expiresIn:"8h"});
  res.json({token,user:{id:user.id,username:user.username,role:user.role}});
 });
@@ -157,7 +158,7 @@ const userSchema = z.object({
  role: z.enum(["admin","forecaster","reviewer","approver","publisher","viewer"])
 });
 app.get("/api/users",auth,roles("admin"),(_req,res)=>{
- const users=db.prepare("SELECT id,username,role,active,created_at FROM users ORDER BY id").all();
+ const users=db.prepare("SELECT id,username,role,active,created_at,last_login_at FROM users ORDER BY id").all();
  res.json({users});
 });
 app.post("/api/users",auth,roles("admin"),(req,res)=>{

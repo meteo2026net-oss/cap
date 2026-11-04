@@ -118,6 +118,10 @@ test("API enforces role separation, public-feed filtering and account deactivati
   };
 
   const admin = await login("admin", "Integration-Test-Admin-Password-2026");
+  const initialUsers = await request("/api/users", { token: admin });
+  assert.equal(initialUsers.status, 200);
+  assert.ok(initialUsers.data.users.find(user => user.username === "admin")?.last_login_at,
+    "successful login should persist the administrator last-login timestamp");
   const createUser = async (username, role) => {
     const result = await request("/api/users", {
       token: admin, method: "POST",
@@ -143,6 +147,9 @@ test("API enforces role separation, public-feed filtering and account deactivati
   assert.equal((await request("/api/delivery/outbox", { token: roleChangeOldSession })).status, 401,
     "a session issued before a role change must be revoked");
   const roleChangeNewSession = await login("rolechange1", "Temporary-Password-2026!");
+  const usersAfterLogin = await request("/api/users", { token: admin });
+  assert.ok(usersAfterLogin.data.users.find(user => user.id === roleChangeId)?.last_login_at,
+    "last-login timestamp should be refreshed after a new successful login");
   assert.equal((await request("/api/delivery/outbox", { token: roleChangeNewSession })).status, 200,
     "the new role should take effect after signing in again");
   assert.equal((await request("/api/users/not-a-number/role", {

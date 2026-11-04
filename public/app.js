@@ -157,6 +157,11 @@ async function loadUsers(){
    const name=document.createElement("b");name.textContent=user.username;
    const state=document.createElement("span");state.className="pill"+(user.active?"":" red");state.textContent=user.active?"نشط":"موقوف";
    heading.append(name,state);
+   const lastLogin=document.createElement("p");lastLogin.className="small muted";
+   if(user.last_login_at){
+    const parsed=new Date(user.last_login_at.replace(" ","T")+"Z");
+    lastLogin.textContent="آخر تسجيل دخول: "+(Number.isNaN(parsed.getTime())?user.last_login_at:new Intl.DateTimeFormat("ar",{dateStyle:"medium",timeStyle:"short"}).format(parsed));
+   }else lastLogin.textContent="آخر تسجيل دخول: لم يسجل دخول بعد";
    const controls=document.createElement("div");controls.className="userRoleControls";
    const label=document.createElement("label");label.textContent="الدور الوظيفي";
    const select=document.createElement("select");select.id="user-role-"+user.id;select.setAttribute("aria-label","الدور الجديد للمستخدم "+user.username);
@@ -165,7 +170,7 @@ async function loadUsers(){
    const actions=document.createElement("div");actions.className="actions";
    const save=document.createElement("button");save.type="button";save.textContent="حفظ الدور";save.onclick=()=>changeUserRole(user.id,user.role,select.value);
    const toggle=document.createElement("button");toggle.type="button";toggle.className="secondary";toggle.textContent=user.active?"إيقاف الحساب":"إعادة تفعيل الحساب";toggle.onclick=()=>toggleUser(user.id,!user.active);
-   actions.append(save,toggle);controls.append(label,actions);card.append(heading,controls);return card;
+   actions.append(save,toggle);controls.append(label,actions);card.append(heading,lastLogin,controls);return card;
   });
   const container=$("#usersList");container.replaceChildren(...cards);
   if(!users.length){const empty=document.createElement("p");empty.className="muted";empty.textContent="لا توجد حسابات.";container.append(empty)}

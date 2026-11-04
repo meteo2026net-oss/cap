@@ -74,8 +74,9 @@ jobs:
           rm -f .env
       - name: Build production Docker image
         run: docker build --pull -t meteo-cap-warning-system:ci .
-      - name: Smoke test Docker container
+      - name: Smoke test Docker container and backup/restore
         run: |
+          set -eu
           docker run -d --name cap-smoke -p 127.0.0.1:18095:8095 \
             --read-only \
             --cap-drop ALL \
@@ -88,13 +89,45 @@ jobs:
             -e ADMIN_PASSWORD=CI-Smoke-Test-Admin-Password-2026 \
             meteo-cap-warning-system:ci
           trap 'docker logs cap-smoke || true; docker rm -f cap-smoke || true' EXIT
+          healthy=false
           for attempt in $(seq 1 30); do
             if curl --fail --silent http://127.0.0.1:18095/api/health; then
-              echo "Container health endpoint passed."
+              healthy=true
+              break
+            fi
+            sleep 2
+          done
+          if [ "$healthy" != true ]; then
+            echo "Container did not become healthy."
+            docker logs cap-smoke
+            exit 1
+          fi
+          echo "Container health endpoint passed."
+
+          backup_output="$(docker exec cap-smoke node src/backup.js)"
+          backup_name="$(printf '%s' "$backup_output" | node -e 'let input="";process.stdin.on("data",chunk=>input+=chunk);process.stdin.on("end",()=>{const result=JSON.parse(input);if(!result.ok||typeof result.backup!=="string")process.exit(1);console.log(require("node:path").basename(result.backup));});')"
+          test -n "$backup_name"
+          echo "Created and validated backup: $backup_name"
+
+          docker stop cap-smoke
+          docker run --rm --volumes-from cap-smoke \
+            --read-only \
+            --cap-drop ALL \
+            --security-opt no-new-privileges:true \
+            --pids-limit 100 \
+            --tmpfs /tmp:rw,noexec,nosuid,size=16m \
+            meteo-cap-warning-system:ci \
+            node src/restore.js "/app/backups/$backup_name" --force
+          echo "Restore command completed against the stopped container's persistent volumes."
+
+          docker start cap-smoke
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:18095/api/health; then
+              echo "Container became healthy after restore."
               exit 0
             fi
             sleep 2
           done
-          echo "Container did not become healthy."
+          echo "Container did not recover after backup/restore."
           docker logs cap-smoke
           exit 1

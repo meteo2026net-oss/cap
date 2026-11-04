@@ -34,7 +34,11 @@ test("SQLite backup is consistent and can be restored with hash-chain validation
     const backup = await createDatabaseBackup(database, path.join(directory, "backups"), {
       now: new Date("2026-11-04T12:30:00.000Z")
     });
-    assert.match(path.basename(backup), /^cap-20261104T123000Z\.sqlite$/);
+    assert.match(path.basename(backup), /^cap-20261104T123000\d{3}Z\.sqlite$/);
+    const sameSecondBackup = await createDatabaseBackup(database, path.join(directory, "backups"), {
+      now: new Date("2026-11-04T12:30:00.500Z")
+    });
+    assert.notEqual(backup, sameSecondBackup, "backups created within the same second must not collide");
 
     const result = await restoreDatabaseBackup(backup, restored);
     assert.equal(result.target, restored);
@@ -73,7 +77,7 @@ test("restore refuses overwrite without force and preserves the previous databas
 test("backup pruning removes only old CAP backup files", async () => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), "cap-prune-test-"));
   try {
-    const oldBackup = path.join(directory, "cap-20260101T000000Z.sqlite");
+    const oldBackup = path.join(directory, "cap-20260101T000000000Z.sqlite");
     const oldOther = path.join(directory, "other.sqlite");
     await fs.writeFile(oldBackup, "old");
     await fs.writeFile(oldOther, "keep");
@@ -83,7 +87,7 @@ test("backup pruning removes only old CAP backup files", async () => {
       retentionDays: 30,
       now: new Date("2026-11-04T00:00:00.000Z")
     });
-    assert.deepEqual(removed, ["cap-20260101T000000Z.sqlite"]);
+    assert.deepEqual(removed, ["cap-20260101T000000000Z.sqlite"]);
     assert.equal(await fs.readFile(oldOther, "utf8"), "keep");
   } finally {
     await fs.rm(directory, { recursive: true, force: true });

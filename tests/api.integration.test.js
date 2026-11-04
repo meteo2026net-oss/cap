@@ -268,7 +268,7 @@ test("API enforces role separation, public-feed filtering and account deactivati
 
   const inboxDatabase = new Database(path.join(cwd, "storage", "cap.sqlite"));
   try {
-    const inboxRow = inboxDatabase.prepare("SELECT source_timestamp,payload_json,status FROM webhook_inbox WHERE id=?").get(acceptedWebhookData.inbox_id);
+    const inboxRow = inboxDatabase.prepare("SELECT source_timestamp,payload_json,status,reviewed_by FROM webhook_inbox WHERE id=?").get(acceptedWebhookData.inbox_id);
     assert.ok(inboxRow, "accepted webhook should be persisted in the inbox");
     assert.equal(inboxRow.source_timestamp, webhookTimestamp);
     assert.equal(inboxRow.status, "reviewed", "review decision should be persisted after reviewer action");

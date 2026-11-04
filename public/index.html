@@ -26,6 +26,12 @@
    <p id="auditStatus" class="pill">لم يتم التحقق بعد</p>
    <p id="auditMeta" class="muted small">التحقق من سلسلة SHA-256 وسجلات ما قبل التحديث.</p>
   </section>
+  <section id="auditHistoryPanel" class="card" hidden style="margin-bottom:18px">
+   <div class="sectionHead"><div><h2>سجل الأحداث والتدقيق</h2><p class="muted small">عرض تسلسلي للأنشطة المسجلة. السجل للقراءة فقط ويستخدم مؤشراً لتحميل الصفحات الأقدم.</p></div><div class="mapActions"><button id="auditHistoryRefreshBtn" class="secondary" type="button">تحديث السجل</button></div></div>
+   <p id="auditHistoryStatus" class="muted small" aria-live="polite">لم يتم تحميل السجل بعد.</p>
+   <div id="auditHistoryList" class="alertsList"></div>
+   <div class="mapActions" style="justify-content:center;margin-top:12px"><button id="auditHistoryLoadMoreBtn" class="secondary" type="button" hidden>تحميل سجلات أقدم</button></div>
+  </section>
   <section id="webhookInboxMonitor" class="card" hidden style="margin-bottom:18px">
    <div class="sectionHead"><div><h2>صندوق استقبال Webhook</h2><p class="muted small">الرسائل الموقعة الواردة تنتظر مراجعة بشرية. لا يؤدي قبولها إلى إنشاء تحذير أو نشره.</p></div><div class="mapActions"><button id="webhookInboxRefreshBtn" class="secondary" type="button">تحديث الوارد</button></div></div>
    <div class="mapTools"><label>تصفية الرسائل<select id="webhookInboxFilter"><option value="pending">بانتظار المراجعة</option><option value="reviewed">تمت مراجعتها</option><option value="rejected">مرفوضة</option><option value="">كل الرسائل</option></select></label><span id="webhookInboxStatus" class="muted small" aria-live="polite">لم يتم تحميل الرسائل بعد.</span></div>

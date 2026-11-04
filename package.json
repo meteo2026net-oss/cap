@@ -10,7 +10,8 @@
     "test": "node --test",
     "test:cap-schema": "node --test tests/cap-schema.test.js",
     "backup": "node src/backup.js",
-    "restore": "node src/restore.js"
+    "restore": "node src/restore.js",
+    "setup:local": "node scripts/setup-local.mjs"
   },
   "engines": {
     "node": ">=20"

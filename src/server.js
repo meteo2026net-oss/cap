@@ -108,6 +108,7 @@ app.post("/api/alerts/:id/approve",auth,roles("admin","reviewer","approver"),(re
  const a=db.prepare("SELECT * FROM alerts WHERE id=?").get(req.params.id);
  if(!a) return res.status(404).json({error:"Alert not found"});
  if(a.workflow!=="pending") return res.status(409).json({error:"Only pending alerts can be approved"});
+ if(a.created_by===req.user.id) return res.status(403).json({error:"A warning creator cannot approve their own warning; an independent reviewer is required."});
  db.prepare("UPDATE alerts SET workflow='approved',approved_by=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(req.user.id,a.id);
  audit(req.user.id,a.id,"approved","Approved by authorized reviewer");
  res.json({ok:true,workflow:"approved"});
@@ -116,7 +117,8 @@ app.post("/api/alerts/:id/publish",auth,roles("admin","publisher"),(req,res)=>{
  const a=db.prepare("SELECT * FROM alerts WHERE id=?").get(req.params.id);
  if(!a) return res.status(404).json({error:"Alert not found"});
  if(a.workflow!=="approved") return res.status(409).json({error:"Approval is required before publishing"});
- const publishedStatus = a.status === "Test" ? "Test" : "Actual";
+ if(a.approved_by===req.user.id) return res.status(403).json({error:"The approving user cannot publish the same warning; a separate publisher is required."});
+ const publishedStatus = a.status;
  db.prepare("UPDATE alerts SET workflow='published',status=?,published_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(publishedStatus,a.id);
  audit(req.user.id,a.id,"published","Published to internal CAP feed");
  res.json({ok:true,workflow:"published",note:"Internal publication only; external distribution connectors are not configured."});

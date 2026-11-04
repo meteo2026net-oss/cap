@@ -34,6 +34,7 @@ test("exports multiple multilingual areas as separate features", () => {
   }]);
   assert.equal(result.features.length, 2);
   assert.deepEqual(result.features.map(feature => feature.properties.area_description), ["North", "South"]);
+  assert.deepEqual(result.features.map(feature => feature.properties.language), ["en-GB", "ar"]);
 });
 
 test("rejects malformed polygons and circles instead of emitting invalid GeoJSON", () => {

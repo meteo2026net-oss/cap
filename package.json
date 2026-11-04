@@ -11,7 +11,8 @@
     "test:cap-schema": "node --test tests/cap-schema.test.js",
     "backup": "node src/backup.js",
     "restore": "node src/restore.js",
-    "setup:local": "node scripts/setup-local.mjs"
+    "setup:local": "node scripts/setup-local.mjs",
+    "worker": "node src/delivery-worker.js"
   },
   "engines": {
     "node": ">=20"

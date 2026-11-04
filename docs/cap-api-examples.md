@@ -88,6 +88,18 @@ The derived message gets a new identifier and a CAP `references` value in the fo
 
 The generated CAP date-time values use numeric UTC offsets (for example `-00:00`), not the `Z` suffix. The GitHub Actions workflow downloads the official OASIS CAP 1.2 XSD and runs `xmllint` against a multilingual sample message.
 
+## Administrator account status
+
+An authenticated administrator can activate or deactivate a team account:
+
+`PATCH /api/users/:id/status`
+
+```json
+{ "active": false }
+```
+
+The server rejects self-deactivation and prevents deactivating the last active administrator. Account status changes are recorded in the audit log. Reactivation uses `{ "active": true }`.
+
 ## Read alert details and public feed
 
 - `GET /api/alerts/:id` (authenticated) returns the alert record and a parsed `info_blocks` array; the internal `info_json` storage column is not exposed.

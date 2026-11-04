@@ -166,6 +166,10 @@ test("API enforces role separation, public-feed filtering and account deactivati
     "forecasters must not read restricted audit history");
   assert.equal((await request("/api/audit", { token: reviewer })).status, 200,
     "reviewers should be able to inspect audit history");
+  const auditStatus = await request("/api/audit/verify", { token: reviewer });
+  assert.equal(auditStatus.status, 200);
+  assert.equal(auditStatus.data.valid, true, "API should verify the cryptographic audit chain");
+  assert.ok(auditStatus.data.verified_entries > 0);
 
   const geoFeed = await request("/api/public/alerts.geojson");
   assert.equal(geoFeed.status, 200);

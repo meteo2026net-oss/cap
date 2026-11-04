@@ -85,7 +85,8 @@ test("stale sending leases are safely returned to the queue",()=>{
   const recent=enqueueDelivery(db,{alertId:1,channel:"webhook",payload:"<recent/>"});
   claimDelivery(db,recent.id);
   const recovered=recoverStaleDeliveries(db,10);
-  assert.deepEqual(recovered.map(row=>row.id),[stale.id]);
+  assert.deepEqual(recovered.recovered.map(row=>row.id),[stale.id]);
+  assert.deepEqual(recovered.deadLettered,[]);
   assert.equal(db.prepare("SELECT status FROM delivery_outbox WHERE id=?").get(stale.id).status,"queued");
   assert.equal(db.prepare("SELECT status FROM delivery_outbox WHERE id=?").get(recent.id).status,"sending");
   assert.match(db.prepare("SELECT last_error FROM delivery_outbox WHERE id=?").get(stale.id).last_error,/Recovered stale sending lease/);
@@ -134,5 +135,20 @@ test("delivery retry policy validates max attempts",()=>{
  try {
   assert.throws(()=>enqueueDelivery(db,{alertId:1,payload:"x",maxAttempts:0}),/maxAttempts/);
   assert.throws(()=>enqueueDelivery(db,{alertId:1,payload:"x",maxAttempts:21}),/maxAttempts/);
+ } finally { db.close(); }
+});
+
+test("stale sending lease at maximum attempts is dead-lettered, not reported as recovered",()=>{
+ const db=fixture();
+ try {
+  const terminal=enqueueDelivery(db,{alertId:1,payload:"<stale-terminal/>",maxAttempts:1});
+  claimDelivery(db,terminal.id);
+  db.prepare("UPDATE delivery_outbox SET last_attempt_at=datetime('now','-30 minutes') WHERE id=?").run(terminal.id);
+  const result=recoverStaleDeliveries(db,10);
+  assert.deepEqual(result.recovered,[]);
+  assert.deepEqual(result.deadLettered.map(row=>row.id),[terminal.id]);
+  const row=db.prepare("SELECT status,dead_letter_at FROM delivery_outbox WHERE id=?").get(terminal.id);
+  assert.equal(row.status,"failed");
+  assert.ok(row.dead_letter_at);
  } finally { db.close(); }
 });

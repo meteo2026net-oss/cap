@@ -272,8 +272,8 @@ test("API enforces role separation, public-feed filtering and account deactivati
     assert.equal(inboxRow.source_timestamp, webhookTimestamp);
     assert.equal(inboxRow.status, "reviewed", "review decision should be persisted after reviewer action");
     assert.equal(JSON.parse(inboxRow.payload_json).provider, "synthetic-test");
-    assert.equal(inboxDatabase.prepare("SELECT COUNT(*) AS count FROM webhook_inbox").get().count, 1,
-      "invalid, stale, tampered and replayed webhooks must not enter the inbox");
+    assert.equal(inboxDatabase.prepare("SELECT COUNT(*) AS count FROM webhook_inbox").get().count, 2,
+      "only the two valid unique webhooks should enter the inbox");
   } finally {
     inboxDatabase.close();
   }

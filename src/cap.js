@@ -5,7 +5,7 @@ const allowed = {
   urgency: ["Immediate", "Expected", "Future", "Past", "Unknown"],
   severity: ["Extreme", "Severe", "Moderate", "Minor", "Unknown"],
   certainty: ["Observed", "Likely", "Possible", "Unlikely", "Unknown"],
-  status: ["Actual", "Exercise", "System", "Test", "Draft"],
+  status: ["Actual", "Exercise", "System", "Test"],
   msg_type: ["Alert", "Update", "Cancel", "Ack", "Error"],
   scope: ["Public", "Restricted", "Private"]
 };
@@ -40,6 +40,8 @@ export function validateAlert(input) {
     throw new Error("Event, headline and description are required.");
   }
   if (!input.area_desc?.trim()) throw new Error("At least one affected area description is required.");
+  if (!input.identifier?.trim() || !input.sender?.trim() || !input.sent || !input.status || !input.msg_type || !input.scope) throw new Error("CAP identifier, sender, sent, status, msgType and scope are required.");
+  if (!input.polygon?.trim() && !input.circle?.trim()) throw new Error("A CAP area requires a polygon or circle; areaDesc alone is insufficient.");
   for (const field of ["sent", "effective", "onset", "expires"]) validDate(input[field], field);
   if (input.expires && input.onset && Date.parse(input.expires) <= Date.parse(input.onset)) {
     throw new Error("Expiry must be later than onset.");

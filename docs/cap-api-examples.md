@@ -88,6 +88,13 @@ The derived message gets a new identifier and a CAP `references` value in the fo
 
 The generated CAP date-time values use numeric UTC offsets (for example `-00:00`), not the `Z` suffix. The GitHub Actions workflow downloads the official OASIS CAP 1.2 XSD and runs `xmllint` against a multilingual sample message.
 
+## Read alert details and public feed
+
+- `GET /api/alerts/:id` (authenticated) returns the alert record and a parsed `info_blocks` array; the internal `info_json` storage column is not exposed.
+- `GET /api/public/alerts` (public, read-only) returns only alerts with workflow `published`, CAP status `Actual`, and scope `Public`. The response includes CAP metadata, geometry, references, and parsed multilingual `info_blocks`.
+
+The public feed is an integration data endpoint, not a substitute for an institution's official alert dissemination channels or public-facing accessibility review.
+
 ## Supported structured fields
 
 - Multiple `info_blocks` with language tags.
@@ -98,4 +105,4 @@ The generated CAP date-time values use numeric UTC offsets (for example `-00:00`
 - Parameters, sender name, web URL, contact, and references.
 - Update and Cancel message drafts linked to a previous alert.
 
-The API's structured payload is ahead of the current dashboard form; multilingual entry is currently available through the API. A visual multilingual editor and map-drawing UI remain future work.
+The dashboard provides an advanced JSON editor for multilingual `info_blocks`, and approved or published alerts expose Update and Cancel draft actions. A guided visual multilingual editor and interactive map-drawing UI remain future work.

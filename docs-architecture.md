@@ -28,6 +28,8 @@
 ## Current implementation boundaries
 - The current public JSON feed includes only published alerts with CAP status `Actual` and scope `Public`; Test and Exercise messages are excluded.
 - The workflow prevents a creator from approving their own alert and prevents the approver from publishing that same alert.
-- Geographic area validation currently supports a closed CAP polygon or one CAP circle. Interactive map drawing and official XSD validation are not yet implemented.
+- Geographic area validation supports closed polygons, circles, geocodes, multiple areas, altitude and ceiling. Interactive map drawing is not yet implemented.
+- XML generation supports multiple language-specific info blocks, multiple categories/response types, resources, parameters and alert references. Update/Cancel drafts reference the prior sender/identifier/sent triple and remain CAP status Test.
+- GitHub Actions downloads the official OASIS CAP 1.2 XSD and runs xmllint against a multilingual sample; the result must be checked in the Actions run before treating it as passed.
 - Automated tests and a GitHub Actions workflow have been added, but their successful execution has not yet been confirmed in this delivery environment.
 - This remains a development foundation. Do not use it as an operational public-warning authority until formal CAP conformance, security, institutional, and end-to-end distribution testing are complete.

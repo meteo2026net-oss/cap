@@ -262,13 +262,13 @@ app.post("/api/delivery/outbox/:id/claim",auth,roles("admin","publisher"),(req,r
  const delivery=claimDelivery(db,deliveryId);
  if(!delivery) return res.status(409).json({error:"Delivery is not queued or has already been claimed"});
  audit(req.user.id,delivery.alert_id,"delivery_claimed",`Claimed outbox entry ${delivery.id}; no external transmission is performed by this endpoint`);
- res.json({delivery:{id:delivery.id,alert_id:delivery.alert_id,channel:delivery.channel,status:delivery.status,attempts:delivery.attempts,payload:delivery.payload},external_adapters_enabled:false});
+ res.json({delivery:{id:delivery.id,alert_id:delivery.alert_id,channel:delivery.channel,status:delivery.status,attempts:delivery.attempts,payload:delivery.payload,lease_token:delivery.lease_token},external_adapters_enabled:false});
 });
 app.post("/api/delivery/outbox/:id/receipt",auth,roles("admin","publisher"),(req,res)=>{
  const deliveryId=Number(req.params.id);
  if(!Number.isSafeInteger(deliveryId) || deliveryId<1) return res.status(400).json({error:"Invalid delivery id"});
  try {
-  const receiptSchema=z.object({status:z.enum(["delivered","failed"]),externalId:z.string().max(256).optional(),details:z.string().max(2000).optional()});
+  const receiptSchema=z.object({status:z.enum(["delivered","failed"]),leaseToken:z.string().uuid(),externalId:z.string().max(256).optional(),details:z.string().max(2000).optional()});
   const data=receiptSchema.parse(req.body);
   const delivery=recordDeliveryReceipt(db,deliveryId,data);
   if(!delivery) return res.status(409).json({error:"A receipt can only be recorded for a sending delivery"});

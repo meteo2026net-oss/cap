@@ -9,6 +9,7 @@ import { z } from "zod";
 import { db, ensureAdmin } from "./db.js";
 import { buildCapXml, makeIdentifier, validateAlert } from "./cap.js";
 import { alertsToGeoJSON } from "./geojson.js";
+import { appendAuditLog, verifyAuditChain } from "./audit.js";
 
 const app = express();
 const port = Number(process.env.PORT || 8095);
@@ -79,7 +80,7 @@ function auth(req,res,next) {
 }
 const roles = (...allowed) => (req,res,next) => allowed.includes(req.user.role) ? next() : res.status(403).json({error:"Insufficient permissions"});
 function audit(userId, alertId, action, details="") {
- db.prepare("INSERT INTO audit_log(user_id,alert_id,action,details) VALUES(?,?,?,?)").run(userId,alertId,action,details);
+ appendAuditLog(db, { userId, alertId, action, details });
 }
 function rowToCap(r) {
  return {...r, msg_type:r.msg_type, area_desc:r.area_desc, response_type:r.response_type, info_blocks:r.info_json ? JSON.parse(r.info_json) : undefined};
@@ -236,6 +237,10 @@ app.get("/api/public/alerts", (req,res)=>{
  const rows=db.prepare("SELECT identifier,sender,sent,status,msg_type,scope,references_text,event,category,response_type,urgency,severity,certainty,effective,onset,expires,headline,description,instruction,area_desc,polygon,circle,language,info_json FROM alerts WHERE workflow='published' AND scope='Public' AND status='Actual' ORDER BY sent DESC LIMIT 100").all();
  res.json({alerts:rows.map(row=>{const {info_json,...alert}=row;return {...alert,info_blocks:info_json?JSON.parse(info_json):[]};})});
 });
+app.get("/api/audit/verify",auth,roles("admin","reviewer","approver"),(_req,res)=>{
+ res.json(verifyAuditChain(db));
+});
+
 app.get("/api/audit",auth,roles("admin","reviewer","approver"),(_req,res)=>{
  res.json({entries:db.prepare(`SELECT l.*,u.username FROM audit_log l LEFT JOIN users u ON u.id=l.user_id ORDER BY l.id DESC LIMIT 500`).all()});
 });

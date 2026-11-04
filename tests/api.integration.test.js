@@ -70,7 +70,13 @@ test("API enforces role separation, public-feed filtering and account deactivati
   assert.ok(csp.includes("frame-ancestors"));
   assert.ok(csp.includes("object-src"));
   assert.ok(csp.includes("script-src"));
-  assert.ok(csp.includes("script-src-attr"));
+  assert.ok(csp.includes("script-src-attr 'none'"), "inline event handler attributes must be blocked");
+  const dashboardScriptResponse = await fetch(base + "/app.js");
+  assert.equal(dashboardScriptResponse.status, 200);
+  const dashboardScript = await dashboardScriptResponse.text();
+  assert.doesNotMatch(dashboardScript, /<[^>]+\sonclick\s*=/i, "dashboard must not render inline HTML event handlers");
+  assert.match(dashboardScript, /data-alert-action/);
+  assert.match(dashboardScript, /data-webhook-review/);
   const dashboardScript = await fetch(base + "/app.js");
   assert.equal(dashboardScript.status, 200, "dashboard JavaScript should be served from the application root");
 

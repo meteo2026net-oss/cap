@@ -126,6 +126,7 @@ export function validateAlert(input) {
     throw new Error("CAP identifier, sender, sent, status, msgType and scope are required.");
   }
   if (/[ ,<>]/.test(input.identifier) || /[ ,<>]/.test(input.sender)) throw new Error("CAP identifier and sender cannot contain spaces, commas or angle brackets.");
+  if (["Update","Cancel","Ack","Error"].includes(input.msg_type) && !input.references_text?.trim()) throw new Error("CAP Update, Cancel, Ack and Error messages must reference the related message.");
   capDateTime(input.sent, "sent");
   const blocks = input.info_blocks?.length ? input.info_blocks : (["Cancel","Ack","Error"].includes(input.msg_type) ? [] : [{
     language: input.language, category: input.category, event: input.event, urgency: input.urgency,

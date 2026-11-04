@@ -158,6 +158,18 @@ test("stale sending lease at maximum attempts is dead-lettered, not reported as 
 });
 
 
+test("delivery receipts reject malformed and incorrect lease tokens",()=>{
+ const db=fixture();
+ try {
+  const queued=enqueueDelivery(db,{alertId:1,payload:"<invalid-token/>"});
+  const claimed=claimDelivery(db,queued.id);
+  assert.throws(()=>recordDeliveryReceipt(db,queued.id,{status:"delivered",leaseToken:"not-a-uuid"}),/valid delivery lease token/);
+  assert.equal(recordDeliveryReceipt(db,queued.id,{status:"delivered",leaseToken:"00000000-0000-4000-8000-000000000000"}),null);
+  assert.equal(db.prepare("SELECT status FROM delivery_outbox WHERE id=?").get(queued.id).status,"sending");
+  assert.equal(recordDeliveryReceipt(db,queued.id,{status:"delivered",leaseToken:claimed.lease_token}).status,"delivered");
+ } finally { db.close(); }
+});
+
 test("delivery receipts reject stale workers after lease recovery",()=>{
  const db=fixture();
  try {

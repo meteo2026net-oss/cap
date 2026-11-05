@@ -83,6 +83,8 @@ The polling interval defaults to 30 seconds and can be adjusted with `CAP_DELIVE
 
 Each new backup includes a private `.sha256` sidecar manifest. Restore verifies the manifest before validating or replacing the target database; missing or mismatched manifests block restoration. Older timestamp-only backups remain supported for backward compatibility. Pruning an expired backup also removes its matching manifest. The restore command refuses to overwrite an existing database unless `--force` is supplied. With `--force`, the previous database is retained beside the restored file as a pre-restore copy. Confirm the restored service and its data before removing that copy. Restore refuses to proceed while SQLite WAL/SHM sidecars exist; stop all application and worker processes and follow the troubleshooting guidance before retrying.
 
+The backup and restore command-line tools load `.env` before opening the database, so a custom `DB_PATH` is respected consistently. On Windows, use `run-backup-now.bat` for a one-time backup, `install-daily-backup.bat` to register a per-user Task Scheduler job at 02:00, and `remove-daily-backup.bat` to remove that job. The scheduled job runs when the configured Windows user is signed in, catches up after the computer was unavailable, and writes logs to `logs/`. It stores backups locally only; copy verified backups to encrypted off-device storage separately. `restore-backup.bat <backup-file> [--force]` is a wrapper for the restore command; stop the server and delivery worker before using it.
+
 Keep a separate encrypted copy of backups on another device or off-host storage. Keep `.env`, `storage/`, and `backups/` private. Do not commit credentials, database files, or live warning data to Git.
 
 ## Troubleshooting

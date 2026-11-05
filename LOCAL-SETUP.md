@@ -1,6 +1,6 @@
-# Local installation (without Docker)
+# Local installation
 
-The application runs directly on Windows, Linux, or macOS with Node.js and embedded SQLite. Container deployment is not part of this project.
+The application runs directly on Windows, Linux, or macOS with Node.js and embedded SQLite. The application and its optional maintenance worker run as ordinary Node.js processes.
 
 ## Requirements
 

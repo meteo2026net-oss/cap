@@ -26,6 +26,10 @@ This guide describes the current security controls and the precautions required 
 9. Review dependency alerts and update pull requests. Run `npm audit`, the automated tests, the official CAP schema validation, direct-mode startup, backup, and restore tests, and CodeQL against the exact release commit before deployment.
 10. Establish institutional operating procedures for alert authoring, review, approval, publication, revocation, escalation, incident response, retention, and staff training before any operational use.
 
+## Repository governance
+
+The current GitHub `main` branch reports branch protection disabled. Before accepting operationally relevant changes, configure and verify repository rules that require reviewed pull requests and passing CAP system checks plus CodeQL, prevent force pushes and branch deletion, and tightly restrict bypass permissions. A checklist entry or a green workflow run does not itself enable these repository settings.
+
 ## Supply-chain and browser-asset considerations
 
 - The dashboard loads Leaflet and Leaflet.draw assets from the third-party `unpkg.com` CDN. Leaflet 1.9.4 CSS and JavaScript include Subresource Integrity metadata, but Leaflet.draw 1.0.4 CSS and JavaScript do not. The Content Security Policy permits these CDN resources. CDN compromise, package replacement, or availability failures can affect the browser dashboard; before operational deployment, prefer reviewed, pinned self-hosted assets or add verified integrity metadata for every external asset.

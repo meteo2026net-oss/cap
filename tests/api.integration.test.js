@@ -651,6 +651,23 @@ test("API enforces role separation, public-feed filtering and account deactivati
     assert.equal(filteredAlerts.data.pagination.limit, 1);
     assert.ok(filteredAlerts.data.pagination.total >= 1);
     assert.equal(filteredAlerts.data.pagination.has_more, filteredAlerts.data.pagination.total > 1);
+    const initialVersions = await request(`/api/alerts/${id}/versions`, { token: reviewer });
+    assert.equal(initialVersions.status, 200, "reviewers should access immutable alert versions");
+    assert.equal(initialVersions.data.count, 1, "new alerts should start with a version-one snapshot");
+    assert.equal(initialVersions.data.versions[0].version_no, 1);
+    assert.equal((await request(`/api/alerts/${id}/versions`, { token: forecaster })).status, 403,
+      "forecasters must not access reviewer version history");
+    const draftEdit = await request(`/api/alerts/${id}`, {
+      token: forecaster, method: "PATCH", body: { headline: "Synthetic warning revised", severity: "Severe" }
+    });
+    assert.equal(draftEdit.status, 200, "draft edits should create a new immutable version");
+    const comparedVersions = await request(`/api/alerts/${id}/versions`, { token: reviewer });
+    assert.equal(comparedVersions.data.count, 2);
+    assert.equal(comparedVersions.data.versions[0].version_no, 2);
+    assert.ok(comparedVersions.data.changed_fields.includes("headline"));
+    assert.ok(comparedVersions.data.changed_fields.includes("severity"));
+    assert.equal(comparedVersions.data.versions[1].snapshot.headline, "Synthetic test warning");
+    assert.equal(comparedVersions.data.versions[0].snapshot.headline, "Synthetic warning revised");
     const alertStats = await request("/api/alerts/stats", { token: forecaster });
     assert.equal(alertStats.status, 200, "global alert statistics endpoint should be available to authenticated users");
     assert.ok(alertStats.data.stats.total >= 1);

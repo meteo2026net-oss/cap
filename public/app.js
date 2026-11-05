@@ -19,7 +19,7 @@ async function finishLogin(d){
  const forcePasswordChange=d.password_change_required===true;
  appPanel.classList.toggle("password-change-required",forcePasswordChange);
  if(forcePasswordChange){$("#passwordStatus").textContent="أصدر المسؤول كلمة مرور مؤقتة لهذا الحساب. يجب تعيين كلمة مرور شخصية جديدة قبل متابعة أي عملية.";
-  await loadMfaStatus();$("#mfaDisableForm").hidden=true;return}
+  await loadMfaStatus();$("#mfaDisableForm").hidden=true;$("#mfaRecoveryRotateForm").hidden=true;return}
  await loadAlerts();initWarningMap();await refreshWarningMap();
  if(d.user.role==="admin")await loadUsers();
  if(canVerifyAudit){await loadAuditIntegrity();await loadAuditHistory();}
@@ -68,7 +68,7 @@ async function loadMfaStatus(){
  try{
   const data=await api("/api/auth/mfa/status");
   status.textContent=data.enabled?"المصادقة متعددة العوامل مفعّلة. رموز الاسترداد المتبقية: "+data.recovery_codes_remaining:(data.required?"المصادقة متعددة العوامل إلزامية لدورك. أكمل إعدادها لفتح العمليات المحمية.":(data.pending?"يوجد إعداد غير مكتمل؛ يمكنك تأكيده قبل انتهاء صلاحيته.":"المصادقة متعددة العوامل غير مفعّلة لهذا الحساب."));
-  $("#mfaEnrollForm").hidden=data.enabled;$("#mfaDisableForm").hidden=!data.enabled;$("#mfaEnrollment").hidden=true;
+  $("#mfaEnrollForm").hidden=data.enabled;$("#mfaDisableForm").hidden=!data.enabled;$("#mfaRecoveryRotateForm").hidden=!data.enabled;$("#mfaEnrollment").hidden=true;
  }catch(error){status.textContent=error.message}
 }
 $("#mfaEnrollForm").addEventListener("submit",async e=>{
@@ -90,6 +90,15 @@ $("#mfaDisableForm").addEventListener("submit",async e=>{
   e.currentTarget.reset();$("#mfaRecoveryPanel").hidden=true;$("#mfaRecoveryCodes").textContent="";status.textContent="تم تعطيل MFA وإلغاء الجلسات السابقة. سجّل الدخول مجدداً.";token="";currentRole="";showApp(false);$("#loginForm").hidden=false;
  }catch(error){status.textContent=error.message}
 });
+$("#mfaRecoveryRotateForm").addEventListener("submit",async e=>{
+  e.preventDefault();const status=$("#mfaActionStatus");
+  try{
+   const data=await api("/api/auth/mfa/recovery-codes",{method:"POST",body:JSON.stringify(Object.fromEntries(new FormData(e.currentTarget)))});
+   token=data.token;e.currentTarget.reset();$("#mfaRecoveryCodes").textContent=data.recovery_codes.join("\\n");$("#mfaRecoveryPanel").hidden=false;
+   status.textContent="تم إصدار مجموعة جديدة. أُبطلت جميع الرموز القديمة والجلسات السابقة؛ احفظ الرموز الجديدة الآن.";
+   await loadMfaStatus();
+  }catch(error){status.textContent=error.message}
+ });
 function initWarningMap(){
  if(warningMap||!window.L)return;
  warningMap=L.map("warningMap").setView([34.8,38.5],5);

@@ -495,6 +495,10 @@ test("API enforces role separation, public-feed filtering and account deactivati
     token: forecaster, method: "POST", body: { staleMinutes: 10 }
   })).status, 403, "forecasters must not run delivery recovery");
 
+  const unauthenticatedCapXml = await fetch(base + "/api/alerts/" + actualRow.id + "/cap.xml");
+  assert.equal(unauthenticatedCapXml.status, 401,
+    "CAP XML exports must not disclose alert details without authentication");
+
   const capXml = await fetch(base + "/api/alerts/" + actualRow.id + "/cap.xml", {
     headers: { Authorization: "Bearer " + forecaster }
   });

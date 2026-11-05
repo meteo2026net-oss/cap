@@ -100,6 +100,25 @@ An authenticated administrator can activate or deactivate a team account:
 
 The server rejects self-deactivation and prevents deactivating the last active administrator. Account status changes are recorded in the audit log. Reactivation uses `{ "active": true }`.
 
+## Search, filter and paginate internal alerts
+
+`GET /api/alerts` is authenticated and accepts optional query parameters:
+
+- `q`: case-insensitive substring search across identifier, event, headline and affected-area description (maximum 160 characters).
+- `workflow`: `draft`, `pending`, `approved`, `published` or `cancelled`.
+- `severity`: `Extreme`, `Severe`, `Moderate`, `Minor` or `Unknown`.
+- `status`: CAP status `Actual`, `Exercise`, `System` or `Test`.
+- `limit`: page size from 0 to 500; defaults to 100.
+- `offset`: zero-based row offset from 0 to 1,000,000; defaults to 0.
+
+The response retains the `alerts` array and adds `pagination` with `total`, `limit`, `offset` and `has_more`. Invalid filters or pagination values return HTTP 400.
+
+Example:
+
+`GET /api/alerts?q=rain&workflow=published&severity=Severe&limit=25&offset=0`
+
+The dashboard exposes the same search and filters with previous/next page controls.
+
 ## Read alert details and public feed
 
 - `GET /api/alerts/:id` (authenticated) returns the alert record and a parsed `info_blocks` array; the internal `info_json` storage column is not exposed.

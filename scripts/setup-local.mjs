@@ -23,9 +23,11 @@ if (!fs.existsSync(examplePath)) {
 
 const jwtSecret = randomBytes(48).toString("base64url");
 const adminPassword = randomBytes(24).toString("base64url");
+const mfaEncryptionKey = randomBytes(32).toString("hex");
 let env = fs.readFileSync(examplePath, "utf8");
 env = env.replace(/^JWT_SECRET=.*$/m, `JWT_SECRET=${jwtSecret}`);
 env = env.replace(/^ADMIN_PASSWORD=.*$/m, `ADMIN_PASSWORD=${adminPassword}`);
+env = env.replace(/^# MFA_ENCRYPTION_KEY=.*$/m, `MFA_ENCRYPTION_KEY=${mfaEncryptionKey}`);
 env = env.replace(/^HOST=.*$/m, "HOST=127.0.0.1");
 fs.writeFileSync(envPath, env, { flag: "wx", mode: 0o600 });
 fs.mkdirSync(path.join(root, "storage"), { recursive: true });
@@ -35,6 +37,7 @@ console.log("\nLocal configuration created successfully.");
 console.log("Administrator username: admin");
 console.log(`Initial administrator password: ${adminPassword}`);
 console.log("JWT secret: generated and saved in .env");
+console.log("MFA encryption key: generated and saved in .env");
 console.log("\nSave the initial password in a password manager. It is shown only once.");
 console.log("Next steps: npm install, npm test, then npm start");
 console.log("Open: http://localhost:8095");

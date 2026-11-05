@@ -42,7 +42,7 @@ function timestampSlug(date) {
   return date.toISOString().replace(/[-:]/g, "").replace(/\.(\d{3})Z$/, "$1Z");
 }
 
-async function validateDatabaseFile(filePath) {
+async function validateDatabaseFile(filePath, auditOptions = {}) {
   const database = new Database(filePath, { readonly: true, fileMustExist: true });
   try {
     const integrity = database.pragma("integrity_check");
@@ -62,7 +62,7 @@ async function validateDatabaseFile(filePath) {
     }
 
     const auditColumns = database.prepare("PRAGMA table_info(audit_log)").all().map(row => row.name);
-    const audit = auditColumns.includes("entry_hash") ? verifyAuditChain(database) : null;
+    const audit = auditColumns.includes("entry_hash") ? verifyAuditChain(database, auditOptions) : null;
     if (audit && !audit.valid) throw new Error("Audit hash chain verification failed: " + (audit.reason || "verification_failed"));
     return { integrity: "ok", audit };
   } finally {
@@ -70,7 +70,7 @@ async function validateDatabaseFile(filePath) {
   }
 }
 
-export async function verifyDatabaseBackup(source) {
+export async function verifyDatabaseBackup(source, options = {}) {
   const sourcePath = path.resolve(source);
   const sourceStat = await fs.lstat(sourcePath);
   if (!sourceStat.isFile() || sourceStat.isSymbolicLink()) {
@@ -85,17 +85,17 @@ export async function verifyDatabaseBackup(source) {
   } catch (error) {
     if (error.code !== "ENOENT" || isNewFormat) throw error;
   }
-  const validation = await validateDatabaseFile(sourcePath);
+  const validation = await validateDatabaseFile(sourcePath, options.auditOptions);
   return { file: sourcePath, checksum, ...validation };
 }
 
-export async function verifyRestoredDatabase(source) {
+export async function verifyRestoredDatabase(source, options = {}) {
   const file = path.resolve(source);
   const stat = await fs.lstat(file);
   if (!stat.isFile() || stat.isSymbolicLink()) {
     throw new Error("Restored database must be a regular file, not a symbolic link.");
   }
-  const validation = await validateDatabaseFile(file);
+  const validation = await validateDatabaseFile(file, options.auditOptions);
   const database = new Database(file, { readonly: true, fileMustExist: true });
   try {
     const count = table => database.prepare(`SELECT COUNT(*) AS count FROM "${table}"`).get().count;
@@ -137,20 +137,20 @@ export async function verifyRestoredDatabase(source) {
 }
 
 
-export async function runIsolatedRestoreDrill(source) {
+export async function runIsolatedRestoreDrill(source, options = {}) {
   const sourcePath = path.resolve(source);
   const startedAt = new Date();
   const workspace = await fs.mkdtemp(path.join(os.tmpdir(), "cap-restore-drill-"));
   const targetPath = path.join(workspace, "restored.sqlite");
   let report;
   try {
-    const sourceBackup = await verifyDatabaseBackup(sourcePath);
-    const sourceState = await verifyRestoredDatabase(sourcePath);
+    const sourceBackup = await verifyDatabaseBackup(sourcePath, options);
+    const sourceState = await verifyRestoredDatabase(sourcePath, options);
 
     // Exercise the same restore implementation used by the real restore CLI,
     // but point it at a fresh temporary target rather than the live DB_PATH.
-    await restoreDatabaseBackup(sourcePath, targetPath);
-    const restoredState = await verifyRestoredDatabase(targetPath);
+    await restoreDatabaseBackup(sourcePath, targetPath, { auditOptions: options.auditOptions });
+    const restoredState = await verifyRestoredDatabase(targetPath, options);
 
     if (JSON.stringify(sourceState.table_fingerprints) !== JSON.stringify(restoredState.table_fingerprints)) {
       throw new Error("Restore drill failed: one or more restored table contents differ from the source backup");
@@ -192,7 +192,7 @@ export async function createDatabaseBackup(database, directory, { now = new Date
     // Keep incomplete or not-yet-validated artifacts out of the visible backup set.
     await database.backup(temporary);
     await fs.chmod(temporary, 0o600);
-    await validateDatabaseFile(temporary);
+    await validateDatabaseFile(temporary, auditOptions);
     await fs.rename(temporary, destination);
     await writeChecksum(destination);
     return destination;
@@ -238,7 +238,7 @@ export async function pruneDatabaseBackups(directory, { retentionDays = 30, now 
   return removed;
 }
 
-export async function restoreDatabaseBackup(source, destination, { force = false, fileSystem = fs } = {}) {
+export async function restoreDatabaseBackup(source, destination, { force = false, fileSystem = fs, auditOptions = {} } = {}) {
   const sourcePath = path.resolve(source);
   const targetPath = path.resolve(destination);
   if (sourcePath === targetPath) throw new Error("Backup source and restore target must be different files");
@@ -252,7 +252,7 @@ export async function restoreDatabaseBackup(source, destination, { force = false
   if (/-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.sqlite$/i.test(sourcePath)) {
     await verifyChecksum(sourcePath);
   }
-  const validation = await validateDatabaseFile(sourcePath);
+  const validation = await validateDatabaseFile(sourcePath, auditOptions);
   await fs.mkdir(path.dirname(targetPath), { recursive: true });
 
   const sidecars = [`${targetPath}-wal`, `${targetPath}-shm`];

@@ -1059,6 +1059,8 @@ app.get("/api/public/alerts", (req,res)=>{
  res.json({alerts:rows.map(row=>{const {info_json,...alert}=row;return {...alert,info_blocks:info_json?JSON.parse(info_json):[]};})});
 });
 app.get("/api/audit/verify",auth,roles("admin","reviewer","approver"),(_req,res)=>{
+ res.set("Cache-Control","no-store");
+ res.set("Pragma","no-cache");
  res.json(verifyAuditChain(db));
 });
 

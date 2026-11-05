@@ -384,7 +384,9 @@ async function loadAlerts(){
   $("#total").textContent=stats.total;
   $("#drafts").textContent=stats.drafts;
   $("#pending").textContent=stats.pending;
+  $("#approved").textContent=stats.approved;
   $("#published").textContent=stats.published;
+  $("#severeAlerts").textContent=stats.extreme+stats.severe;
   $("#alertsList").innerHTML=alerts.map(a=>{
    const actions=[];
    const id=esc(a.id);

@@ -387,14 +387,25 @@ app.post("/api/auth/change-password",auth,passwordChangeLimiter,(req,res)=>{
  if(typeof newPassword!=="string" || newPassword.length<14 || newPassword.length>200) return res.status(400).json({error:"New password must contain 14 to 200 characters"});
  if(typeof currentPassword!=="string" || currentPassword.length>200) return res.status(401).json({error:"Current password is incorrect"});
  if(currentPassword===newPassword) return res.status(400).json({error:"New password must be different from the current password"});
- const row=db.prepare("SELECT password_hash FROM users WHERE id=?").get(req.user.id);
- if(!row || !bcrypt.compareSync(currentPassword,row.password_hash)) return res.status(401).json({error:"Current password is incorrect"});
+ const row=db.prepare("SELECT password_hash,token_version,active FROM users WHERE id=?").get(req.user.id);
+ if(!row || row.active!==1 || row.token_version!==req.user.token_version || !bcrypt.compareSync(currentPassword,row.password_hash))
+  return res.status(401).json({error:"Current password is incorrect or the session has expired"});
  const hash=bcrypt.hashSync(newPassword,12);
- db.prepare("UPDATE users SET password_hash=?,must_change_password=0,token_version=token_version+1 WHERE id=?").run(hash,req.user.id);
- const tokenVersion=db.prepare("SELECT token_version FROM users WHERE id=?").get(req.user.id).token_version;
- const token=jwt.sign({id:req.user.id,token_version:tokenVersion},secret,{expiresIn:"8h"});
- audit(req.user.id,null,"password_changed","Password changed; all previous sessions revoked");
- res.json({ok:true,token,password_change_required:false,user:{id:req.user.id,username:req.user.username,role:req.user.role},session_revoked_for_other_devices:true});
+ try {
+  const changed=db.transaction(()=>{
+   const current=db.prepare("SELECT password_hash,token_version,active FROM users WHERE id=?").get(req.user.id);
+   if(!current || current.active!==1 || current.token_version!==req.user.token_version || current.password_hash!==row.password_hash) return null;
+   db.prepare("UPDATE users SET password_hash=?,must_change_password=0,token_version=token_version+1 WHERE id=?").run(hash,req.user.id);
+   audit(req.user.id,null,"password_changed","Password changed; all previous sessions revoked");
+   return db.prepare("SELECT token_version FROM users WHERE id=?").get(req.user.id).token_version;
+  }).immediate();
+  if(changed===null) return res.status(409).json({error:"Account credentials changed during this request; sign in again"});
+  const token=jwt.sign({id:req.user.id,token_version:changed},secret,{expiresIn:"8h"});
+  res.json({ok:true,token,password_change_required:false,user:{id:req.user.id,username:req.user.username,role:req.user.role},session_revoked_for_other_devices:true});
+ } catch(error) {
+  console.error("Password change failed:",error);
+  res.status(500).json({error:"Unable to safely change password"});
+ }
 });
 app.get("/api/me",auth,(req,res)=>res.json({user:req.user}));
 

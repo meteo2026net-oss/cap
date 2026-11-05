@@ -191,7 +191,8 @@ test("API enforces role separation, public-feed filtering and account deactivati
   assert.equal(confirmed.status, 200, "valid TOTP should enable MFA");
   assert.equal(confirmed.data.enabled, true);
   assert.equal(confirmed.data.recovery_codes.length, 10);
-  const mfaStatusAfter = await request("/api/auth/mfa/status", { token: mfaInitialToken });
+  assert.equal((await request("/api/me", { token: mfaInitialToken })).status, 401, "enabling MFA must revoke sessions issued before enrollment");
+  const mfaStatusAfter = await request("/api/auth/mfa/status", { token: confirmed.data.token });
   assert.equal(mfaStatusAfter.data.enabled, true);
   assert.equal(mfaStatusAfter.data.recovery_codes_remaining, 10);
   const passwordStage = await request("/api/auth/login", {

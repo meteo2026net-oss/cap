@@ -1,0 +1,59 @@
+name: Bootstrap dependency lockfile
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: cap-lockfile-bootstrap-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  bootstrap:
+    if: ${{ hashFiles('package-lock.json') == '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Set up Node.js 22 and npm cache
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Generate npm lockfile v3 from package.json
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund --lockfile-version=3
+      - name: Verify lockfile format and root manifest
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const manifest = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+          const lock = JSON.parse(fs.readFileSync('package-lock.json', 'utf8'));
+          if (lock.lockfileVersion !== 3) throw new Error(`Expected lockfileVersion 3, got ${lock.lockfileVersion}`);
+          if (lock.name !== manifest.name || lock.version !== manifest.version) throw new Error('Lockfile root package identity does not match package.json');
+          if (JSON.stringify(lock.packages[''].dependencies) !== JSON.stringify(manifest.dependencies)) throw new Error('Lockfile root dependencies differ from package.json');
+          console.log(`Verified npm lockfile v${lock.lockfileVersion} with ${Object.keys(lock.packages || {}).length} package entries.`);
+          NODE
+      - name: Prove clean reproducible install with npm ci
+        run: npm ci --no-audit --no-fund
+      - name: Run application tests against the locked dependency graph
+        run: npm test
+      - name: Check dependency advisories
+        run: npm audit --audit-level=low
+      - name: Commit generated lockfile
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package-lock.json
+          if git diff --cached --quiet; then
+            echo "No lockfile changes to commit."
+            exit 0
+          fi
+          git commit -m "build: add reproducible npm dependency lockfile"
+          git push origin HEAD:main

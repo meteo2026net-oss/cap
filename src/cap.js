@@ -25,9 +25,20 @@ function validateReferences(value) {
     if (/[\s<>]/.test(sender) || /[\s<>]/.test(identifier)) {
       throw new Error("CAP reference sender and identifier cannot contain whitespace or angle brackets.");
     }
-    if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(sent) ||
-        !Number.isFinite(Date.parse(sent))) {
+    const timestamp = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(Z|([+-])(\d{2}):(\d{2}))$/.exec(sent);
+    if (!timestamp || !Number.isFinite(Date.parse(sent))) {
       throw new Error("CAP reference sent timestamp must be a valid ISO 8601 date-time with a timezone.");
+    }
+    const [year, month, day, hour, minute, second] = timestamp.slice(1, 7).map(Number);
+    const calendar = new Date(0);
+    calendar.setUTCFullYear(year, month - 1, day);
+    calendar.setUTCHours(hour, minute, second, 0);
+    const offsetHour = timestamp[9] === undefined ? 0 : Number(timestamp[9]);
+    const offsetMinute = timestamp[10] === undefined ? 0 : Number(timestamp[10]);
+    if (calendar.getUTCFullYear() !== year || calendar.getUTCMonth() !== month - 1 ||
+        calendar.getUTCDate() !== day || hour > 23 || minute > 59 || second > 59 ||
+        offsetHour > 23 || offsetMinute > 59) {
+      throw new Error("CAP reference sent timestamp contains an out-of-range date, time or timezone offset.");
     }
   }
   return references.length;

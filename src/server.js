@@ -188,6 +188,26 @@ function rowToCap(r) {
 }
 
 app.get("/api/health", (_req,res)=>res.json({ok:true,service:"Meteo CAP Warning System",cap:"1.2"}));
+app.get("/api/health/ready", (_req,res)=>{
+ try {
+  const sqlite = db.pragma("quick_check");
+  const foreignKeys = db.pragma("foreign_key_check");
+  const databaseOk = sqlite.length === 1 && sqlite[0].quick_check === "ok";
+  const foreignKeysOk = foreignKeys.length === 0;
+  const ok = databaseOk && foreignKeysOk;
+  return res.status(ok ? 200 : 503).json({
+   ok,
+   service:"Meteo CAP Warning System",
+   checks:{database:databaseOk ? "ok" : "failed",foreign_keys:foreignKeysOk ? "ok" : "failed"}
+  });
+ } catch {
+  return res.status(503).json({
+   ok:false,
+   service:"Meteo CAP Warning System",
+   checks:{database:"unavailable"}
+  });
+ }
+});
 const loginLimiter = rateLimit({windowMs:15*60*1000,limit:10,skipSuccessfulRequests:true,standardHeaders:true,legacyHeaders:false});
 app.post("/api/auth/login",loginLimiter,(req,res)=>{
  const {username,password} = req.body || {};

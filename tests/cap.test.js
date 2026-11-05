@@ -242,3 +242,21 @@ test("allows multiple CAP references separated by whitespace only", () => {
   ].join(" ");
   assert.equal(validateAlert({ ...valid, msg_type: "Cancel", references_text }), true);
 });
+
+test("accepts XML Schema maximum timezone offsets and rejects offsets beyond 14 hours", () => {
+  const validReferences = [
+    "alerts@example.test,urn:uuid:east-limit,2026-11-03T12:00:00+14:00",
+    "alerts@example.test,urn:uuid:west-limit,2026-11-03T12:00:00-14:00"
+  ].join(" ");
+  assert.equal(validateAlert({ ...valid, msg_type: "Update", references_text: validReferences }), true);
+
+  for (const sent of [
+    "2026-11-03T12:00:00+14:01",
+    "2026-11-03T12:00:00-14:30",
+    "2026-11-03T12:00:00+15:00"
+  ]) {
+    const references_text = `alerts@example.test,urn:uuid:out-of-range,${sent}`;
+    assert.throws(() => validateAlert({ ...valid, msg_type: "Update", references_text }),
+      /out-of-range date, time or timezone offset/);
+  }
+});

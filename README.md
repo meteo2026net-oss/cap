@@ -4,7 +4,7 @@ Standalone Arabic-first weather-warning management starter based on the OASIS Co
 
 ## Run locally (without Docker)
 
-Requirements: Node.js 20+ and npm. Docker is **not required** for this mode. From the repository root, run:
+Requirements: Node.js 22+ and npm. Docker is **not required** for this mode. From the repository root, run:
 
 ```bash
 npm run setup:local

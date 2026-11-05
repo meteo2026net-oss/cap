@@ -292,6 +292,8 @@ async function loadUsers(){
    heading.append(name,state);
    const mfaState=document.createElement("p");mfaState.className="small muted";
    mfaState.textContent=user.mfa_enabled?"MFA: مفعّل":(user.mfa_required?"MFA: مطلوب ويحتاج إلى إعداد":"MFA: غير مفعّل");
+   const passwordState=document.createElement("p");passwordState.className="small muted";
+   passwordState.textContent=user.must_change_password?"كلمة المرور: مؤقتة — يجب تغييرها عند تسجيل الدخول":"كلمة المرور: اعتيادية";
    const lastLogin=document.createElement("p");lastLogin.className="small muted";
    if(user.last_login_at){
     const parsed=new Date(user.last_login_at.replace(" ","T")+"Z");
@@ -306,7 +308,7 @@ async function loadUsers(){
    const reset=document.createElement("button");reset.type="button";reset.className="secondary";reset.textContent="إعادة تعيين كلمة المرور";reset.disabled=user.id===currentUserId;reset.onclick=()=>resetUserPassword(user.id,user.username);
    const save=document.createElement("button");save.type="button";save.textContent="حفظ الدور";save.onclick=()=>changeUserRole(user.id,user.role,select.value);
    const toggle=document.createElement("button");toggle.type="button";toggle.className="secondary";toggle.textContent=user.active?"إيقاف الحساب":"إعادة تفعيل الحساب";toggle.onclick=()=>toggleUser(user.id,!user.active);
-   actions.append(save,toggle,reset);controls.append(label,actions);card.append(heading,mfaState,lastLogin,controls);return card;
+   actions.append(save,toggle,reset);controls.append(label,actions);card.append(heading,mfaState,passwordState,lastLogin,controls);return card;
   });
   const container=$("#usersList");container.replaceChildren(...cards);
   if(!users.length){const empty=document.createElement("p");empty.className="muted";empty.textContent="لا توجد حسابات.";container.append(empty)}

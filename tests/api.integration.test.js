@@ -195,6 +195,22 @@ test("API enforces role separation, public-feed filtering and account deactivati
       body: { username, role, password: "Temporary-Password-2026!" }
     });
     assert.equal(result.status, 201, "user should be created: " + username);
+    assert.equal(result.data.must_change_password, true, "new accounts must require a password change");
+    const initialLogin = await request("/api/auth/login", {
+      method: "POST", body: { username, password: "Temporary-Password-2026!" }
+    });
+    assert.equal(initialLogin.status, 200);
+    assert.equal(initialLogin.data.password_change_required, true);
+    assert.equal((await request("/api/alerts", { token: initialLogin.data.token })).status, 403,
+      "newly provisioned accounts must not access application data before changing the initial password");
+    const initialPasswordChange = await request("/api/auth/change-password", {
+      token: initialLogin.data.token, method: "POST",
+      body: {
+        currentPassword: "Temporary-Password-2026!",
+        newPassword: "Temporary-Password-2026!"
+      }
+    });
+    assert.equal(initialPasswordChange.status, 200, "new users must be able to replace their initial password");
     return result.data.id;
   };
 

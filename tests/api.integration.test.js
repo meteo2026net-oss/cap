@@ -505,6 +505,14 @@ test("API enforces role separation, public-feed filtering and account deactivati
     "reviewers should be able to inspect audit history");
   assert.ok(auditHistory.data.entries.some(entry => entry.action === "login_succeeded" && entry.username === "admin"),
     "successful administrator sign-ins should be included in the audit history");
+  assert.ok(auditHistory.data.entries.some(entry => entry.action === "user_created" && entry.details.includes("approver1")),
+    "creating an account should record the target username and assigned role");
+  assert.ok(auditHistory.data.entries.some(entry => entry.action === "user_role_changed" && entry.details.includes("rolechange1") && entry.details.includes("viewer") && entry.details.includes("publisher")),
+    "role changes should record the target account and old/new roles");
+  assert.ok(auditHistory.data.entries.some(entry => entry.action === "user_deactivated" && entry.details.includes("disabled1")),
+    "account deactivation should be represented in the audit history");
+  assert.ok(auditHistory.data.entries.some(entry => entry.action === "user_activated" && entry.details.includes("disabled1")),
+    "account reactivation should be represented in the audit history");
   const firstAuditPage = await request("/api/audit?limit=1", { token: reviewer });
   assert.equal(firstAuditPage.status, 200);
   assert.equal(firstAuditPage.data.entries.length, 1);

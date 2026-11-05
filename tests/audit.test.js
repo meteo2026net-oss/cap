@@ -252,3 +252,55 @@ test("audit verification cannot detect deletion of the final retained entry with
     database.close();
   }
 });
+
+
+test("signed external audit checkpoint detects final tail truncation", async () => {
+  const fs = await import("node:fs");
+  const os = await import("node:os");
+  const path = await import("node:path");
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "cap-audit-checkpoint-"));
+  const checkpointPath = path.join(directory, "anchor.json");
+  const checkpointSecret = "test-only-checkpoint-secret-at-least-32-bytes";
+  const database = new Database(":memory:");
+  try {
+    database.exec("CREATE TABLE audit_log (id INTEGER PRIMARY KEY,user_id INTEGER,alert_id INTEGER,action TEXT NOT NULL,details TEXT,created_at TEXT NOT NULL,previous_hash TEXT,entry_hash TEXT)");
+    installAuditLogGuards(database);
+    appendAuditLog(database, { action: "first_event" }, { checkpointPath, checkpointSecret });
+    appendAuditLog(database, { action: "second_event" }, { checkpointPath, checkpointSecret });
+    const intact = verifyAuditChain(database, { checkpointPath, checkpointSecret });
+    assert.equal(intact.valid, true);
+    assert.equal(intact.integrity_capabilities.detects_final_tail_truncation, true);
+    database.exec("DROP TRIGGER audit_log_no_delete");
+    database.prepare("DELETE FROM audit_log WHERE id=2").run();
+    const truncated = verifyAuditChain(database, { checkpointPath, checkpointSecret });
+    assert.equal(truncated.valid, false);
+    assert.equal(truncated.reason, "checkpoint_anchor_missing_or_changed");
+  } finally {
+    database.close();
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("external audit checkpoint detects unanchored append and forged signature", async () => {
+  const fs = await import("node:fs");
+  const os = await import("node:os");
+  const path = await import("node:path");
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "cap-audit-checkpoint-"));
+  const checkpointPath = path.join(directory, "anchor.json");
+  const checkpointSecret = "test-only-checkpoint-secret-at-least-32-bytes";
+  const database = new Database(":memory:");
+  try {
+    database.exec("CREATE TABLE audit_log (id INTEGER PRIMARY KEY,user_id INTEGER,alert_id INTEGER,action TEXT NOT NULL,details TEXT,created_at TEXT NOT NULL,previous_hash TEXT,entry_hash TEXT)");
+    installAuditLogGuards(database);
+    appendAuditLog(database, { action: "anchored" }, { checkpointPath, checkpointSecret });
+    appendAuditLog(database, { action: "unanchored" });
+    assert.equal(verifyAuditChain(database, { checkpointPath, checkpointSecret }).reason, "checkpoint_stale_or_database_rollback");
+    const document = JSON.parse(fs.readFileSync(checkpointPath, "utf8"));
+    document.signature = "0".repeat(64);
+    fs.writeFileSync(checkpointPath, JSON.stringify(document));
+    assert.equal(verifyAuditChain(database, { checkpointPath, checkpointSecret }).reason, "checkpoint_signature_invalid");
+  } finally {
+    database.close();
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});

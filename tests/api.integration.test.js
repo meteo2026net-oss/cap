@@ -261,6 +261,25 @@ test("API enforces role separation, public-feed filtering and account deactivati
   assert.equal(rejectedInboxMessage.status, 200);
   assert.equal(rejectedInboxMessage.data.status, "rejected");
 
+  const concurrentWebhookBody = JSON.stringify({ provider: "synthetic-test", event: "concurrent-review-test" });
+  const concurrentWebhookSignature = createWebhookSignature(webhookSecret, webhookTimestamp, concurrentWebhookBody);
+  const concurrentWebhookResponse = await sendWebhook(concurrentWebhookBody, webhookTimestamp, concurrentWebhookSignature);
+  assert.equal(concurrentWebhookResponse.status, 202);
+  const concurrentWebhookData = await concurrentWebhookResponse.json();
+  const concurrentReviews = await Promise.all([
+    request(`/api/webhooks/inbox/${concurrentWebhookData.inbox_id}/review`, {
+      token: reviewer, method: "PATCH", body: { status: "reviewed", note: "First competing decision" }
+    }),
+    request(`/api/webhooks/inbox/${concurrentWebhookData.inbox_id}/review`, {
+      token: admin, method: "PATCH", body: { status: "rejected", note: "Second competing decision" }
+    })
+  ]);
+  assert.deepEqual(concurrentReviews.map(result => result.status).sort(), [200, 409],
+    "only one competing reviewer decision may transition a pending webhook inbox item");
+  const finalWebhookReview = await request("/api/webhooks/inbox?status=pending", { token: reviewer });
+  assert.equal(finalWebhookReview.data.messages.some(item => item.id === concurrentWebhookData.inbox_id), false,
+    "a concurrently reviewed webhook must no longer appear in the pending inbox");
+
   const invalidCapStatus = await request("/api/alerts", {
     token: forecaster, method: "POST",
     body: {

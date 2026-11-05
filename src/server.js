@@ -59,7 +59,7 @@ app.use(helmet({
 const origins = (process.env.CORS_ORIGINS || "").split(",").map(s=>s.trim()).filter(Boolean);
 app.use(cors({ origin: origins.length ? origins : false }));
 app.use("/api", rateLimit({ windowMs: 15*60*1000, limit: 300, standardHeaders: true, legacyHeaders: false }));
-app.use("/api/auth", rateLimit({ windowMs: 15*60*1000, limit: 60, standardHeaders: true, legacyHeaders: false }));
+app.use("/api/auth", rateLimit({ windowMs: 15*60*1000, limit: 60, skipSuccessfulRequests: true, standardHeaders: true, legacyHeaders: false }));
 
 const webhookIngressEnabled = process.env.CAP_WEBHOOK_INGRESS_ENABLED === "true";
 const webhookSecret = process.env.CAP_WEBHOOK_SECRET || "";
@@ -197,10 +197,10 @@ app.post("/api/auth/login",loginLimiter,(req,res)=>{
  const token = jwt.sign({id:user.id,token_version:user.token_version}, secret, {expiresIn:"8h"});
  res.json({token,password_change_required:user.must_change_password===1,user:{id:user.id,username:user.username,role:user.role}});
 });
-const mfaLoginLimiter = rateLimit({windowMs:15*60*1000,limit:10,standardHeaders:true,legacyHeaders:false});
-const mfaEnrollLimiter = rateLimit({windowMs:15*60*1000,limit:10,standardHeaders:true,legacyHeaders:false});
-const mfaConfirmLimiter = rateLimit({windowMs:15*60*1000,limit:10,standardHeaders:true,legacyHeaders:false});
-const mfaDisableLimiter = rateLimit({windowMs:15*60*1000,limit:10,standardHeaders:true,legacyHeaders:false});
+const mfaLoginLimiter = rateLimit({windowMs:15*60*1000,limit:10,skipSuccessfulRequests:true,standardHeaders:true,legacyHeaders:false});
+const mfaEnrollLimiter = rateLimit({windowMs:15*60*1000,limit:10,skipSuccessfulRequests:true,standardHeaders:true,legacyHeaders:false});
+const mfaConfirmLimiter = rateLimit({windowMs:15*60*1000,limit:10,skipSuccessfulRequests:true,standardHeaders:true,legacyHeaders:false});
+const mfaDisableLimiter = rateLimit({windowMs:15*60*1000,limit:10,skipSuccessfulRequests:true,standardHeaders:true,legacyHeaders:false});
 app.post("/api/auth/mfa/challenge",mfaLoginLimiter,(req,res)=>{
  const {challenge_token:challengeToken,code}=req.body || {};
  if(typeof challengeToken!=="string" || challengeToken.length>4096 || typeof code!=="string" || code.length>64)

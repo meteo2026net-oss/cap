@@ -783,8 +783,10 @@ test("API enforces role separation, public-feed filtering and account deactivati
       area_desc: "Northern test district",
       polygon: "",
       circle: "",
-      onset: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
-      expires: new Date(Date.now() + 6 * 60 * 60 * 1000).toISOString(),
+      onset: expires
+        ? new Date(Date.parse(expires) - 2 * 60 * 60 * 1000).toISOString()
+        : new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+      expires: expires || new Date(Date.now() + 6 * 60 * 60 * 1000).toISOString(),
       language: "ar",
       info_blocks: [{
         language: "ar",

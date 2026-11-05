@@ -153,3 +153,6 @@ The dashboard provides an advanced JSON editor for multilingual `info_blocks`, a
 - The dashboard export button carries the current search and filter selections into the downloaded file.
 
 Example: `GET /api/alerts/export.csv?q=rain&workflow=published&severity=Severe`
+## Global alert statistics
+
+`GET /api/alerts/stats` requires authentication and returns counts across the complete alert table, independent of the current list search, filters or page offset. The `stats` object includes `total`, workflow counts (`drafts`, `pending`, `approved`, `published`, `cancelled`), severity counts (`extreme`, `severe`, `moderate`, `minor`) and CAP status counts (`actual`, `test`, `exercise`, `system`). Empty groups are returned as zero. The dashboard uses this endpoint so its summary counters no longer change when the user moves between pages or filters the alert list.

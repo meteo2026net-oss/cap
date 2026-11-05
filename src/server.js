@@ -616,7 +616,7 @@ app.get("/api/alerts/:id/relations",auth,(req,res)=>{
   for(const reference of String(current.references_text||"").trim().split(/\s+/).filter(Boolean)){
    const parts=reference.split(",");
    if(parts.length!==3) continue;
-   const parent=db.prepare("SELECT "+columns+" FROM alerts WHERE sender=? AND identifier=? AND (sent=? OR replace(sent,char(90),char(45)||'00:00')=?)").get(parts[0],parts[1],parts[2],parts[2]);
+   const parent=db.prepare("SELECT "+columns+" FROM alerts WHERE sender=? AND identifier=? AND (sent=? OR substr(sent,1,19)||char(45)||'00:00'=?)").get(parts[0],parts[1],parts[2],parts[2]);
    if(parent && !found.has(parent.id)){found.set(parent.id,parent);queue.push(parent);}
   }
   const normalizedSent=current.sent.replace(/\.\d{3}Z$/,"-00:00");

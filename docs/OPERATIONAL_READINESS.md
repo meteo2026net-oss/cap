@@ -29,7 +29,7 @@ These are deployment-time decisions; they are not needed to continue repository 
 - [ ] Review role separation and last-administrator safeguards against the institution's approved policy.
 - [ ] Define session lifetime, revocation, secret rotation, and emergency account recovery.
 - [ ] Define audit retention, external immutable/off-host anchoring, access review, and evidence export.
-- [x] Commit privileged delivery and webhook-inbox state transitions atomically with their audit events; integration tests verify rollback when an audit append fails.
+- [x] Commit alert/user creation, MFA enrollment initiation, privileged delivery transitions, and webhook-inbox review atomically with their audit events; integration tests verify rollback when an audit append fails.
 - [ ] Confirm that no shared accounts or default credentials are used.
 
 ## 3. CAP 1.2 conformance and interoperability

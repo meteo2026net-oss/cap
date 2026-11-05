@@ -201,6 +201,20 @@ test("API enforces role separation, public-feed filtering and account deactivati
   const forecaster = await login("forecaster1", "Temporary-Password-2026!");
   const reviewer = await login("reviewer1", "Temporary-Password-2026!");
   const publisher = await login("publisher1", "Temporary-Password-2026!");
+  for (const [roleName, token] of [["forecaster", forecaster], ["reviewer", reviewer], ["publisher", publisher]]) {
+    assert.equal((await request("/api/users", { token })).status, 403,
+      roleName + " must not list user accounts");
+    assert.equal((await request("/api/users", {
+      token, method: "POST",
+      body: { username: roleName + "-unauthorized", role: "viewer", password: "Temporary-Password-2026!" }
+    })).status, 403, roleName + " must not create user accounts");
+    assert.equal((await request(`/api/users/${disabledId}/role`, {
+      token, method: "PATCH", body: { role: "publisher" }
+    })).status, 403, roleName + " must not change account roles");
+    assert.equal((await request(`/api/users/${disabledId}/status`, {
+      token, method: "PATCH", body: { active: false }
+    })).status, 403, roleName + " must not activate or deactivate accounts");
+  }
 
   assert.equal((await request("/api/webhooks/inbox", { token: forecaster })).status, 403,
     "forecasters must not inspect inbound webhook messages");

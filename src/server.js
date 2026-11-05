@@ -344,6 +344,43 @@ app.post("/api/auth/mfa/disable",auth,mfaDisableLimiter,(req,res)=>{
   res.status(503).json({error:"Unable to safely disable MFA"});
  }
 });
+app.post("/api/auth/mfa/recovery-codes",auth,mfaConfirmLimiter,(req,res)=>{
+ const {password,code}=req.body||{};
+ if(typeof password!=="string" || password.length>200 || typeof code!=="string" || code.length>64)
+  return res.status(400).json({error:"Current password and an authenticator or unused recovery code are required"});
+ const row=db.prepare("SELECT password_hash,mfa_enabled,mfa_secret_enc,mfa_last_used_step,mfa_recovery_hashes FROM users WHERE id=?").get(req.user.id);
+ if(!row || !bcrypt.compareSync(password,row.password_hash)) return res.status(401).json({error:"Current password is incorrect"});
+ if(!row.mfa_enabled || !row.mfa_secret_enc) return res.status(409).json({error:"MFA is not enabled"});
+ try {
+  const recoveryCodes=generateRecoveryCodes();
+  const nextHashes=JSON.stringify(recoveryCodes.map(hashRecoveryCode));
+  const result=db.transaction(()=>{
+   const current=db.prepare("SELECT token_version,mfa_enabled,mfa_secret_enc,mfa_last_used_step,mfa_recovery_hashes FROM users WHERE id=?").get(req.user.id);
+   if(!current || current.token_version!==req.user.token_version || current.mfa_enabled!==1 || !current.mfa_secret_enc) return false;
+   const secretValue=decryptTotpSecret(current.mfa_secret_enc);
+   const step=verifyTotp(secretValue,code,Date.now(),1);
+   if(step!==null) {
+    if(current.mfa_last_used_step!==null && step<=current.mfa_last_used_step) return false;
+   } else {
+    let hashes;try{hashes=JSON.parse(current.mfa_recovery_hashes||"[]")}catch{hashes=[]}
+    const remaining=consumeRecoveryCode(hashes,code);
+    if(remaining===null) return false;
+   }
+   db.prepare("UPDATE users SET mfa_last_used_step=COALESCE(?,mfa_last_used_step),mfa_recovery_hashes=?,token_version=token_version+1 WHERE id=?")
+    .run(step,nextHashes,req.user.id);
+   db.prepare("UPDATE mfa_login_challenges SET consumed_at=CURRENT_TIMESTAMP WHERE user_id=? AND consumed_at IS NULL").run(req.user.id);
+   audit(req.user.id,null,"mfa_recovery_codes_regenerated","Recovery codes replaced after password and second-factor verification; prior sessions revoked");
+   return true;
+  }).immediate();
+  if(!result) return res.status(401).json({error:"Authenticator or recovery code is invalid, already used, or the session has changed"});
+  const tokenVersion=db.prepare("SELECT token_version FROM users WHERE id=?").get(req.user.id).token_version;
+  const replacementToken=jwt.sign({id:req.user.id,token_version:tokenVersion},secret,{expiresIn:"8h"});
+  res.json({ok:true,token:replacementToken,recovery_codes:recoveryCodes,sessions_revoked:true,warning:"All previous recovery codes are invalid. Store this new set securely; it is shown only once."});
+ } catch(error) {
+  console.error("MFA recovery-code regeneration failed:",error);
+  res.status(503).json({error:"Unable to safely regenerate recovery codes"});
+ }
+});
 const passwordChangeLimiter=rateLimit({windowMs:15*60*1000,limit:5,skipSuccessfulRequests:true,keyGenerator:req=>String(req.user.id),standardHeaders:true,legacyHeaders:false});
 app.post("/api/auth/change-password",auth,passwordChangeLimiter,(req,res)=>{
  const {currentPassword,newPassword}=req.body || {};

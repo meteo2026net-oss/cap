@@ -605,6 +605,27 @@ app.get("/api/alerts/:id",auth,(req,res)=>{
  const {info_json,...alert}=row;
  res.json({alert:{...alert,info_blocks:info_json?JSON.parse(info_json):[]}});
 });
+app.get("/api/alerts/:id/relations",auth,(req,res)=>{
+ const columns="id,identifier,sender,sent,status,msg_type,scope,workflow,references_text,event,headline,severity,urgency,expires,created_at,updated_at";
+ const root=db.prepare("SELECT "+columns+" FROM alerts WHERE id=?").get(req.params.id);
+ if(!root) return res.status(404).json({error:"Alert not found"});
+ const found=new Map([[root.id,root]]);
+ const queue=[root];
+ while(queue.length && found.size<100){
+  const current=queue.shift();
+  for(const reference of String(current.references_text||"").trim().split(/\s+/).filter(Boolean)){
+   const parts=reference.split(",");
+   if(parts.length!==3) continue;
+   const parent=db.prepare("SELECT "+columns+" FROM alerts WHERE sender=? AND identifier=? AND sent=?").get(parts[0],parts[1],parts[2]);
+   if(parent && !found.has(parent.id)){found.set(parent.id,parent);queue.push(parent);}
+  }
+  const currentReference=[current.sender,current.identifier,current.sent].join(",");
+  const children=db.prepare("SELECT "+columns+" FROM alerts WHERE instr(' '||COALESCE(references_text,'')||' ',?)>0 ORDER BY sent,id LIMIT 100").all(" "+currentReference+" ");
+  for(const child of children){if(!found.has(child.id)){found.set(child.id,child);queue.push(child);}}
+ }
+ const messages=[...found.values()].sort((a,b)=>a.sent.localeCompare(b.sent)||a.id-b.id);
+ res.set("Cache-Control","no-store").json({root_id:root.id,count:messages.length,truncated:queue.length>0,messages});
+});
 app.post("/api/alerts",auth,roles("admin","forecaster"),(req,res)=>{
  try {
   const data = schema.parse(req.body);

@@ -43,6 +43,11 @@ test("isolated restore drill runs the real restore path and compares every table
   assert.deepEqual(liveAfter, liveBefore, "the live database must remain byte-for-byte unchanged");
   assert.equal(result.result, "passed");
   assert.equal(result.integrity, "ok");
+  assert.deepEqual(result.audit_checkpoint, {
+    configured: false,
+    valid: null,
+    checkpoint_latest_id: null
+  });
   assert.equal(result.temporary_workspace_removed, true);
   assert.deepEqual(result.counts, { users: 2, alerts: 1, audit_log: 2 });
   assert.equal(result.table_counts.alert_versions, 1);

@@ -17,3 +17,6 @@ header{padding:12px 0 24px;border-bottom:1px solid #26364b}.brand{justify-conten
 .userItem{display:grid;gap:10px}.userHeading{display:flex;align-items:center;justify-content:space-between;gap:12px}.userRoleControls{display:grid;grid-template-columns:minmax(180px,1fr) auto;gap:12px;align-items:end}.userRoleControls label{min-width:0}.userRoleControls .actions{margin:0}@media(max-width:600px){.userRoleControls{grid-template-columns:1fr}.userRoleControls .actions button{flex:1}}
 
 .auditEntry{display:grid;gap:6px}.auditEntry .userHeading{align-items:center}.auditDetails{margin:0;overflow-wrap:anywhere}.auditHash{display:block;white-space:pre-wrap;overflow-wrap:anywhere;direction:ltr;text-align:left;background:#081321;border:1px solid #293d56;border-radius:8px;padding:10px;color:#cbd5e1;font-size:10px;margin-top:8px}
+
+#appPanel.password-change-required > :not(.welcome):not(#passwordSettings):not(#mfaSettings){display:none!important}
+#appPanel.password-change-required #passwordSettings{border:2px solid var(--accent,#e0a526)}

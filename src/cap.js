@@ -79,6 +79,9 @@ function normalizeResource(resource) {
 }
 function normalizeInfo(info) {
   if (!info.event?.trim()) throw new Error("Every CAP info block requires an event.");
+  for (const [field, values] of [["urgency", allowed.urgency], ["severity", allowed.severity], ["certainty", allowed.certainty]]) {
+    if (!values.includes(info[field] || "Unknown")) throw new Error(`Invalid CAP info ${field}.`);
+  }
   if (info.language && !/^[A-Za-z]{1,8}(?:-[A-Za-z0-9]{1,8})*$/.test(info.language)) throw new Error("CAP language must use a valid RFC 3066-style language tag.");
   if (info.headline && info.headline.length > 160) throw new Error("CAP headline must not exceed 160 characters.");
   if (info.expires && info.onset && Date.parse(info.expires) <= Date.parse(info.onset)) throw new Error("Info expiry must be later than onset.");

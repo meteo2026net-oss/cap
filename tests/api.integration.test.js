@@ -729,6 +729,9 @@ test("API enforces role separation, public-feed filtering and account deactivati
     assert.ok(timeline.data.timeline.some(item => item.event_type === "review_note_added" &&
       item.details === "Verify the affected area boundaries before approval."),
       "timeline should include review notes");
+    assert.equal(timeline.data.truncated, false, "small timelines should not be marked as truncated");
+    assert.ok(timeline.data.timeline.filter(item => item.event_type === "created")
+      .every(item => item.details === ""), "unapproved audit details must not be exposed in the timeline");
     assert.deepEqual(timeline.data.timeline.map(item => item.created_at),
       [...timeline.data.timeline].map(item => item.created_at).sort(),
       "timeline events should be returned in chronological order");

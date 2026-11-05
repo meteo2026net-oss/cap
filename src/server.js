@@ -897,9 +897,14 @@ app.get("/api/audit",auth,roles("admin","reviewer","approver"),(req,res)=>{
    return res.status(400).json({error:"before_id must be a positive safe integer"});
   }
  }
- const rows=beforeId===null
-  ? db.prepare(`SELECT l.*,u.username FROM audit_log l LEFT JOIN users u ON u.id=l.user_id ORDER BY l.id DESC LIMIT ?`).all(limit+1)
-  : db.prepare(`SELECT l.*,u.username FROM audit_log l LEFT JOIN users u ON u.id=l.user_id WHERE l.id<? ORDER BY l.id DESC LIMIT ?`).all(beforeId,limit+1);
+ const action=typeof req.query.action==="string"?req.query.action.trim().slice(0,80):"";
+ const search=typeof req.query.q==="string"?req.query.q.trim().slice(0,160):"";
+ const clauses=[],params=[];
+ if(action){clauses.push("l.action=?");params.push(action);}
+ if(search){clauses.push("(instr(lower(COALESCE(l.action,char(0))),lower(?))>0 OR instr(lower(COALESCE(l.details,char(0))),lower(?))>0 OR instr(lower(COALESCE(u.username,char(0))),lower(?))>0)");params.push(search,search,search);}
+ if(beforeId!==null){clauses.push("l.id<?");params.push(beforeId);}
+ const where=clauses.length?"WHERE "+clauses.join(" AND "):"";
+ const rows=db.prepare("SELECT l.*,u.username FROM audit_log l LEFT JOIN users u ON u.id=l.user_id "+where+" ORDER BY l.id DESC LIMIT ?").all(...params,limit+1);
  const hasMore=rows.length>limit;
  const entries=rows.slice(0,limit);
  res.json({entries,has_more:hasMore,next_before_id:hasMore?entries.at(-1).id:null});

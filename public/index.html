@@ -7,6 +7,7 @@
  <header><div class="brand"><span class="logo">⚡</span><div><b>METEO CAP</b><small>مركز إدارة التحذيرات الجوية</small></div></div><div id="userBadge" class="muted">نظام مستقل • CAP 1.2</div></header>
  <section id="loginPanel" class="login card"><h1>تسجيل الدخول</h1><p class="muted">الدخول إلى مركز إدارة التحذيرات</p>
   <form id="loginForm"><label>اسم المستخدم<input name="username" autocomplete="username" required></label><label>كلمة المرور<input name="password" type="password" required></label><button>دخول آمن</button><p id="loginError" class="error"></p></form>
+  <form id="mfaChallengeForm" hidden><label>رمز تطبيق المصادقة أو رمز استرداد<input name="code" autocomplete="one-time-code" inputmode="text" maxlength="64" required></label><button>إكمال التحقق</button><button id="mfaBackToLogin" class="secondary" type="button">العودة لتسجيل الدخول</button><p id="mfaChallengeError" class="error" aria-live="polite"></p></form>
  </section>
  <main id="appPanel" hidden>
   <div class="welcome"><div><p class="eyebrow">OPERATIONS CENTER</p><h1>مركز التحذيرات الجوية</h1><p class="muted">إدارة دورة حياة التحذير من المسودة حتى النشر.</p></div><button id="logoutBtn" class="secondary">تسجيل الخروج</button></div>
@@ -19,6 +20,31 @@
     <button type="submit">تحديث كلمة المرور</button>
    </form>
    <p id="passwordStatus" class="muted small" aria-live="polite"></p>
+  </section>
+  <section id="mfaSettings" class="card" style="margin-bottom:18px">
+   <div class="sectionHead"><h2>المصادقة متعددة العوامل (MFA)</h2><span class="tag">SECURITY</span></div>
+   <p id="mfaStatus" class="muted small" aria-live="polite">جارٍ تحميل حالة المصادقة...</p>
+   <form id="mfaEnrollForm" class="formGrid">
+    <label>كلمة المرور الحالية<input name="password" type="password" autocomplete="current-password" required></label>
+    <button type="submit">بدء إعداد تطبيق المصادقة</button>
+   </form>
+   <div id="mfaEnrollment" hidden>
+    <p class="muted small">أضف المفتاح التالي يدوياً في تطبيق مصادقة موثوق، ثم أدخل الرمز المكوّن من 6 أرقام للتأكيد. لا تشارك المفتاح مع أي شخص.</p>
+    <code id="mfaSecret" class="mono"></code>
+    <p class="muted small">رابط الإعداد:</p><code id="mfaOtpAuth" class="mono"></code>
+    <form id="mfaConfirmForm" class="formGrid">
+     <label>كلمة المرور الحالية<input name="password" type="password" autocomplete="current-password" required></label>
+     <label>رمز التطبيق<input name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" required></label>
+     <button type="submit">تأكيد وتفعيل MFA</button>
+    </form>
+   </div>
+   <div id="mfaRecoveryPanel" hidden><p class="muted small">رموز الاسترداد التالية تظهر مرة واحدة فقط. احفظها في مكان آمن ولا تضعها في مستودع GitHub.</p><pre id="mfaRecoveryCodes" class="mono"></pre></div>
+   <form id="mfaDisableForm" class="formGrid" hidden>
+    <label>كلمة المرور الحالية<input name="password" type="password" autocomplete="current-password" required></label>
+    <label>رمز التطبيق أو رمز استرداد غير مستخدم<input name="code" maxlength="64" required></label>
+    <button type="submit" class="secondary">تعطيل MFA</button>
+   </form>
+   <p id="mfaActionStatus" class="muted small" aria-live="polite"></p>
   </section>
   <section id="userAdmin" class="card" hidden style="margin-bottom:18px"><div class="sectionHead"><h2>إدارة حسابات الفريق</h2><span class="tag">ADMIN</span></div><form id="userForm" class="formGrid"><label>اسم المستخدم<input name="username" minlength="3" maxlength="64" required></label><label>كلمة مرور مؤقتة (14 حرفاً على الأقل)<input name="password" type="password" minlength="14" required></label><label>الدور الوظيفي<select name="role"><option value="forecaster">متنبئ جوي</option><option value="reviewer">مراجع</option><option value="approver">معتمد</option><option value="publisher">ناشر</option><option value="viewer">مشاهد</option><option value="admin">مدير نظام</option></select></label><button>إنشاء الحساب</button></form><p class="muted small">يمكن تعديل الدور وإيقاف الحساب أو إعادة تفعيله. تغيير الدور أو الحالة يلغي الجلسات الحالية للمستخدم.</p><div id="usersList" class="alertsList" style="margin-top:14px" aria-live="polite"></div></section>
   <section id="auditIntegrity" class="card" hidden style="margin-bottom:18px">

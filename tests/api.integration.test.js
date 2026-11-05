@@ -200,6 +200,28 @@ test("API enforces role separation, public-feed filtering and account deactivati
   assert.equal((await request("/api/users/999999/password-reset", {
     token: admin, method: "POST", body: {}
   })).status, 404, "password reset must report an unknown account without changing any credentials");
+  const userAuditDb = new Database(path.join(cwd, "storage", "cap.sqlite"));
+  try {
+    userAuditDb.exec(`CREATE TRIGGER fail_user_create_audit BEFORE INSERT ON audit_log
+      WHEN NEW.action='user_created' BEGIN SELECT RAISE(ABORT, 'synthetic audit failure'); END;`);
+  } finally {
+    userAuditDb.close();
+  }
+  const failedAuditedUser = await request("/api/users", {
+    token: admin, method: "POST",
+    body: { username: "audit-rollback-user", role: "viewer", password: "Initial-Temporary-Password-2026!" }
+  });
+  assert.equal(failedAuditedUser.status, 400);
+  const verifyUserRollback = new Database(path.join(cwd, "storage", "cap.sqlite"));
+  try {
+    assert.equal(verifyUserRollback.prepare("SELECT COUNT(*) AS count FROM users WHERE username=?")
+      .get("audit-rollback-user").count, 0,
+      "user creation must roll back when its audit event cannot be stored");
+    verifyUserRollback.exec("DROP TRIGGER fail_user_create_audit");
+  } finally {
+    verifyUserRollback.close();
+  }
+
   const createUser = async (username, role) => {
     const result = await request("/api/users", {
       token: admin, method: "POST",
@@ -556,6 +578,33 @@ test("API enforces role separation, public-feed filtering and account deactivati
   const finalWebhookReview = await request("/api/webhooks/inbox?status=pending", { token: reviewer });
   assert.equal(finalWebhookReview.data.messages.some(item => item.id === concurrentWebhookData.inbox_id), false,
     "a concurrently reviewed webhook must no longer appear in the pending inbox");
+
+  const alertAuditDb = new Database(path.join(cwd, "storage", "cap.sqlite"));
+  try {
+    alertAuditDb.exec(`CREATE TRIGGER fail_alert_create_audit BEFORE INSERT ON audit_log
+      WHEN NEW.action='created' BEGIN SELECT RAISE(ABORT, 'synthetic audit failure'); END;`);
+  } finally {
+    alertAuditDb.close();
+  }
+  const failedAuditedAlert = await request("/api/alerts", {
+    token: forecaster, method: "POST",
+    body: {
+      event: "Audit rollback synthetic event", headline: "Audit rollback warning",
+      description: "Synthetic test only", area_desc: "Synthetic test area",
+      circle: "33.5,36.2 8", category: "Met", urgency: "Expected",
+      severity: "Moderate", certainty: "Likely", status: "Test"
+    }
+  });
+  assert.equal(failedAuditedAlert.status, 400);
+  const verifyAlertRollback = new Database(path.join(cwd, "storage", "cap.sqlite"));
+  try {
+    assert.equal(verifyAlertRollback.prepare("SELECT COUNT(*) AS count FROM alerts WHERE headline=?")
+      .get("Audit rollback warning").count, 0,
+      "alert creation must roll back when its audit event cannot be stored");
+    verifyAlertRollback.exec("DROP TRIGGER fail_alert_create_audit");
+  } finally {
+    verifyAlertRollback.close();
+  }
 
   const invalidCapStatus = await request("/api/alerts", {
     token: forecaster, method: "POST",

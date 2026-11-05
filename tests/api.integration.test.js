@@ -668,6 +668,12 @@ test("API enforces role separation, public-feed filtering and account deactivati
     assert.ok(comparedVersions.data.changed_fields.includes("severity"));
     assert.equal(comparedVersions.data.versions[1].snapshot.headline, "Synthetic test warning");
     assert.equal(comparedVersions.data.versions[0].snapshot.headline, "Synthetic warning revised");
+    const versionDb = new Database(path.join(cwd, "storage", "cap.sqlite"));
+    assert.throws(() => versionDb.prepare("UPDATE alert_versions SET snapshot_json='{}' WHERE id=?").run(comparedVersions.data.versions[0].id),
+      /immutable/i, "stored alert snapshots must reject updates");
+    assert.throws(() => versionDb.prepare("DELETE FROM alert_versions WHERE id=?").run(comparedVersions.data.versions[0].id),
+      /immutable/i, "stored alert snapshots must reject deletion");
+    versionDb.close();
     const alertStats = await request("/api/alerts/stats", { token: forecaster });
     assert.equal(alertStats.status, 200, "global alert statistics endpoint should be available to authenticated users");
     assert.ok(alertStats.data.stats.total >= 1);

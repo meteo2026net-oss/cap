@@ -196,16 +196,18 @@ app.post("/api/auth/mfa/challenge",mfaChallengeLimiter,(req,res)=>{
   const complete=db.transaction(()=>{
    const challenge=db.prepare("SELECT id FROM mfa_login_challenges WHERE id=? AND user_id=? AND expires_at>? AND consumed_at IS NULL").get(claims.jti,user.id,Date.now());
    if(!challenge) return null;
+   const currentUser=db.prepare("SELECT active,token_version,mfa_enabled,mfa_secret_enc,mfa_last_used_step,mfa_recovery_hashes FROM users WHERE id=?").get(user.id);
+   if(!currentUser || !currentUser.active || currentUser.token_version!==claims.token_version || currentUser.mfa_enabled!==1 || !currentUser.mfa_secret_enc) return null;
    const now=Date.now();
    let nextRecovery=null;
    let acceptedStep=null;
-   const secretValue=decryptTotpSecret(user.mfa_secret_enc);
+   const secretValue=decryptTotpSecret(currentUser.mfa_secret_enc);
    acceptedStep=verifyTotp(secretValue,code,now,1);
    if(acceptedStep!==null) {
-    if(user.mfa_last_used_step!==null && acceptedStep<=user.mfa_last_used_step) return null;
+    if(currentUser.mfa_last_used_step!==null && acceptedStep<=currentUser.mfa_last_used_step) return null;
    } else {
     let hashes;
-    try { hashes=JSON.parse(user.mfa_recovery_hashes||"[]"); } catch { hashes=[]; }
+    try { hashes=JSON.parse(currentUser.mfa_recovery_hashes||"[]"); } catch { hashes=[]; }
     nextRecovery=consumeRecoveryCode(hashes,code);
     if(nextRecovery===null) return null;
    }
@@ -290,13 +292,15 @@ app.post("/api/auth/mfa/disable",auth,mfaChallengeLimiter,(req,res)=>{
  if(!row.mfa_enabled || !row.mfa_secret_enc) return res.status(409).json({error:"MFA is not enabled"});
  try {
   const result=db.transaction(()=>{
-   const secretValue=decryptTotpSecret(row.mfa_secret_enc);
+   const current=db.prepare("SELECT token_version,mfa_enabled,mfa_secret_enc,mfa_last_used_step,mfa_recovery_hashes FROM users WHERE id=?").get(req.user.id);
+   if(!current || current.token_version!==req.user.token_version || current.mfa_enabled!==1 || !current.mfa_secret_enc) return false;
+   const secretValue=decryptTotpSecret(current.mfa_secret_enc);
    const step=verifyTotp(secretValue,code,Date.now(),1);
    let recoveryRemaining=null;
    if(step!==null) {
-    if(row.mfa_last_used_step!==null && step<=row.mfa_last_used_step) return false;
+    if(current.mfa_last_used_step!==null && step<=current.mfa_last_used_step) return false;
    } else {
-    let hashes;try{hashes=JSON.parse(row.mfa_recovery_hashes||"[]")}catch{hashes=[]}
+    let hashes;try{hashes=JSON.parse(current.mfa_recovery_hashes||"[]")}catch{hashes=[]}
     recoveryRemaining=consumeRecoveryCode(hashes,code);
     if(recoveryRemaining===null) return false;
    }

@@ -22,12 +22,12 @@ SQLite is embedded through `better-sqlite3`; there is no separate database serve
    npm start
    ```
 
-   Alternatively, double-click `start-local.bat`. On first run it creates `.env` with cryptographically random secrets and installs npm dependencies if needed.
+   Alternatively, double-click `start-local.bat`. It creates `.env` on first run and runs `npm ci` on every launch to verify and install the exact locked dependencies.
 
 5. Save the generated administrator password printed by the setup script.
 6. Open http://127.0.0.1:8095.
 
-The setup script never overwrites an existing `.env`. It requires Node.js 22+, generates the JWT, administrator, and MFA encryption secrets, and installs the lockfile-pinned dependencies with `npm ci`. If native dependency installation fails on Windows, install Microsoft C++ Build Tools (Desktop development with C++) and retry `npm ci`.
+The setup script never overwrites an existing `.env`. It requires Node.js 22+, generates the JWT, administrator, and MFA encryption secrets, and installs the lockfile-pinned dependencies with `npm ci` every time it runs. If native dependency installation fails on Windows, install Microsoft C++ Build Tools (Desktop development with C++) and retry `npm ci`.
 
 ## Linux / macOS
 

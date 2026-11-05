@@ -14,7 +14,7 @@ Please do not publish exploitable vulnerability details in a public issue. Use G
 - Use unique random `JWT_SECRET` and a unique administrator password.
 - Keep the service bound to localhost behind a maintained HTTPS reverse proxy; do not expose the application port directly.
 - Restrict administrator and publisher accounts to authorized institutional personnel.
-- Back up the SQLite volume securely and test restoration before upgrades.
+- Back up the SQLite database securely and test restoration before upgrades.
 - Keep Test/Exercise messages for non-operational validation.
 - Do not use this development project as an official public-warning authority until institutional approval, CAP conformance testing, security review, monitoring, and operational procedures are complete.
 

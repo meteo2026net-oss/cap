@@ -106,18 +106,30 @@ export async function verifyRestoredDatabase(source) {
     for (const table of ["users", "alerts", "audit_log"]) {
       if (tables.has(table)) counts[table] = count(table);
     }
+    const tableFingerprints = {};
+    for (const table of [...tables].filter(name => !name.startsWith("sqlite_")).sort()) {
+      const quote = identifier => `"${identifier.replaceAll('"', '""')}"`;
+      const columns = database.prepare(`PRAGMA table_info(${quote(table)})`).all().map(column => column.name);
+      const digest = createHash("sha256");
+      let rowCount = 0;
+      const order = columns.length ? ` ORDER BY ${columns.map(quote).join(", ")}` : "";
+      for (const row of database.prepare(`SELECT * FROM ${quote(table)}${order}`).iterate()) {
+        digest.update(JSON.stringify(row));
+        digest.update("\\n");
+        rowCount += 1;
+      }
+      tableFingerprints[table] = { rows: rowCount, sha256: digest.digest("hex") };
+    }
     const tableCounts = Object.fromEntries(
-      [...tables].filter(name => !name.startsWith("sqlite_")).sort().map(name => [
-        name,
-        database.prepare(`SELECT COUNT(*) AS count FROM "${name.replaceAll('"', '""')}"`).get().count
-      ])
+      Object.entries(tableFingerprints).map(([name, fingerprint]) => [name, fingerprint.rows])
     );
     return {
       file,
       integrity: validation.integrity,
       audit: validation.audit,
       counts,
-      table_counts: tableCounts
+      table_counts: tableCounts,
+      table_fingerprints: tableFingerprints
     };
   } finally {
     database.close();
@@ -140,8 +152,8 @@ export async function runIsolatedRestoreDrill(source) {
     await restoreDatabaseBackup(sourcePath, targetPath);
     const restoredState = await verifyRestoredDatabase(targetPath);
 
-    if (JSON.stringify(sourceState.table_counts) !== JSON.stringify(restoredState.table_counts)) {
-      throw new Error("Restore drill failed: table record counts differ between source and restored database");
+    if (JSON.stringify(sourceState.table_fingerprints) !== JSON.stringify(restoredState.table_fingerprints)) {
+      throw new Error("Restore drill failed: one or more restored table contents differ from the source backup");
     }
     if ((sourceState.audit?.valid ?? null) !== (restoredState.audit?.valid ?? null)) {
       throw new Error("Restore drill failed: audit-chain validity differs after restore");
@@ -156,7 +168,8 @@ export async function runIsolatedRestoreDrill(source) {
       integrity: restoredState.integrity,
       audit: restoredState.audit,
       counts: restoredState.counts,
-      table_counts: restoredState.table_counts
+      table_counts: restoredState.table_counts,
+      table_fingerprints: restoredState.table_fingerprints
     };
   } finally {
     await fs.rm(workspace, { recursive: true, force: true });

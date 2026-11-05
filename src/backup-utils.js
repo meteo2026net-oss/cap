@@ -129,7 +129,7 @@ export async function restoreDatabaseBackup(source, destination, { force = false
   }
   // UUID-named backups are the new format and must have a valid checksum manifest.
   // Legacy timestamp-only backups remain restorable for backward compatibility.
-  if (/-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.sqlite$/i.test(sourcePath)) {
+  if (/-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.sqlite$/i.test(sourcePath)) {
     await verifyChecksum(sourcePath);
   }
   const validation = await validateDatabaseFile(sourcePath);

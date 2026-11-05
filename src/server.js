@@ -664,9 +664,13 @@ app.patch("/api/webhooks/inbox/:id/review",auth,roles("admin","reviewer"),(req,r
  if(!Number.isSafeInteger(id) || id<1) return res.status(400).json({error:"Invalid inbox id"});
  try {
   const data=z.object({status:z.enum(["reviewed","rejected"]),note:z.string().max(2000).optional().default("")}).parse(req.body);
-  const result=db.prepare("UPDATE webhook_inbox SET status=?,reviewed_at=CURRENT_TIMESTAMP,reviewed_by=?,review_note=? WHERE id=? AND status='pending'").run(data.status,req.user.id,data.note,id);
-  if(!result.changes) return res.status(409).json({error:"Webhook message is missing or no longer pending"});
-  audit(req.user.id,null,"webhook_inbox_"+data.status,`Reviewed inbound webhook message ${id}`);
+  const result=db.transaction(()=>{
+   const updated=db.prepare("UPDATE webhook_inbox SET status=?,reviewed_at=CURRENT_TIMESTAMP,reviewed_by=?,review_note=? WHERE id=? AND status='pending'").run(data.status,req.user.id,data.note,id);
+   if(!updated.changes) return null;
+   audit(req.user.id,null,"webhook_inbox_"+data.status,`Reviewed inbound webhook message ${id}`);
+   return updated;
+  }).immediate();
+  if(!result) return res.status(409).json({error:"Webhook message is missing or no longer pending"});
   res.json({ok:true,id,status:data.status,reviewed_by:req.user.id,reviewer_username:req.user.username});
  } catch(error) { res.status(400).json({error:error.message}); }
 });
@@ -687,27 +691,37 @@ app.get("/api/delivery/outbox",auth,roles("admin","publisher"),(req,res)=>{
  res.json({deliveries:rows,counts,external_adapters_enabled:false});
 });
 app.post("/api/delivery/process-retries",auth,roles("admin","publisher"),(req,res)=>{
- const result=processDueRetries(db);
- for(const item of result.requeued) audit(req.user.id,item.alert_id,"delivery_auto_retry_queued",`Automatically requeued outbox entry ${item.id}`);
- for(const item of result.deadLettered) audit(req.user.id,item.alert_id,"delivery_dead_lettered",`Moved outbox entry ${item.id} to dead-letter state`);
+ const result=db.transaction(()=>{
+  const processed=processDueRetries(db);
+  for(const item of processed.requeued) audit(req.user.id,item.alert_id,"delivery_auto_retry_queued",`Automatically requeued outbox entry ${item.id}`);
+  for(const item of processed.deadLettered) audit(req.user.id,item.alert_id,"delivery_dead_lettered",`Moved outbox entry ${item.id} to dead-letter state`);
+  return processed;
+ }).immediate();
  res.json({ok:true,requeued_count:result.requeued.length,requeued_ids:result.requeued.map(item=>item.id),dead_lettered_count:result.deadLettered.length,dead_letter_ids:result.deadLettered.map(item=>item.id)});
 });
 
 app.post("/api/delivery/recover-stale",auth,roles("admin","publisher"),(req,res)=>{
  const staleMinutes=req.body?.staleMinutes ?? 10;
  if(!Number.isInteger(staleMinutes) || staleMinutes<1 || staleMinutes>1440) return res.status(400).json({error:"staleMinutes must be an integer from 1 to 1440"});
- const result=recoverStaleDeliveries(db,staleMinutes);
- for(const item of result.recovered) audit(req.user.id,item.alert_id,"delivery_lease_recovered",`Recovered stale sending lease for outbox entry ${item.id}`);
- for(const item of result.deadLettered) audit(req.user.id,item.alert_id,"delivery_lease_dead_lettered",`Dead-lettered stale sending lease after maximum attempts for outbox entry ${item.id}`);
+ const result=db.transaction(()=>{
+  const recovered=recoverStaleDeliveries(db,staleMinutes);
+  for(const item of recovered.recovered) audit(req.user.id,item.alert_id,"delivery_lease_recovered",`Recovered stale sending lease for outbox entry ${item.id}`);
+  for(const item of recovered.deadLettered) audit(req.user.id,item.alert_id,"delivery_lease_dead_lettered",`Dead-lettered stale sending lease after maximum attempts for outbox entry ${item.id}`);
+  return recovered;
+ }).immediate();
  res.json({ok:true,recovered_count:result.recovered.length,recovered_ids:result.recovered.map(item=>item.id),dead_lettered_count:result.deadLettered.length,dead_letter_ids:result.deadLettered.map(item=>item.id),stale_minutes:staleMinutes});
 });
 
 app.post("/api/delivery/outbox/:id/claim",auth,roles("admin","publisher"),(req,res)=>{
  const deliveryId=Number(req.params.id);
  if(!Number.isSafeInteger(deliveryId) || deliveryId<1) return res.status(400).json({error:"Invalid delivery id"});
- const delivery=claimDelivery(db,deliveryId);
+ const delivery=db.transaction(()=>{
+  const claimed=claimDelivery(db,deliveryId);
+  if(!claimed) return null;
+  audit(req.user.id,claimed.alert_id,"delivery_claimed",`Claimed outbox entry ${claimed.id}; no external transmission is performed by this endpoint`);
+  return claimed;
+ }).immediate();
  if(!delivery) return res.status(409).json({error:"Delivery is not queued or has already been claimed"});
- audit(req.user.id,delivery.alert_id,"delivery_claimed",`Claimed outbox entry ${delivery.id}; no external transmission is performed by this endpoint`);
  res.json({delivery:{id:delivery.id,alert_id:delivery.alert_id,channel:delivery.channel,status:delivery.status,attempts:delivery.attempts,payload:delivery.payload,lease_token:delivery.lease_token},external_adapters_enabled:false});
 });
 app.post("/api/delivery/outbox/:id/receipt",auth,roles("admin","publisher"),(req,res)=>{
@@ -716,18 +730,26 @@ app.post("/api/delivery/outbox/:id/receipt",auth,roles("admin","publisher"),(req
  try {
   const receiptSchema=z.object({status:z.enum(["delivered","failed"]),leaseToken:z.string().uuid(),externalId:z.string().max(256).optional(),details:z.string().max(2000).optional()});
   const data=receiptSchema.parse(req.body);
-  const delivery=recordDeliveryReceipt(db,deliveryId,data);
+  const delivery=db.transaction(()=>{
+   const recorded=recordDeliveryReceipt(db,deliveryId,data);
+   if(!recorded) return null;
+   audit(req.user.id,recorded.alert_id,"delivery_"+recorded.status,`Receipt recorded for outbox entry ${recorded.id}`);
+   return recorded;
+  }).immediate();
   if(!delivery) return res.status(409).json({error:"A receipt can only be recorded for a sending delivery"});
-  audit(req.user.id,delivery.alert_id,"delivery_"+delivery.status,`Receipt recorded for outbox entry ${delivery.id}`);
   res.json({ok:true,delivery:{id:delivery.id,status:delivery.status,attempts:delivery.attempts,external_id:delivery.external_id}});
  } catch(error) { res.status(400).json({error:error.message}); }
 });
 app.post("/api/delivery/outbox/:id/retry",auth,roles("admin","publisher"),(req,res)=>{
  const deliveryId=Number(req.params.id);
  if(!Number.isSafeInteger(deliveryId) || deliveryId<1) return res.status(400).json({error:"Invalid delivery id"});
- const delivery=retryDelivery(db,deliveryId);
+ const delivery=db.transaction(()=>{
+  const retried=retryDelivery(db,deliveryId);
+  if(!retried) return null;
+  audit(req.user.id,retried.alert_id,"delivery_retry_queued",`Requeued outbox entry ${retried.id}`);
+  return retried;
+ }).immediate();
  if(!delivery) return res.status(409).json({error:"Only failed deliveries can be retried"});
- audit(req.user.id,delivery.alert_id,"delivery_retry_queued",`Requeued outbox entry ${delivery.id}`);
  res.json({ok:true,delivery:{id:delivery.id,status:delivery.status,attempts:delivery.attempts}});
 });
 

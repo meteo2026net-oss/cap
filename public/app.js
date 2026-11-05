@@ -269,6 +269,10 @@ async function loadAuditHistory(append=false){
  status.textContent=append?"جارٍ تحميل السجلات الأقدم...":"جارٍ تحميل سجل التدقيق...";
  try{
   const params=new URLSearchParams({limit:"50"});
+  const auditSearch=$("#auditSearch")?.value.trim()||"";
+  const auditAction=$("#auditActionFilter")?.value||"";
+  if(auditSearch)params.set("q",auditSearch);
+  if(auditAction)params.set("action",auditAction);
   const requestedCursor=append?auditHistoryCursor:null;
   if(requestedCursor!==null)params.set("before_id",String(requestedCursor));
   const result=await api("/api/audit?"+params.toString());
@@ -308,14 +312,25 @@ async function loadAuditHistory(append=false){
 }
 $("#auditExportCsvBtn")?.addEventListener("click",async()=>{
  try{
-  const response=await fetch("/api/audit/export.csv",{headers:{Authorization:"Bearer "+token}});
+  const params=new URLSearchParams();
+  const q=$("#auditSearch")?.value.trim()||"",action=$("#auditActionFilter")?.value||"";
+  if(q)params.set("q",q);if(action)params.set("action",action);
+  const response=await fetch("/api/audit/export.csv?"+params.toString(),{headers:{Authorization:"Bearer "+token}});
   if(!response.ok){const data=await response.json().catch(()=>({}));throw new Error(data.error||"تعذر تصدير سجل التدقيق");}
   const blob=await response.blob(),url=URL.createObjectURL(blob),a=document.createElement("a");
   a.href=url;a.download="cap-audit-export.csv";document.body.appendChild(a);a.click();a.remove();
   setTimeout(()=>URL.revokeObjectURL(url),1000);
  }catch(error){alert(error.message)}
 });
-$("#auditHistoryRefreshBtn")?.addEventListener("click",()=>loadAuditHistory());
+function resetAuditHistoryFilters(){
+ auditHistoryGeneration++;auditHistoryCursor=null;auditHistoryLoading=false;
+ const list=$("#auditHistoryList");if(list)list.replaceChildren();
+ loadAuditHistory();
+}
+$("#auditSearch")?.addEventListener("change",resetAuditHistoryFilters);
+$("#auditSearch")?.addEventListener("keydown",event=>{if(event.key==="Enter"){event.preventDefault();resetAuditHistoryFilters();}});
+$("#auditActionFilter")?.addEventListener("change",resetAuditHistoryFilters);
+$("#auditHistoryRefreshBtn")?.addEventListener("click",resetAuditHistoryFilters);
 $("#auditHistoryLoadMoreBtn")?.addEventListener("click",()=>loadAuditHistory(true));
 
 async function loadUsers(){

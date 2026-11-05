@@ -774,7 +774,7 @@ test("API enforces role separation, public-feed filtering and account deactivati
       severity: "Moderate",
       certainty: "Likely",
       scope: "Public",
-      status: "Test",
+      status,
       effective: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
       response_type: "Shelter",
       headline: "Corrected integration warning headline",

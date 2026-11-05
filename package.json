@@ -17,7 +17,8 @@
     "backup:list": "node src/list-backups.js",
     "backup:health": "node src/backup-health.js",
     "restore:verify": "node src/verify-restored-db.js",
-    "restore:drill": "node src/restore-drill.js"
+    "restore:drill": "node src/restore-drill.js",
+    "audit:checkpoint:init": "node scripts/initialize-audit-checkpoint.js"
   },
   "engines": {
     "node": ">=22"

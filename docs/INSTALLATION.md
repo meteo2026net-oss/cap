@@ -1,6 +1,6 @@
 # Installation and operating guide
 
-This project runs directly on the host with Node.js and an embedded SQLite database. **Docker and container runtimes are not used or supported by this repository.**
+This project runs directly on the host with Node.js and an embedded SQLite database.
 
 ## Dependency installation and updates
 

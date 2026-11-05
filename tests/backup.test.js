@@ -4,7 +4,7 @@ import Database from "better-sqlite3";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { appendAuditLog, installAuditLogGuards } from "../src/audit.js";
+import { appendAuditLog, initializeAuditCheckpoint, installAuditLogGuards } from "../src/audit.js";
 import { createDatabaseBackup, pruneDatabaseBackups, restoreDatabaseBackup, verifyDatabaseBackup } from "../src/backup-utils.js";
 
 function createFixtureDatabase(filePath) {
@@ -440,6 +440,41 @@ test("restore rejects a symbolic-link checksum manifest", async () => {
       /manifest must be a regular file/
     );
   } finally {
+    database.close();
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});
+
+
+test("restore rejects a backup older than the signed external audit checkpoint", async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "cap-restore-checkpoint-"));
+  const source = path.join(directory, "source.sqlite");
+  const backupDirectory = path.join(directory, "backups");
+  const checkpointPath = path.join(directory, "external", "audit-anchor.json");
+  const restored = path.join(directory, "restored.sqlite");
+  const checkpointSecret = "test-only-checkpoint-secret-at-least-32-bytes";
+  const previousPath = process.env.AUDIT_CHECKPOINT_PATH;
+  const previousSecret = process.env.AUDIT_CHECKPOINT_SECRET;
+  const database = createFixtureDatabase(source);
+  try {
+    initializeAuditCheckpoint(database, { checkpointPath, checkpointSecret });
+    process.env.AUDIT_CHECKPOINT_PATH = checkpointPath;
+    process.env.AUDIT_CHECKPOINT_SECRET = checkpointSecret;
+
+    const olderBackup = await createDatabaseBackup(database, backupDirectory);
+    appendAuditLog(database, { action: "post-backup-operational-change" });
+
+    await assert.rejects(
+      () => restoreDatabaseBackup(olderBackup, restored),
+      /Audit hash chain verification failed/,
+      "a valid but older backup must not silently roll the database behind the signed checkpoint"
+    );
+    await assert.rejects(() => fs.stat(restored), { code: "ENOENT" });
+  } finally {
+    if (previousPath === undefined) delete process.env.AUDIT_CHECKPOINT_PATH;
+    else process.env.AUDIT_CHECKPOINT_PATH = previousPath;
+    if (previousSecret === undefined) delete process.env.AUDIT_CHECKPOINT_SECRET;
+    else process.env.AUDIT_CHECKPOINT_SECRET = previousSecret;
     database.close();
     await fs.rm(directory, { recursive: true, force: true });
   }

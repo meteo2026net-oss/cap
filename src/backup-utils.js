@@ -39,12 +39,16 @@ async function validateDatabaseFile(filePath) {
 export async function createDatabaseBackup(database, directory, { now = new Date() } = {}) {
   await fs.mkdir(directory, { recursive: true });
   const destination = path.join(directory, `cap-${timestampSlug(now)}-${randomUUID()}.sqlite`);
+  const temporary = `${destination}.tmp`;
   try {
-    await database.backup(destination);
-    await fs.chmod(destination, 0o600);
-    await validateDatabaseFile(destination);
+    // Keep incomplete or not-yet-validated artifacts out of the visible backup set.
+    await database.backup(temporary);
+    await fs.chmod(temporary, 0o600);
+    await validateDatabaseFile(temporary);
+    await fs.rename(temporary, destination);
     return destination;
   } catch (error) {
+    await fs.rm(temporary, { force: true }).catch(() => {});
     await fs.rm(destination, { force: true }).catch(() => {});
     throw error;
   }
@@ -67,8 +71,15 @@ export async function pruneDatabaseBackups(directory, { retentionDays = 30, now 
   for (const name of names) {
     if (!/^cap-\d{8}T\d{6}(?:\d{3})?Z(?:-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?\.sqlite$/.test(name)) continue;
     const filePath = path.join(directory, name);
-    const stat = await fs.stat(filePath);
-    if (stat.isFile() && stat.mtimeMs < cutoff) {
+    let stat;
+    try {
+      stat = await fs.lstat(filePath);
+    } catch (error) {
+      if (error.code === "ENOENT") continue; // Another process already removed it.
+      throw error;
+    }
+    // Never follow or remove symlinks while pruning backup files.
+    if (stat.isFile() && !stat.isSymbolicLink() && stat.mtimeMs < cutoff) {
       await fs.unlink(filePath);
       removed.push(name);
     }
@@ -81,6 +92,10 @@ export async function restoreDatabaseBackup(source, destination, { force = false
   const targetPath = path.resolve(destination);
   if (sourcePath === targetPath) throw new Error("Backup source and restore target must be different files");
 
+  const sourceStat = await fs.lstat(sourcePath);
+  if (!sourceStat.isFile() || sourceStat.isSymbolicLink()) {
+    throw new Error("Backup source must be a regular file, not a symbolic link.");
+  }
   const validation = await validateDatabaseFile(sourcePath);
   await fs.mkdir(path.dirname(targetPath), { recursive: true });
 

@@ -155,10 +155,12 @@ export async function runIsolatedRestoreDrill(source) {
     if (JSON.stringify(sourceState.table_fingerprints) !== JSON.stringify(restoredState.table_fingerprints)) {
       throw new Error("Restore drill failed: one or more restored table contents differ from the source backup");
     }
-    if ((sourceState.audit?.valid ?? null) !== (restoredState.audit?.valid ?? null)) {
-      throw new Error("Restore drill failed: audit-chain validity differs after restore");
+    if (JSON.stringify(sourceState.audit) !== JSON.stringify(restoredState.audit)) {
+      throw new Error("Restore drill failed: audit-chain or external-checkpoint verification differs after restore");
     }
 
+    const checkpoint = restoredState.audit?.checkpoint ?? null;
+    const checkpointConfigured = Boolean(restoredState.audit?.integrity_capabilities?.external_checkpoint_configured);
     report = {
       result: "passed",
       source: sourcePath,
@@ -167,6 +169,11 @@ export async function runIsolatedRestoreDrill(source) {
       source_checksum: sourceBackup.checksum,
       integrity: restoredState.integrity,
       audit: restoredState.audit,
+      audit_checkpoint: {
+        configured: checkpointConfigured,
+        valid: checkpoint ? checkpoint.valid : null,
+        checkpoint_latest_id: checkpoint?.checkpoint_latest_id ?? null
+      },
       counts: restoredState.counts,
       table_counts: restoredState.table_counts,
       table_fingerprints: restoredState.table_fingerprints

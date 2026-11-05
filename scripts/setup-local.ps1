@@ -37,6 +37,10 @@ if (-not (Test-Path ".env")) {
   Write-Host "Save this password securely. It will not be displayed again."
 } else {
   Write-Host "Existing .env found; it will not be overwritten."
+  $existingEnv = Get-Content ".env" -Raw
+  if ($existingEnv -notmatch "(?m)^MFA_ENCRYPTION_KEY=.+$") {
+    Write-Warning "MFA_ENCRYPTION_KEY is not configured. Add a persistent 32-byte key before enabling MFA. Do not generate or replace this key if any account has already enrolled MFA."
+  }
 }
 
 if (-not (Test-Path "node_modules")) {

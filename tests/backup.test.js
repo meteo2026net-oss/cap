@@ -364,3 +364,44 @@ test("restore detects dangling WAL and SHM symlinks", async () => {
     await fs.rm(directory, { recursive: true, force: true });
   }
 });
+
+
+test("new backups include SHA-256 manifests and restore verifies them", async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "cap-backup-checksum-"));
+  const source = path.join(directory, "source.sqlite");
+  const database = createFixtureDatabase(source);
+  try {
+    const backup = await createDatabaseBackup(database, path.join(directory, "backups"));
+    const manifestPath = `${backup}.sha256`;
+    assert.match(await fs.readFile(manifestPath, "utf8"), /^[a-f0-9]{64}  cap-.*\\.sqlite\\n$/);
+    assert.equal((await fs.stat(manifestPath)).mode & 0o777, 0o600);
+    await restoreDatabaseBackup(backup, path.join(directory, "restored.sqlite"));
+  } finally { database.close(); await fs.rm(directory, { recursive: true, force: true }); }
+});
+
+test("restore rejects modified backup bytes before replacing the target", async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "cap-backup-tamper-"));
+  const source = path.join(directory, "source.sqlite");
+  const target = path.join(directory, "target.sqlite");
+  const database = createFixtureDatabase(source);
+  try {
+    const backup = await createDatabaseBackup(database, path.join(directory, "backups"));
+    await fs.copyFile(source, target);
+    await fs.appendFile(backup, Buffer.from("tampered"));
+    await assert.rejects(() => restoreDatabaseBackup(backup, target, { force: true }), /SHA-256 checksum verification failed/);
+    const untouched = new Database(target, { readonly: true });
+    try { assert.equal(untouched.prepare("SELECT username FROM users").get().username, "backup-test"); }
+    finally { untouched.close(); }
+  } finally { database.close(); await fs.rm(directory, { recursive: true, force: true }); }
+});
+
+test("restore rejects a missing checksum manifest for a new-format backup", async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "cap-backup-manifest-missing-"));
+  const source = path.join(directory, "source.sqlite");
+  const database = createFixtureDatabase(source);
+  try {
+    const backup = await createDatabaseBackup(database, path.join(directory, "backups"));
+    await fs.rm(`${backup}.sha256`);
+    await assert.rejects(() => restoreDatabaseBackup(backup, path.join(directory, "restored.sqlite")), /ENOENT/);
+  } finally { database.close(); await fs.rm(directory, { recursive: true, force: true }); }
+});

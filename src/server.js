@@ -664,6 +664,35 @@ app.get("/api/alerts/:id/versions",auth,roles("admin","reviewer","approver"),(re
  const changed_fields=current&&previous?Object.keys(current).filter(key=>JSON.stringify(current[key])!==JSON.stringify(previous[key])):[];
  res.set("Cache-Control","no-store").json({versions,count:versions.length,changed_fields,has_comparison:!!previous});
 });
+app.get("/api/alerts/:id/timeline",auth,roles("admin","reviewer","approver"),(req,res)=>{
+ const alertId=Number(req.params.id);
+ if(!Number.isSafeInteger(alertId)||alertId<1)return res.status(400).json({error:"Invalid alert id"});
+ const exists=db.prepare("SELECT id FROM alerts WHERE id=?").get(alertId);
+ if(!exists)return res.status(404).json({error:"Alert not found"});
+ const versions=db.prepare(`SELECT v.id,v.version_no,v.change_type,v.created_at,u.username AS actor
+  FROM alert_versions v LEFT JOIN users u ON u.id=v.changed_by
+  WHERE v.alert_id=? ORDER BY v.created_at ASC,v.id ASC LIMIT 200`).all(alertId);
+ const auditRows=db.prepare(`SELECT l.id,l.action,l.details,l.created_at,u.username AS actor
+  FROM audit_log l LEFT JOIN users u ON u.id=l.user_id
+  WHERE l.alert_id=? ORDER BY l.created_at ASC,l.id ASC LIMIT 500`).all(alertId);
+ const versionEvents=versions.map(row=>({id:"version-"+row.id,source:"version",
+  event_type:row.change_type,summary:row.change_type==="created"?"إنشاء النسخة الأولى":"تحديث مسودة التحذير",
+  version_no:row.version_no,actor:row.actor,created_at:row.created_at}));
+ const auditEvents=auditRows.map(row=>{
+  const labels={created:"إنشاء التحذير",submitted:"إرسال للمراجعة",approved:"اعتماد التحذير",
+   returned_to_author:"إعادة للمُنشئ",published:"نشر التحذير",cancelled:"إلغاء التحذير",
+   review_note_added:"إضافة ملاحظة مراجعة",draft_updated:"تعديل المسودة",
+   derived:"إنشاء رسالة مشتقة",webhook_inbox_reviewed:"مراجعة رسالة واردة"};
+  return {id:"audit-"+row.id,source:"audit",event_type:row.action,
+   summary:labels[row.action]||"حدث: "+row.action,
+   details:["review_note_added","returned_to_author"].includes(row.action)?String(row.details||"").slice(0,1000):"",
+   actor:row.actor,created_at:row.created_at};
+ });
+ const timeline=[...versionEvents,...auditEvents].sort((a,b)=>a.created_at.localeCompare(b.created_at)||
+  (a.source===b.source?String(a.id).localeCompare(String(b.id)):a.source==="version"?-1:1));
+ res.set("Cache-Control","no-store").json({alert_id:alertId,count:timeline.length,
+  truncated:versions.length===200||auditRows.length===500,timeline});
+});
 app.get("/api/alerts/:id",auth,(req,res)=>{
  const row = db.prepare("SELECT * FROM alerts WHERE id=?").get(req.params.id);
  if (!row) return res.status(404).json({error:"Alert not found"});

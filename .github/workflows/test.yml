@@ -45,7 +45,7 @@ jobs:
                 !setupPs1.includes("npm ci") ||
                 !startBat.includes("LSS 22") || !startBat.includes("where npm") ||
                 !startBat.includes("call npm ci") ||
-                startBat.toLowerCase().includes('if not exist "node_modules"')) {
+                startBat.toLowerCase().includes("if not exist \"node_modules\"")) {
               throw new Error("Node.js policy or Windows dependency-bootstrap behavior differs from the tested setup contract");
             }
             console.log("Node.js 22 policy and reproducible Windows dependency bootstrap are consistent across package, local pin, setup scripts, and CI.");

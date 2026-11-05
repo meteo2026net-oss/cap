@@ -521,8 +521,35 @@ app.patch("/api/users/:id/status",auth,roles("admin"),(req,res)=>{
 });
 
 app.get("/api/alerts",auth,(req,res)=>{
- const rows = db.prepare("SELECT id,identifier,event,urgency,severity,certainty,headline,area_desc,workflow,sent,expires,status,msg_type FROM alerts ORDER BY sent DESC LIMIT 500").all();
- res.json({alerts:rows});
+ const workflow = req.query.workflow;
+ const severity = req.query.severity;
+ const status = req.query.status;
+ const search = typeof req.query.q === "string" ? req.query.q.trim().slice(0,160) : "";
+ const parseBoundedInteger = (value, fallback, maximum) => {
+  if (value === undefined) return fallback;
+  if (!/^(0|[1-9]\\d*)$/.test(String(value))) return null;
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed <= maximum ? parsed : null;
+ };
+ const limit = parseBoundedInteger(req.query.limit,100,500);
+ const offset = parseBoundedInteger(req.query.offset,0,1000000);
+ if (limit === null || offset === null) return res.status(400).json({error:"Invalid pagination parameters"});
+ if (workflow !== undefined && !["draft","pending","approved","published","cancelled"].includes(workflow)) return res.status(400).json({error:"Invalid workflow filter"});
+ if (severity !== undefined && !["Extreme","Severe","Moderate","Minor","Unknown"].includes(severity)) return res.status(400).json({error:"Invalid severity filter"});
+ if (status !== undefined && !["Actual","Exercise","System","Test"].includes(status)) return res.status(400).json({error:"Invalid CAP status filter"});
+ const clauses = [];
+ const params = [];
+ if (workflow !== undefined) { clauses.push("workflow=?"); params.push(workflow); }
+ if (severity !== undefined) { clauses.push("severity=?"); params.push(severity); }
+ if (status !== undefined) { clauses.push("status=?"); params.push(status); }
+ if (search) {
+  clauses.push("(instr(lower(identifier),lower(?))>0 OR instr(lower(event),lower(?))>0 OR instr(lower(headline),lower(?))>0 OR instr(lower(area_desc),lower(?))>0)");
+  params.push(search,search,search,search);
+ }
+ const where = clauses.length ? "WHERE " + clauses.join(" AND ") : "";
+ const total = db.prepare("SELECT COUNT(*) AS count FROM alerts " + where).get(...params).count;
+ const rows = db.prepare("SELECT id,identifier,event,urgency,severity,certainty,headline,area_desc,workflow,sent,expires,status,msg_type FROM alerts " + where + " ORDER BY sent DESC,id DESC LIMIT ? OFFSET ?").all(...params,limit,offset);
+ res.json({alerts:rows,pagination:{total,limit,offset,has_more:offset+rows.length<total}});
 });
 app.get("/api/alerts/:id",auth,(req,res)=>{
  const row = db.prepare("SELECT * FROM alerts WHERE id=?").get(req.params.id);

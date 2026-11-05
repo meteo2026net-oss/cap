@@ -93,3 +93,36 @@ jobs:
           echo "Syntax checks passed for $count tracked JavaScript files."
       - run: npm test
       - run: npm run test:cap-schema
+
+  windows-backup:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Install exact dependency versions
+        run: npm ci --no-audit --no-fund
+      - name: Test configured backup and restore CLIs on Windows
+        run: node --test tests/backup-cli.test.js
+      - name: Parse Windows PowerShell backup scripts
+        shell: pwsh
+        run: |
+          $files = @(
+            "scripts/run-backup.ps1",
+            "scripts/install-daily-backup.ps1",
+            "scripts/remove-daily-backup.ps1"
+          )
+          foreach ($file in $files) {
+            $tokens = $null
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile(
+              (Join-Path $PWD $file), [ref]$tokens, [ref]$errors
+            ) | Out-Null
+            if ($errors.Count -gt 0) {
+              $errors | ForEach-Object { Write-Error $_.Message }
+              throw "PowerShell syntax validation failed: $file"
+            }
+          }
+          Write-Output "All Windows backup PowerShell scripts parsed successfully."

@@ -124,3 +124,8 @@ Before operational use, expand the existing official CAP 1.2 XSD check into a co
 ## Roadmap
 
 See [docs-architecture.md](docs-architecture.md) for the staged delivery plan.
+
+## Security
+
+See [Security operations and deployment boundaries](docs/SECURITY.md) for current safeguards, deployment precautions, and known limitations. This project is a development foundation and is not certified for operational public-warning issuance.
+

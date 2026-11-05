@@ -345,6 +345,9 @@ test("API enforces role separation, public-feed filtering and account deactivati
   const reviewer = await login("reviewer1", "Temporary-Password-2026!");
   const publisherInitialSession = await login("publisher1", "Temporary-Password-2026!");
   const publisher = await enrollMfa(publisherInitialSession, "Temporary-Password-2026!");
+  const publisherProfile = await request("/api/me", { token: publisher });
+  assert.equal(publisherProfile.data.user.role, "publisher");
+  assert.equal(publisherProfile.data.user.mfa_enabled, 1, "MFA confirmation should be reflected in authenticated role context");
   const approverInitialSession = await login("approver1", "Temporary-Password-2026!");
   const approver = await enrollMfa(approverInitialSession, "Temporary-Password-2026!");
   const viewer = disabledOldSession;
@@ -518,9 +521,10 @@ test("API enforces role separation, public-feed filtering and account deactivati
   assert.equal((await request(`/api/alerts/${separationDraft.data.id}/publish`, {
     token: admin, method: "POST", body: {}
   })).status, 403, "the same administrator who approved a warning must not publish it");
-  assert.equal((await request(`/api/alerts/${separationDraft.data.id}/publish`, {
+  const independentPublisherResult = await request(`/api/alerts/${separationDraft.data.id}/publish`, {
     token: publisher, method: "POST", body: {}
-  })).status, 200, "a different publisher should be able to publish after the approving administrator is blocked");
+  });
+  assert.equal(independentPublisherResult.status, 200, "a different publisher should be able to publish after the approving administrator is blocked: " + JSON.stringify(independentPublisherResult.data));
 
   const actualIdentifier = await createAndPublish("Actual");
   const original = await request("/api/alerts", { token: forecaster });

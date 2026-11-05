@@ -720,6 +720,22 @@ test("API enforces role separation, public-feed filtering and account deactivati
     assert.ok(reviewHistory.data.entries.some(entry =>
       entry.action === "review_note_added" && entry.details === "Verify the affected area boundaries before approval."
     ), "review history should include the saved note");
+    const timeline = await request(`/api/alerts/${id}/timeline`, { token: reviewer });
+    assert.equal(timeline.status, 200, "reviewers should access the unified alert timeline");
+    assert.ok(timeline.data.timeline.some(item => item.source === "version" && item.version_no === 1),
+      "timeline should include immutable content snapshots");
+    assert.ok(timeline.data.timeline.some(item => item.source === "audit" && item.event_type === "submitted"),
+      "timeline should include workflow transitions");
+    assert.ok(timeline.data.timeline.some(item => item.event_type === "review_note_added" &&
+      item.details === "Verify the affected area boundaries before approval."),
+      "timeline should include review notes");
+    assert.deepEqual(timeline.data.timeline.map(item => item.created_at),
+      [...timeline.data.timeline].map(item => item.created_at).sort(),
+      "timeline events should be returned in chronological order");
+    assert.equal((await request(`/api/alerts/${id}/timeline`, { token: forecaster })).status, 403,
+      "forecasters must not access the reviewer timeline");
+    assert.equal((await request("/api/alerts/999999/timeline", { token: reviewer })).status, 404,
+      "timeline must reject unknown alerts");
     assert.equal((await request("/api/review/queue", { token: forecaster })).status, 403,
       "forecasters must not access the reviewer queue");
     assert.equal((await request("/api/review/queue?limit=201", { token: reviewer })).status, 400,

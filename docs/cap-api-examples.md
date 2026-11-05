@@ -142,3 +142,14 @@ The dashboard provides an advanced JSON editor for multilingual `info_blocks`, a
 ## Public GeoJSON feed
 
 `GET /api/public/alerts.geojson` returns a GeoJSON `FeatureCollection` containing geometry from published alerts only when CAP `scope` is `Public` and CAP `status` is `Actual`. CAP polygon coordinate pairs are converted from latitude,longitude to GeoJSON longitude,latitude order. CAP circles are emitted as GeoJSON `Point` features with `geometry_kind: circle` and `radius_km` properties because GeoJSON has no native circle geometry. Each polygon or circle becomes a separate feature; multilingual and multi-area info blocks are included.
+## Export filtered internal alerts as CSV
+
+`GET /api/alerts/export.csv` requires an authenticated session and accepts the same `q`, `workflow`, `severity` and `status` filters as `GET /api/alerts`. The export is sorted newest first and includes identifier, event, headline, affected area, urgency, severity, certainty, CAP status, workflow, message type, sent time and expiry.
+
+- The export is limited to 5,000 rows. If more rows match, the endpoint returns HTTP 413 and asks the user to narrow the filters.
+- CSV fields are quoted and embedded quotes are escaped. The response includes a UTF-8 BOM for spreadsheet compatibility.
+- Cells beginning with formula-triggering characters are prefixed with an apostrophe to reduce spreadsheet formula-injection risk.
+- Responses are marked `Cache-Control: no-store` and are not available from the public feed.
+- The dashboard export button carries the current search and filter selections into the downloaded file.
+
+Example: `GET /api/alerts/export.csv?q=rain&workflow=published&severity=Severe`

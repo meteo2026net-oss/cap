@@ -32,7 +32,7 @@ npm start
 
 The setup command creates a local `.env` file only if one does not already exist, generates a strong JWT secret, initial administrator password, and persistent 32-byte MFA encryption key, and creates the `storage` and `backups` folders. Keep the MFA key backed up separately and do not rotate it while accounts have enrolled MFA secrets. Save the generated administrator password when it is displayed. The setup command never overwrites an existing `.env`.
 
-Alternatively, run `powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\setup-local.ps1` and then `npm start`, or double-click `start-local.bat`.
+Alternatively, run `powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\setup-local.ps1` and then `npm start`, or double-click `start-local.bat`. Both Windows startup paths run `npm ci` so an incomplete or stale `node_modules` directory cannot silently bypass the lockfile.
 
 Open http://localhost:8095. Stop the server with Ctrl+C.
 
@@ -51,7 +51,7 @@ The setup command generates local secrets and creates the data folders. Open htt
 
 ## Normal subsequent starts
 
-After the first setup and dependency installation, use:
+After the first setup, use `npm start` for a fast start that does not reinstall dependencies. The Windows `start-local.bat` convenience launcher intentionally runs `npm ci` on each launch to verify and repair the exact locked dependency tree.
 
 ```bash
 npm start

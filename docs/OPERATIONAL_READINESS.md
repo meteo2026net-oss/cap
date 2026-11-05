@@ -65,7 +65,8 @@ These are deployment-time decisions; they are not needed to continue repository 
 - [x] Provide a local backup-health CLI check for missing, corrupt, or stale newest backups, with configurable freshness threshold, JSON output, and non-zero exit status for scheduler/CI consumption; external alert routing remains pending.
 - [ ] Configure monitoring/alerting for missed or failed backup jobs and deploy equivalent scheduled automation on non-Windows hosts.
 - [ ] Perform a restore drill in an isolated environment using a production-like backup.
-- [ ] Verify SQLite integrity, foreign keys, users, alerts, workflow states, references, and audit-chain verification after restore.
+- [x] Provide a read-only post-restore verification CLI that checks SQLite integrity, foreign keys, audit-chain validity, and core users/alerts/audit record counts.
+- [ ] Verify restored workflow states and CAP references against a production-like backup during an isolated restore drill.
 - [ ] Record the drill date, backup identifier, operator, measured recovery time, and result.
 - [ ] Document disaster recovery, host loss, credential compromise, and database corruption procedures.
 

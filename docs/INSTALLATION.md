@@ -5,7 +5,7 @@ This repository supports two equivalent operating modes. Both use the same appli
 ## Mode A — Run directly (no Docker)
 
 ### Requirements
-- Node.js 20 or newer (CI currently tests with Node.js 22)
+- Node.js 22 or newer (the CI and Docker image use Node.js 22)
 - npm (included with Node.js)
 - Windows 10/11, Linux, or macOS
 
@@ -153,7 +153,7 @@ Both modes currently use the same application and database format. The delivery 
 
 - **Server refuses to start:** verify that `.env` exists and that `JWT_SECRET` is at least 32 characters and `ADMIN_PASSWORD` is at least 14 characters; neither may be a placeholder.
 - **Port 8095 is busy:** change `PORT` in `.env` for direct mode. For Docker mode change `CAP_PORT` (the internal container port remains 8095).
-- **better-sqlite3 installation fails:** use a supported Node.js LTS release (Node 20+) and install the platform's native build tools if npm requests them.
+- **better-sqlite3 installation fails:** use a supported Node.js LTS release (Node 22+) and install the platform's native build tools if npm requests them.
 - **Map tiles do not load:** the dashboard map requires internet access to the OpenStreetMap tile service.
 - **Forgot the generated initial password:** if no users/data have been created yet, stop the service, back up the database, and follow a reviewed administrator recovery procedure; do not delete the database as a routine password reset.
 

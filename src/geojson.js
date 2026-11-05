@@ -1,11 +1,11 @@
 function parseDecimal(value) {
-  if (typeof value !== "string" || !/^[+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)$/.test(value.trim())) return NaN;
+  if (typeof value !== "string" || !/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(value.trim())) return NaN;
   return Number(value);
 }
 
 function parsePolygon(value) {
   if (typeof value !== "string" || !value.trim()) return null;
-  const pairs = value.trim().split(/\\s+/).map(pair => {
+  const pairs = value.trim().split(/\s+/).map(pair => {
     const parts = pair.split(",");
     if (parts.length !== 2) throw new Error("Invalid CAP polygon coordinates: malformed coordinate pair.");
     const lat = parseDecimal(parts[0]), lon = parseDecimal(parts[1]);

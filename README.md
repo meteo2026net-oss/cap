@@ -68,7 +68,7 @@ The service listens on `127.0.0.1:8095` by default and stores SQLite data in the
 - CAP 1.2 XML export with numeric-offset timestamps, multiple language blocks, multiple categories/response types, multiple affected areas, geocodes, altitude/ceiling, parameters and supplemental resources.
 - Dashboard advanced JSON editor for multilingual information blocks and supplemental resources.
 - Dashboard actions and API support for linked Update and Cancel drafts; derived messages remain in Test status pending independent review.
-- Administrator account activation/deactivation and role changes with safeguards against disabling/demoting the current or last active administrator; role changes revoke existing sessions.
+- Administrator account activation/deactivation, role changes, and audited password resets. Password resets issue a generated temporary password once, revoke all sessions, and require a password change before application access; role changes revoke existing sessions.
 - Successful sign-ins update a persistent last-login timestamp, visible to administrators in the account-management panel; each successful sign-in is also recorded in the append-only, hash-chained audit history. Restricted audit history supports bounded cursor pagination. Existing SQLite databases are upgraded automatically.
 - GitHub Actions downloads the official OASIS CAP 1.2 XSD and validates a generated multilingual XML example with xmllint.
 - Public JSON feed for published Public-scope `Actual` alerts, including multilingual `info_blocks`, geometry, references, and CAP metadata.
@@ -94,7 +94,7 @@ The service listens on `127.0.0.1:8095` by default and stores SQLite data in the
 - `GET /api/auth/mfa/status`, `POST /api/auth/mfa/enroll`, `POST /api/auth/mfa/confirm`, and `POST /api/auth/mfa/disable`
 - `GET /api/users` (admin only)
 - `POST /api/users` (admin only; provisions admin/forecaster/reviewer/approver/publisher/viewer accounts)
-- `PATCH /api/users/:id/status` (admin only; activates/deactivates an account with last-admin safeguards and revokes existing sessions on state changes)
+- `POST /api/users/:id/password-reset` (admin only; issues a temporary password once, revokes existing sessions, and forces password change before normal application access)\n- `PATCH /api/users/:id/status` (admin only; activates/deactivates an account with last-admin safeguards and revokes existing sessions on state changes)
 - `PATCH /api/users/:id/role` (admin only; changes an account role, prevents self/last-admin demotion, and revokes existing sessions)
 - `GET /api/alerts`
 - `GET /api/alerts/:id`

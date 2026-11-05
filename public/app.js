@@ -407,7 +407,7 @@ $("#alertForm").addEventListener("submit",async e=>{
  if(jsonBlocks){try{obj.info_blocks=JSON.parse(jsonBlocks);if(!Array.isArray(obj.info_blocks)||obj.info_blocks.length<1)throw new Error("يجب إدخال مصفوفة غير فارغة")}catch(error){alert("صيغة JSON غير صحيحة في كتل اللغات المتعددة: "+error.message);return}}
  const hasInfoArea=obj.info_blocks?.some(b=>b.area||b.areas?.length);
  if(!obj.polygon?.trim()&&!obj.circle?.trim()&&!hasInfoArea){alert("أدخل مضلعاً أو دائرة أو منطقة جغرافية ضمن كتل المعلومات.");return}
- for(const k of ["onset","expires"])if(obj[k])obj[k]=new Date(obj[k]).toISOString();else obj[k]="";
+ for(const k of ["effective","onset","expires"])if(obj[k])obj[k]=new Date(obj[k]).toISOString();else obj[k]="";
  try{
   if(editingAlertId){
    const id=editingAlertId;
@@ -426,7 +426,7 @@ async function editDraft(id){
   const alertData=current.alert;
   if(alertData.workflow!=="draft")throw new Error("لا يمكن تعديل تحذير لم يعد مسودة.");
   const form=$("#alertForm");
-  const values={event:alertData.event,headline:alertData.headline,category:alertData.category,urgency:alertData.urgency,severity:alertData.severity,certainty:alertData.certainty,status:alertData.status,scope:alertData.scope,onset:dateForLocalInput(alertData.onset),expires:dateForLocalInput(alertData.expires),area_desc:alertData.area_desc,description:alertData.description,instruction:alertData.instruction,polygon:alertData.polygon,circle:alertData.circle,info_blocks_json:alertData.info_blocks?.length?JSON.stringify(alertData.info_blocks,null,2):""};
+  const values={event:alertData.event,headline:alertData.headline,category:alertData.category,urgency:alertData.urgency,severity:alertData.severity,certainty:alertData.certainty,status:alertData.status,scope:alertData.scope,effective:dateForLocalInput(alertData.effective),onset:dateForLocalInput(alertData.onset),expires:dateForLocalInput(alertData.expires),response_type:alertData.response_type,language:alertData.language,area_desc:alertData.area_desc,description:alertData.description,instruction:alertData.instruction,polygon:alertData.polygon,circle:alertData.circle,info_blocks_json:alertData.info_blocks?.length?JSON.stringify(alertData.info_blocks,null,2):""};
   for(const [name,value] of Object.entries(values)){const field=form.elements.namedItem(name);if(field)field.value=value??""}
   editingAlertId=id;setAlertEditorMode(true);form.scrollIntoView({behavior:"smooth",block:"start"});
  }catch(error){alert(error.message)}

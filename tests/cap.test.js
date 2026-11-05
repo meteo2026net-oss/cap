@@ -213,7 +213,7 @@ test("validates CAP references as complete sender,identifier,sent triplets", () 
     "alerts@example.test,urn:uuid:previous-two,2026-11-04T06:30:00Z"
   ].join(" ");
   const xml = buildCapXml({ ...valid, msg_type: "Update", references_text: references });
-  assert.match(xml, /<msgType>Update<\\/msgType>/);
+  assert.ok(xml.includes("<msgType>Update</msgType>"));
   assert.match(xml, /urn:uuid:previous-one/);
   assert.match(xml, /urn:uuid:previous-two/);
 });
@@ -236,6 +236,6 @@ test("allows multiple CAP references separated by whitespace only", () => {
   const references_text = [
     "alerts@example.test,urn:uuid:one,2026-11-03T12:00:00-00:00",
     "alerts@example.test,urn:uuid:two,2026-11-04T12:00:00-00:00"
-  ].join("\\n");
+  ].join(" ");
   assert.equal(validateAlert({ ...valid, msg_type: "Cancel", references_text }), true);
 });

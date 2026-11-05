@@ -148,7 +148,12 @@ const schema = z.object({
 function auth(req,res,next) {
  const token = (req.headers.authorization || "").replace(/^Bearer\s+/i,"");
  try {
-   req.user = jwt.verify(token, secret);
+   const claims = jwt.verify(token, secret);
+   // MFA login challenges are purpose-bound credentials, never authenticated sessions.
+   if (claims.purpose !== undefined || claims.jti !== undefined) {
+    return res.status(401).json({error:"Authentication required"});
+   }
+   req.user = claims;
    const user = db.prepare("SELECT id,username,role,active,token_version,mfa_enabled,must_change_password FROM users WHERE id=?").get(req.user.id);
    if (!user || !user.active) return res.status(401).json({error:"Account unavailable"});
    if (req.user.token_version !== user.token_version) return res.status(401).json({error:"Session expired; please sign in again"});

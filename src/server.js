@@ -271,13 +271,15 @@ app.post("/api/auth/mfa/confirm",auth,mfaChallengeLimiter,(req,res)=>{
    const current=db.prepare("SELECT mfa_enabled,mfa_pending_secret_enc,mfa_pending_expires_at FROM users WHERE id=?").get(req.user.id);
    if(!current || current.mfa_enabled || current.mfa_pending_secret_enc!==row.mfa_pending_secret_enc ||
       !current.mfa_pending_expires_at || Date.parse(current.mfa_pending_expires_at)<=Date.now()) return false;
-   db.prepare("UPDATE users SET mfa_enabled=1,mfa_secret_enc=?,mfa_pending_secret_enc=NULL,mfa_pending_expires_at=NULL,mfa_last_used_step=?,mfa_recovery_hashes=? WHERE id=?")
+   db.prepare("UPDATE users SET mfa_enabled=1,mfa_secret_enc=?,mfa_pending_secret_enc=NULL,mfa_pending_expires_at=NULL,mfa_last_used_step=?,mfa_recovery_hashes=?,token_version=token_version+1 WHERE id=?")
     .run(row.mfa_pending_secret_enc,step,hashes,req.user.id);
    audit(req.user.id,null,"mfa_enabled","TOTP enabled; one-time recovery codes generated");
    return true;
   }).immediate();
   if(!enable) return res.status(409).json({error:"MFA enrollment changed or expired; start again"});
-  res.json({enabled:true,recovery_codes:recoveryCodes,warning:"Store these recovery codes securely. They are shown only once."});
+  const tokenVersion=db.prepare("SELECT token_version FROM users WHERE id=?").get(req.user.id).token_version;
+  const replacementToken=jwt.sign({id:req.user.id,token_version:tokenVersion},secret,{expiresIn:"8h"});
+  res.json({enabled:true,token:replacementToken,recovery_codes:recoveryCodes,warning:"Store these recovery codes securely. They are shown only once."});
  } catch(error) {
   console.error("MFA confirmation failed:",error);
   res.status(503).json({error:"Unable to verify MFA enrollment"});

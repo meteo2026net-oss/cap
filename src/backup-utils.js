@@ -192,7 +192,7 @@ export async function createDatabaseBackup(database, directory, { now = new Date
     // Keep incomplete or not-yet-validated artifacts out of the visible backup set.
     await database.backup(temporary);
     await fs.chmod(temporary, 0o600);
-    await validateDatabaseFile(temporary, auditOptions);
+    await validateDatabaseFile(temporary);
     await fs.rename(temporary, destination);
     await writeChecksum(destination);
     return destination;
@@ -286,7 +286,7 @@ export async function restoreDatabaseBackup(source, destination, { force = false
   try {
     await fs.copyFile(sourcePath, temporary);
     await fs.chmod(temporary, 0o600);
-    await validateDatabaseFile(temporary);
+    await validateDatabaseFile(temporary, auditOptions);
 
     if (targetStat) {
       await fileSystem.rename(targetPath, rollback);

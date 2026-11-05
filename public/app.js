@@ -502,14 +502,36 @@ async function loadReviewQueue(){
     save.disabled=true;try{await api("/api/alerts/"+encodeURIComponent(item.id)+"/review-notes",{method:"POST",body:JSON.stringify({note:note.value})});note.value="";history.hidden=false;await loadReviewHistory(item.id,history);status.textContent="تم حفظ ملاحظة التحذير #"+item.id+" في سجل التدقيق.";}catch(error){alert(error.message)}finally{save.disabled=false}
    });
    const historyButton=document.createElement("button");historyButton.type="button";historyButton.className="secondary";historyButton.textContent="سجل قرارات المراجعة";historyButton.addEventListener("click",async()=>{history.hidden=false;await loadReviewHistory(item.id,history)});
-   actions.append(save,historyButton);
+   const versionsButton=document.createElement("button");versionsButton.type="button";versionsButton.className="secondary";versionsButton.textContent="مقارنة نسخ التحذير";versionsButton.addEventListener("click",async()=>{versionDiff.hidden=false;await loadAlertVersionDiff(item.id,versionDiff)});
+   actions.append(save,historyButton,versionsButton);
    for(const [action,label] of [["approve","اعتماد"],["return","إعادة للمُنشئ"]]){const button=document.createElement("button");button.type="button";button.textContent=label;button.dataset.alertAction=action;button.dataset.alertId=item.id;button.addEventListener("click",()=>act(item.id,action));actions.append(button);}
    card.append(actions);
    const history=document.createElement("div");history.className="reviewHistory small";history.hidden=true;history.textContent="اضغط لعرض سجل المراجعة.";card.append(history);
+   const versionDiff=document.createElement("div");versionDiff.className="reviewVersionDiff small";versionDiff.hidden=true;card.append(versionDiff);
    list.append(card);
   }
   if(!data.count)list.textContent="لا توجد تحذيرات بانتظار المراجعة";
  }catch(error){status.textContent=error.message;list.textContent=error.message;}
+}
+async function loadAlertVersionDiff(id,container){
+ container.textContent="جارٍ تحميل نسخ التحذير ومقارنة الحقول...";
+ try{
+  const data=await api("/api/alerts/"+encodeURIComponent(id)+"/versions");
+  container.replaceChildren();
+  if(!data.has_comparison){container.textContent="هذه النسخة الأولى؛ لا توجد نسخة سابقة للمقارنة.";return}
+  const versions=data.versions;
+  const heading=document.createElement("p");heading.textContent="النسخة الحالية #"+versions[0].version_no+" مقارنة بالنسخة #"+versions[1].version_no;container.append(heading);
+  const current=versions[0].snapshot,previous=versions[1].snapshot;
+  const labels={headline:"العنوان",event:"الحدث",description:"الوصف",instruction:"التعليمات",severity:"الشدة",urgency:"الإلحاح",certainty:"اليقين",status:"حالة CAP",scope:"النطاق",effective:"بداية الفعالية",onset:"بداية الحدث",expires:"انتهاء التحذير",area_desc:"المنطقة",polygon:"المضلع",circle:"الدائرة",language:"اللغة",info_blocks:"معلومات متعددة اللغات"};
+  for(const key of data.changed_fields){
+   const row=document.createElement("section");row.className="versionChange";
+   const label=document.createElement("b");label.textContent=labels[key]||key;row.append(label);
+   const before=document.createElement("p");before.textContent="قبل: "+JSON.stringify(previous[key]??null);row.append(before);
+   const after=document.createElement("p");after.textContent="بعد: "+JSON.stringify(current[key]??null);row.append(after);
+   container.append(row);
+  }
+  if(!data.changed_fields.length)container.append(document.createTextNode("لا توجد تغييرات في حقول CAP بين آخر نسختين."));
+ }catch(error){container.textContent=error.message;}
 }
 async function loadReviewHistory(id,container){
  container.textContent="جارٍ تحميل سجل المراجعة...";

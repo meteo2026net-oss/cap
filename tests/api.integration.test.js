@@ -486,8 +486,8 @@ test("API enforces role separation, public-feed filtering and account deactivati
     assert.equal(inboxRow.reviewed_by, (await inboxDatabase.prepare("SELECT id FROM users WHERE username=?").get("reviewer1")).id,
       "reviewer identity should be persisted with the inbox decision");
     assert.equal(JSON.parse(inboxRow.payload_json).provider, "synthetic-test");
-    assert.equal(inboxDatabase.prepare("SELECT COUNT(*) AS count FROM webhook_inbox").get().count, 2,
-      "only the two valid unique webhooks should enter the inbox");
+    assert.equal(inboxDatabase.prepare("SELECT COUNT(*) AS count FROM webhook_inbox").get().count, 3,
+      "only the three valid unique webhooks should enter the inbox");
   } finally {
     inboxDatabase.close();
   }

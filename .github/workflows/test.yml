@@ -40,6 +40,8 @@ jobs:
                 !setup.includes("nodeMajor < 22") ||
                 !setup.includes("Node.js 22 or newer") ||
                 !setupPs1.includes("$nodeMajor -lt 22") || !setupPs1.includes("npm ci") ||
+                !setupPs1.includes("$mfaBytes = New-Object byte[] 32") ||
+                !setupPs1.includes("MFA_ENCRYPTION_KEY=$mfaEncryptionKey") ||
                 !startBat.includes("LSS 22") || !startBat.includes("npm ci")) {
               throw new Error("Node.js version policy differs between package.json, .nvmrc, Windows setup scripts, and CI");
             }

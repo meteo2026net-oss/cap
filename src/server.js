@@ -188,17 +188,21 @@ app.post("/api/auth/login",loginLimiter,(req,res)=>{
  if (user.mfa_enabled) {
   const challengeId = randomUUID();
   const expiresAt = Date.now() + 5 * 60 * 1000;
-  db.prepare("DELETE FROM mfa_login_challenges WHERE expires_at < ? OR consumed_at IS NOT NULL").run(Date.now());
-  db.prepare("INSERT INTO mfa_login_challenges(id,user_id,expires_at) VALUES(?,?,?)").run(challengeId,user.id,expiresAt);
+  db.transaction(()=>{
+   db.prepare("DELETE FROM mfa_login_challenges WHERE expires_at < ? OR consumed_at IS NOT NULL").run(Date.now());
+   db.prepare("INSERT INTO mfa_login_challenges(id,user_id,expires_at) VALUES(?,?,?)").run(challengeId,user.id,expiresAt);
+   audit(user.id,null,"mfa_login_challenge_created","Password accepted; second factor required");
+  }).immediate();
   const challengeToken = jwt.sign(
    {id:user.id,token_version:user.token_version,purpose:"mfa-login",jti:challengeId},
    secret,{expiresIn:"5m"}
   );
-  audit(user.id,null,"mfa_login_challenge_created","Password accepted; second factor required");
   return res.json({mfa_required:true,password_change_required:user.must_change_password===1,challenge_token:challengeToken,expires_in:300});
  }
- db.prepare("UPDATE users SET last_login_at=CURRENT_TIMESTAMP WHERE id=?").run(user.id);
- audit(user.id,null,"login_succeeded","Successful password authentication; MFA not enabled");
+ db.transaction(()=>{
+  db.prepare("UPDATE users SET last_login_at=CURRENT_TIMESTAMP WHERE id=?").run(user.id);
+  audit(user.id,null,"login_succeeded","Successful password authentication; MFA not enabled");
+ }).immediate();
  const token = jwt.sign({id:user.id,token_version:user.token_version}, secret, {expiresIn:"8h"});
  res.json({token,password_change_required:user.must_change_password===1,user:{id:user.id,username:user.username,role:user.role}});
 });

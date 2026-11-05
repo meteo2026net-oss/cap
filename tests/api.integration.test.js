@@ -321,12 +321,12 @@ test("API enforces role separation, public-feed filtering and account deactivati
     assert.equal((await request(`/api/alerts/${id}/approve`, {
       token: viewer, method: "POST", body: {}
     })).status, 403, "viewers must not approve warnings");
-    assert.equal((await request(`/api/alerts/${id}/approve`, {
-      token: reviewer, method: "POST", body: {}
-    })).status, 200);
-    assert.equal((await request(`/api/alerts/${id}/approve`, {
-      token: reviewer, method: "POST", body: {}
-    })).status, 409, "an approved warning must not be approved twice");
+    const concurrentApprovals = await Promise.all([
+      request(`/api/alerts/${id}/approve`, { token: reviewer, method: "POST", body: {} }),
+      request(`/api/alerts/${id}/approve`, { token: reviewer, method: "POST", body: {} })
+    ]);
+    assert.deepEqual(concurrentApprovals.map(result => result.status).sort(), [200, 409],
+      "concurrent approval attempts must produce exactly one successful transition");
     assert.equal((await request(`/api/alerts/${id}/publish`, {
       token: reviewer, method: "POST", body: {}
     })).status, 403, "approver cannot publish the same warning");

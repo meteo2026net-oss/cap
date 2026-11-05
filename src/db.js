@@ -92,6 +92,22 @@ CREATE INDEX IF NOT EXISTS idx_delivery_alert ON delivery_outbox(alert_id);
  const userColumns = db.prepare("PRAGMA table_info(users)").all().map(column => column.name);
  if (!userColumns.includes("token_version")) db.exec("ALTER TABLE users ADD COLUMN token_version INTEGER NOT NULL DEFAULT 0");
  if (!userColumns.includes("last_login_at")) db.exec("ALTER TABLE users ADD COLUMN last_login_at TEXT");
+ if (!userColumns.includes("mfa_enabled")) db.exec("ALTER TABLE users ADD COLUMN mfa_enabled INTEGER NOT NULL DEFAULT 0 CHECK(mfa_enabled IN (0,1))");
+ if (!userColumns.includes("mfa_secret_enc")) db.exec("ALTER TABLE users ADD COLUMN mfa_secret_enc TEXT");
+ if (!userColumns.includes("mfa_pending_secret_enc")) db.exec("ALTER TABLE users ADD COLUMN mfa_pending_secret_enc TEXT");
+ if (!userColumns.includes("mfa_pending_expires_at")) db.exec("ALTER TABLE users ADD COLUMN mfa_pending_expires_at TEXT");
+ if (!userColumns.includes("mfa_last_used_step")) db.exec("ALTER TABLE users ADD COLUMN mfa_last_used_step INTEGER");
+ if (!userColumns.includes("mfa_recovery_hashes")) db.exec("ALTER TABLE users ADD COLUMN mfa_recovery_hashes TEXT NOT NULL DEFAULT '[]'");
+ db.exec(`
+  CREATE TABLE IF NOT EXISTS mfa_login_challenges (
+   id TEXT PRIMARY KEY,
+   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+   expires_at INTEGER NOT NULL,
+   consumed_at TEXT,
+   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE INDEX IF NOT EXISTS idx_mfa_challenges_expiry ON mfa_login_challenges(expires_at, consumed_at);
+ `);
 
  const deliveryColumns = db.prepare("PRAGMA table_info(delivery_outbox)").all().map(column => column.name);
  if (!deliveryColumns.includes("max_attempts")) db.exec("ALTER TABLE delivery_outbox ADD COLUMN max_attempts INTEGER NOT NULL DEFAULT 5 CHECK(max_attempts BETWEEN 1 AND 20)");

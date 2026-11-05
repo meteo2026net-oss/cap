@@ -3,8 +3,8 @@ import path from "node:path";
 import { randomBytes } from "node:crypto";
 
 const nodeMajor = Number(process.versions.node.split(".")[0]);
-if (nodeMajor < 20) {
-  console.error(`Node.js 20 or newer is required. Detected: ${process.version}`);
+if (nodeMajor < 22) {
+  console.error(`Node.js 22 or newer is required. Detected: ${process.version}`);
   process.exit(1);
 }
 

@@ -91,6 +91,7 @@ CREATE INDEX IF NOT EXISTS idx_delivery_alert ON delivery_outbox(alert_id);
 
  const userColumns = db.prepare("PRAGMA table_info(users)").all().map(column => column.name);
  if (!userColumns.includes("token_version")) db.exec("ALTER TABLE users ADD COLUMN token_version INTEGER NOT NULL DEFAULT 0");
+ if (!userColumns.includes("must_change_password")) db.exec("ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0 CHECK(must_change_password IN (0,1))");
  if (!userColumns.includes("last_login_at")) db.exec("ALTER TABLE users ADD COLUMN last_login_at TEXT");
  if (!userColumns.includes("mfa_enabled")) db.exec("ALTER TABLE users ADD COLUMN mfa_enabled INTEGER NOT NULL DEFAULT 0 CHECK(mfa_enabled IN (0,1))");
  if (!userColumns.includes("mfa_secret_enc")) db.exec("ALTER TABLE users ADD COLUMN mfa_secret_enc TEXT");

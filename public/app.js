@@ -421,6 +421,7 @@ async function loadAlerts(){
     actions.push("<button class='secondary' data-alert-derive='Update' data-alert-id='"+id+"'>إنشاء تحديث</button>");
     actions.push("<button class='secondary' data-alert-derive='Cancel' data-alert-id='"+id+"'>إلغاء التحذير</button>");
    }
+   actions.push("<button class='secondary' data-alert-relations='1' data-alert-id='"+id+"'>سلسلة الرسائل</button>");
    actions.push("<button class='secondary' data-alert-download='"+id+"'>CAP XML</button>");
    const severityClass=a.severity==="Extreme"||a.severity==="Severe"?"red":"orange";
    return "<article class='alertItem'><b>"+esc(a.headline)+"</b><div class='alertMeta'><span>"+esc(a.event)+"</span><span class='pill'>"+esc(a.workflow)+"</span><span class='pill "+severityClass+"'>"+esc(a.severity)+"</span><span>"+esc(a.area_desc)+"</span></div><div class='actions'>"+actions.join("")+"</div></article>";
@@ -430,6 +431,20 @@ async function loadAlerts(){
   else $("#alertsList").textContent=e.message;
  }
 }
+async function loadAlertRelations(id){
+ const panel=$("#alertRelationsPanel"),list=$("#alertRelationsList"),meta=$("#alertRelationsMeta");
+ panel.hidden=false;list.textContent="جارٍ تحميل سلسلة الرسائل…";meta.textContent="التحقق من روابط CAP references للرسالة المحددة.";
+ panel.scrollIntoView({behavior:"smooth",block:"nearest"});
+ try{
+  const data=await api("/api/alerts/"+encodeURIComponent(id)+"/relations");
+  meta.textContent="عدد الرسائل المرتبطة: "+data.count+(data.truncated?" • تم بلوغ حد العرض":"");
+  list.innerHTML=data.messages.map(message=>{
+   const label=message.msg_type==="Alert"?"رسالة أصلية":message.msg_type==="Update"?"تحديث":message.msg_type==="Cancel"?"إلغاء":message.msg_type;
+   return "<article class='alertItem'><b>"+esc(message.headline||message.event||message.identifier)+"</b><div class='alertMeta'><span>"+esc(label)+"</span><span class='pill'>"+esc(message.workflow)+"</span><span class='pill'>"+esc(message.status)+"</span><span>"+esc(message.sent)+"</span><span>"+esc(message.identifier)+"</span></div><div class='muted small'>"+esc(message.references_text||"لا توجد رسالة مرجعية")+"</div></article>";
+  }).join("")||"<p class='muted'>لا توجد رسائل مرتبطة.</p>";
+ }catch(error){list.textContent=error.message;}
+}
+$("#alertRelationsClose")?.addEventListener("click",()=>{$("#alertRelationsPanel").hidden=true;});
 function esc(s=""){return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
 async function downloadXml(id){try{const r=await fetch(`/api/alerts/${id}/cap.xml`,{headers:headers()});if(!r.ok)throw new Error("تعذر إنشاء XML");const blob=await r.blob(),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download=`cap-alert-${id}.xml`;a.click();URL.revokeObjectURL(url)}catch(e){alert(e.message)}}
 $("#alertsList").addEventListener("click",event=>{
@@ -440,6 +455,7 @@ $("#alertsList").addEventListener("click",event=>{
  if(button.dataset.alertAction)act(id,button.dataset.alertAction);
  else if(button.dataset.alertDerive)derive(id,button.dataset.alertDerive);
  else if(button.dataset.alertDownload)downloadXml(id);
+ else if(button.dataset.alertRelations)loadAlertRelations(id);
 });
 $("#webhookInboxList")?.addEventListener("click",event=>{
  const button=event.target.closest("button[data-webhook-review]");

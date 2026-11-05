@@ -13,7 +13,8 @@ import { buildCapXml, makeIdentifier, validateAlert } from "./cap.js";
 import { alertsToGeoJSON } from "./geojson.js";
 import { appendAuditLog, verifyAuditChain } from "./audit.js";
 import { enqueueDelivery, claimDelivery, recordDeliveryReceipt, retryDelivery, recoverStaleDeliveries, processDueRetries } from "./delivery.js";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
+import { consumeRecoveryCode, decryptTotpSecret, encryptTotpSecret, generateRecoveryCodes, generateTotpSecret, hashRecoveryCode, verifyTotp } from "./mfa.js";
 import { verifyAndConsumeWebhook } from "./webhook-replay.js";
 
 const app = express();
@@ -161,10 +162,155 @@ app.post("/api/auth/login", (req,res)=>{
  const passwordHash = user?.active ? user.password_hash : DUMMY_PASSWORD_HASH;
  const passwordMatches = bcrypt.compareSync(password, passwordHash);
  if (!user || !user.active || !passwordMatches) return res.status(401).json({error:"Invalid credentials"});
+ if (user.mfa_enabled) {
+  const challengeId = randomUUID();
+  const expiresAt = Date.now() + 5 * 60 * 1000;
+  db.prepare("DELETE FROM mfa_login_challenges WHERE expires_at < ? OR consumed_at IS NOT NULL").run(Date.now());
+  db.prepare("INSERT INTO mfa_login_challenges(id,user_id,expires_at) VALUES(?,?,?)").run(challengeId,user.id,expiresAt);
+  const challengeToken = jwt.sign(
+   {id:user.id,token_version:user.token_version,purpose:"mfa-login",jti:challengeId},
+   secret,{expiresIn:"5m"}
+  );
+  audit(user.id,null,"mfa_login_challenge_created","Password accepted; second factor required");
+  return res.json({mfa_required:true,challenge_token:challengeToken,expires_in:300});
+ }
  db.prepare("UPDATE users SET last_login_at=CURRENT_TIMESTAMP WHERE id=?").run(user.id);
- audit(user.id,null,"login_succeeded","Successful authentication");
+ audit(user.id,null,"login_succeeded","Successful password authentication; MFA not enabled");
  const token = jwt.sign({id:user.id,token_version:user.token_version}, secret, {expiresIn:"8h"});
  res.json({token,user:{id:user.id,username:user.username,role:user.role}});
+});
+const mfaChallengeLimiter = rateLimit({windowMs:15*60*1000,limit:10,standardHeaders:true,legacyHeaders:false});
+app.post("/api/auth/mfa/challenge",mfaChallengeLimiter,(req,res)=>{
+ const {challenge_token:challengeToken,code}=req.body || {};
+ if(typeof challengeToken!=="string" || challengeToken.length>4096 || typeof code!=="string" || code.length>64)
+  return res.status(401).json({error:"Invalid or expired MFA challenge"});
+ let claims;
+ try {
+  claims=jwt.verify(challengeToken,secret);
+  if(claims.purpose!=="mfa-login" || typeof claims.jti!=="string") throw new Error("Invalid challenge purpose");
+ } catch { return res.status(401).json({error:"Invalid or expired MFA challenge"}); }
+ const user=db.prepare("SELECT id,username,role,active,token_version,mfa_secret_enc,mfa_last_used_step,mfa_recovery_hashes FROM users WHERE id=?").get(claims.id);
+ if(!user || !user.active || user.token_version!==claims.token_version || !user.mfa_secret_enc)
+  return res.status(401).json({error:"Invalid or expired MFA challenge"});
+ try {
+  const complete=db.transaction(()=>{
+   const challenge=db.prepare("SELECT id FROM mfa_login_challenges WHERE id=? AND user_id=? AND expires_at>? AND consumed_at IS NULL").get(claims.jti,user.id,Date.now());
+   if(!challenge) return null;
+   const now=Date.now();
+   let nextRecovery=null;
+   let acceptedStep=null;
+   const secretValue=decryptTotpSecret(user.mfa_secret_enc);
+   acceptedStep=verifyTotp(secretValue,code,now,1);
+   if(acceptedStep!==null) {
+    if(user.mfa_last_used_step!==null && acceptedStep<=user.mfa_last_used_step) return null;
+   } else {
+    let hashes;
+    try { hashes=JSON.parse(user.mfa_recovery_hashes||"[]"); } catch { hashes=[]; }
+    nextRecovery=consumeRecoveryCode(hashes,code);
+    if(nextRecovery===null) return null;
+   }
+   db.prepare("UPDATE mfa_login_challenges SET consumed_at=CURRENT_TIMESTAMP WHERE id=? AND consumed_at IS NULL").run(claims.jti);
+   if(acceptedStep!==null) db.prepare("UPDATE users SET mfa_last_used_step=? WHERE id=?").run(acceptedStep,user.id);
+   else db.prepare("UPDATE users SET mfa_recovery_hashes=? WHERE id=?").run(JSON.stringify(nextRecovery),user.id);
+   db.prepare("UPDATE users SET last_login_at=CURRENT_TIMESTAMP WHERE id=?").run(user.id);
+   audit(user.id,null,"mfa_login_succeeded",acceptedStep!==null?"TOTP challenge completed":"Recovery code consumed for login");
+   return true;
+  }).immediate();
+  if(!complete) return res.status(401).json({error:"Invalid, expired, or already-used MFA challenge or code"});
+  const token=jwt.sign({id:user.id,token_version:user.token_version},secret,{expiresIn:"8h"});
+  return res.json({token,user:{id:user.id,username:user.username,role:user.role}});
+ } catch(error) {
+  console.error("MFA challenge failed:",error);
+  return res.status(500).json({error:"Unable to complete MFA challenge"});
+ }
+});
+app.get("/api/auth/mfa/status",auth,(req,res)=>{
+ const row=db.prepare("SELECT mfa_enabled,mfa_pending_expires_at,mfa_recovery_hashes FROM users WHERE id=?").get(req.user.id);
+ let count=0;try{count=JSON.parse(row.mfa_recovery_hashes||"[]").length}catch{}
+ res.json({enabled:row.mfa_enabled===1,pending:!!row.mfa_pending_expires_at && Date.parse(row.mfa_pending_expires_at)>Date.now(),recovery_codes_remaining:count});
+});
+app.post("/api/auth/mfa/enroll",auth,mfaChallengeLimiter,(req,res)=>{
+ const {password}=req.body||{};
+ if(typeof password!=="string" || password.length>200) return res.status(401).json({error:"Current password is incorrect"});
+ const row=db.prepare("SELECT password_hash,mfa_enabled FROM users WHERE id=?").get(req.user.id);
+ if(!row || !bcrypt.compareSync(password,row.password_hash)) return res.status(401).json({error:"Current password is incorrect"});
+ if(row.mfa_enabled) return res.status(409).json({error:"MFA is already enabled; disable it before enrolling again"});
+ try {
+  const secretValue=generateTotpSecret();
+  const expiresAt=new Date(Date.now()+10*60*1000).toISOString();
+  db.prepare("UPDATE users SET mfa_pending_secret_enc=?,mfa_pending_expires_at=? WHERE id=?")
+   .run(encryptTotpSecret(secretValue),expiresAt,req.user.id);
+  audit(req.user.id,null,"mfa_enrollment_started","Pending TOTP enrollment created; confirmation required");
+  const issuer="Meteo CAP";
+  const label=encodeURIComponent(issuer+":"+req.user.username);
+  const otpauthUrl="otpauth://totp/"+label+"?secret="+secretValue+"&issuer="+encodeURIComponent(issuer)+"&algorithm=SHA1&digits=6&period=30";
+  res.json({secret:secretValue,otpauth_url:otpauthUrl,expires_at:expiresAt,algorithm:"SHA1",digits:6,period:30});
+ } catch(error) {
+  console.error("MFA enrollment failed:",error);
+  res.status(503).json({error:"MFA encryption is not configured correctly"});
+ }
+});
+app.post("/api/auth/mfa/confirm",auth,mfaChallengeLimiter,(req,res)=>{
+ const {password,code}=req.body||{};
+ if(typeof password!=="string" || password.length>200 || typeof code!=="string" || !/^\d{6}$/.test(code))
+  return res.status(400).json({error:"A current password and six-digit authenticator code are required"});
+ const row=db.prepare("SELECT password_hash,mfa_enabled,mfa_pending_secret_enc,mfa_pending_expires_at FROM users WHERE id=?").get(req.user.id);
+ if(!row || !bcrypt.compareSync(password,row.password_hash)) return res.status(401).json({error:"Current password is incorrect"});
+ if(row.mfa_enabled) return res.status(409).json({error:"MFA is already enabled"});
+ if(!row.mfa_pending_secret_enc || !row.mfa_pending_expires_at || Date.parse(row.mfa_pending_expires_at)<=Date.now())
+  return res.status(409).json({error:"MFA enrollment is missing or expired; start enrollment again"});
+ try {
+  const secretValue=decryptTotpSecret(row.mfa_pending_secret_enc);
+  const step=verifyTotp(secretValue,code,Date.now(),1);
+  if(step===null) return res.status(401).json({error:"Authenticator code is invalid"});
+  const recoveryCodes=generateRecoveryCodes();
+  const hashes=JSON.stringify(recoveryCodes.map(hashRecoveryCode));
+  const enable=db.transaction(()=>{
+   const current=db.prepare("SELECT mfa_enabled,mfa_pending_secret_enc,mfa_pending_expires_at FROM users WHERE id=?").get(req.user.id);
+   if(!current || current.mfa_enabled || current.mfa_pending_secret_enc!==row.mfa_pending_secret_enc ||
+      !current.mfa_pending_expires_at || Date.parse(current.mfa_pending_expires_at)<=Date.now()) return false;
+   db.prepare("UPDATE users SET mfa_enabled=1,mfa_secret_enc=?,mfa_pending_secret_enc=NULL,mfa_pending_expires_at=NULL,mfa_last_used_step=?,mfa_recovery_hashes=? WHERE id=?")
+    .run(row.mfa_pending_secret_enc,step,hashes,req.user.id);
+   audit(req.user.id,null,"mfa_enabled","TOTP enabled; one-time recovery codes generated");
+   return true;
+  }).immediate();
+  if(!enable) return res.status(409).json({error:"MFA enrollment changed or expired; start again"});
+  res.json({enabled:true,recovery_codes:recoveryCodes,warning:"Store these recovery codes securely. They are shown only once."});
+ } catch(error) {
+  console.error("MFA confirmation failed:",error);
+  res.status(503).json({error:"Unable to verify MFA enrollment"});
+ }
+});
+app.post("/api/auth/mfa/disable",auth,mfaChallengeLimiter,(req,res)=>{
+ const {password,code}=req.body||{};
+ if(typeof password!=="string" || password.length>200 || typeof code!=="string" || code.length>64)
+  return res.status(400).json({error:"Current password and an authenticator or recovery code are required"});
+ const row=db.prepare("SELECT password_hash,mfa_enabled,mfa_secret_enc,mfa_last_used_step,mfa_recovery_hashes FROM users WHERE id=?").get(req.user.id);
+ if(!row || !bcrypt.compareSync(password,row.password_hash)) return res.status(401).json({error:"Current password is incorrect"});
+ if(!row.mfa_enabled || !row.mfa_secret_enc) return res.status(409).json({error:"MFA is not enabled"});
+ try {
+  const result=db.transaction(()=>{
+   const secretValue=decryptTotpSecret(row.mfa_secret_enc);
+   const step=verifyTotp(secretValue,code,Date.now(),1);
+   let recoveryRemaining=null;
+   if(step!==null) {
+    if(row.mfa_last_used_step!==null && step<=row.mfa_last_used_step) return false;
+   } else {
+    let hashes;try{hashes=JSON.parse(row.mfa_recovery_hashes||"[]")}catch{hashes=[]}
+    recoveryRemaining=consumeRecoveryCode(hashes,code);
+    if(recoveryRemaining===null) return false;
+   }
+   db.prepare("UPDATE users SET mfa_enabled=0,mfa_secret_enc=NULL,mfa_pending_secret_enc=NULL,mfa_pending_expires_at=NULL,mfa_last_used_step=NULL,mfa_recovery_hashes='[]',token_version=token_version+1 WHERE id=?").run(req.user.id);
+   db.prepare("UPDATE mfa_login_challenges SET consumed_at=CURRENT_TIMESTAMP WHERE user_id=? AND consumed_at IS NULL").run(req.user.id);
+   audit(req.user.id,null,"mfa_disabled","MFA disabled after password and second-factor verification; sessions revoked");
+   return true;
+  }).immediate();
+  if(!result) return res.status(401).json({error:"Authenticator or recovery code is invalid or already used"});
+  res.json({enabled:false,sessions_revoked:true});
+ } catch(error) {
+  console.error("MFA disable failed:",error);
+  res.status(503).json({error:"Unable to safely disable MFA"});
+ }
 });
 app.post("/api/auth/change-password",auth,rateLimit({windowMs:15*60*1000,limit:5}),(req,res)=>{
  const {currentPassword,newPassword}=req.body || {};

@@ -28,7 +28,7 @@ This guide describes the current security controls and the precautions required 
 
 ## Supply-chain and browser-asset considerations
 
-- The dashboard loads Leaflet and Leaflet.draw assets from the third-party `unpkg.com` CDN. The Leaflet 1.9.4 CSS and JavaScript references include Subresource Integrity attributes; the Leaflet.draw 1.0.4 CSS and JavaScript references currently do not. The Content Security Policy permits these CDN resources. CDN compromise, package replacement, or availability failures can therefore affect the browser dashboard. Before operational deployment, evaluate self-hosting reviewed, pinned assets or adding verified integrity metadata for every external asset.
+- The dashboard loads Leaflet and Leaflet.draw assets from the third-party `unpkg.com` CDN. Leaflet.draw currently lacks Subresource Integrity metadata; treat this as a browser supply-chain risk and prefer reviewed, pinned self-hosted assets before any operational deployment. The Leaflet 1.9.4 CSS and JavaScript references include Subresource Integrity attributes; the Leaflet.draw 1.0.4 CSS and JavaScript references currently do not. The Content Security Policy permits these CDN resources. CDN compromise, package replacement, or availability failures can therefore affect the browser dashboard. Before operational deployment, evaluate self-hosting reviewed, pinned assets or adding verified integrity metadata for every external asset.
 - The repository commits `package-lock.json`; CI uses `npm ci` so dependency resolution is reproducible against the reviewed lockfile. Review dependency updates and vulnerability reports before merging.
 
 ## Important limitations

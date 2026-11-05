@@ -201,3 +201,23 @@ test("concurrent outbox claims grant exactly one worker the lease", async () => 
   assert.equal(claimDelivery(db,queued.id),null,"the claimed job must no longer be available");
  } finally { db.close(); }
 });
+
+
+test("queue maintenance processes bounded batches without exceeding SQLite parameter limits", () => {
+ const db=fixture();
+ try {
+  const addAlert=db.prepare("INSERT INTO alerts(id,identifier) VALUES(?,?)");
+  const addDelivery=db.prepare("INSERT INTO delivery_outbox(alert_id,channel,payload,status,attempts,max_attempts,last_attempt_at) VALUES(?,'cap_feed','<batch/>','sending',1,1,datetime('now','-30 minutes'))");
+  for(let id=2;id<=502;id++){
+   addAlert.run(id,"batch-alert-"+id);
+   addDelivery.run(id);
+  }
+  const first=recoverStaleDeliveries(db,10);
+  assert.equal(first.deadLettered.length,500,"stale lease recovery must be bounded to 500 rows per pass");
+  assert.equal(db.prepare("SELECT COUNT(*) AS count FROM delivery_outbox WHERE status='sending'").get().count,1);
+  const second=recoverStaleDeliveries(db,10);
+  assert.equal(second.deadLettered.length,1,"subsequent passes must drain the remaining stale entries");
+  const due=db.prepare("SELECT COUNT(*) AS count FROM delivery_outbox WHERE status='failed' AND dead_letter_at IS NOT NULL").get().count;
+  assert.equal(due,501);
+ } finally { db.close(); }
+});

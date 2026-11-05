@@ -112,10 +112,10 @@ export async function verifyRestoredDatabase(source) {
       const columns = database.prepare(`PRAGMA table_info(${quote(table)})`).all().map(column => column.name);
       const digest = createHash("sha256");
       let rowCount = 0;
-      const order = columns.length ? ` ORDER BY ${columns.map(quote).join(", ")}` : "";
+      const order = columns.length ? ` ORDER BY ${columns.map(column => `${quote(column)} COLLATE BINARY`).join(", ")}` : "";
       for (const row of database.prepare(`SELECT * FROM ${quote(table)}${order}`).iterate()) {
         digest.update(JSON.stringify(row));
-        digest.update("\\n");
+        digest.update(Buffer.from([0]));
         rowCount += 1;
       }
       tableFingerprints[table] = { rows: rowCount, sha256: digest.digest("hex") };

@@ -5,11 +5,11 @@ Set-Location $root
 $node = Get-Command node -ErrorAction SilentlyContinue
 $npm = Get-Command npm -ErrorAction SilentlyContinue
 if (-not $node -or -not $npm) {
-  Write-Error "Node.js 20+ and npm are required. Install the Node.js LTS release, then reopen PowerShell."
+  Write-Error "Node.js 22+ and npm are required. Install Node.js 22 LTS or newer, then reopen PowerShell."
 }
 $nodeMajor = [int]((node -p "process.versions.node").Split(".")[0])
-if ($nodeMajor -lt 20) {
-  Write-Error "Node.js 20 or newer is required. Detected: $(node --version)"
+if ($nodeMajor -lt 22) {
+  Write-Error "Node.js 22 or newer is required. Detected: $(node --version)"
 }
 
 if (-not (Test-Path ".env")) {
@@ -19,13 +19,17 @@ if (-not (Test-Path ".env")) {
   try {
     $jwtBytes = New-Object byte[] 48
     $passwordBytes = New-Object byte[] 24
+    $mfaBytes = New-Object byte[] 32
     $rng.GetBytes($jwtBytes)
     $rng.GetBytes($passwordBytes)
+    $rng.GetBytes($mfaBytes)
   } finally { $rng.Dispose() }
   $jwtSecret = ([System.BitConverter]::ToString($jwtBytes)).Replace("-", "").ToLowerInvariant()
   $adminPassword = [Convert]::ToBase64String($passwordBytes).TrimEnd("=").Replace("+", "-").Replace("/", "_")
+  $mfaEncryptionKey = ([System.BitConverter]::ToString($mfaBytes)).Replace("-", "").ToLowerInvariant()
   $envText = $envText.Replace("REPLACE_WITH_A_UNIQUE_RANDOM_SECRET_AT_LEAST_32_CHARACTERS", $jwtSecret)
   $envText = $envText.Replace("REPLACE_WITH_A_UNIQUE_PASSWORD_AT_LEAST_14_CHARS", $adminPassword)
+  $envText = [regex]::Replace($envText, "(?m)^# MFA_ENCRYPTION_KEY=.*$", "MFA_ENCRYPTION_KEY=$mfaEncryptionKey")
   [System.IO.File]::WriteAllText((Join-Path $root ".env"), $envText, (New-Object System.Text.UTF8Encoding($false)))
   Write-Host "Created .env with cryptographically random secrets."
   Write-Host "Initial administrator username: admin"
@@ -36,9 +40,9 @@ if (-not (Test-Path ".env")) {
 }
 
 if (-not (Test-Path "node_modules")) {
-  Write-Host "Installing dependencies..."
-  npm install
-  if ($LASTEXITCODE -ne 0) { throw "npm install failed." }
+  Write-Host "Installing exact locked dependencies with npm ci..."
+  npm ci
+  if ($LASTEXITCODE -ne 0) { throw "npm ci failed." }
 } else {
   Write-Host "node_modules already exists; skipping dependency installation."
 }

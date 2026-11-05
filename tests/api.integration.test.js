@@ -593,10 +593,29 @@ test("API enforces role separation, public-feed filtering and account deactivati
   assert.match(await capXml.text(), /<alert xmlns=/);
 
   for (const msg_type of ["Update", "Cancel"]) {
-    const derived = await request(`/api/alerts/${actualRow.id}/derive`, {
-      token: forecaster, method: "POST", body: { msg_type }
-    });
+    let derived;
+    if (msg_type === "Cancel") {
+      const concurrentCancels = await Promise.all([
+        request(`/api/alerts/${actualRow.id}/derive`, {
+          token: forecaster, method: "POST", body: { msg_type }
+        }),
+        request(`/api/alerts/${actualRow.id}/derive`, {
+          token: forecaster, method: "POST", body: { msg_type }
+        })
+      ]);
+      assert.deepEqual(concurrentCancels.map(result => result.status).sort(), [201, 409],
+        "concurrent cancellation attempts for the same CAP message must create exactly one cancellation");
+      derived = concurrentCancels.find(result => result.status === 201);
+      const duplicateCancel = concurrentCancels.find(result => result.status === 409);
+      assert.match(duplicateCancel.data.error, /cancellation.*already exists/i);
+    } else {
+      derived = await request(`/api/alerts/${actualRow.id}/derive`, {
+        token: forecaster, method: "POST", body: { msg_type }
+      });
+    }
     assert.equal(derived.status, 201, msg_type + " should create a new draft");
+    assert.notEqual(derived.data.identifier, actualIdentifier,
+      "each derived CAP message must receive its own unique identifier");
     assert.equal(derived.data.status, "Test", "derived messages must remain in Test status");
     assert.equal(derived.data.workflow, "draft");
     assert.ok(derived.data.references.includes(actualIdentifier),
@@ -628,6 +647,18 @@ test("API enforces role separation, public-feed filtering and account deactivati
     assert.equal(derivedOutbox.data.deliveries.filter(item =>
       item.alert_id === derived.data.id && item.channel === "cap_feed"
     ).length, 1, msg_type + " publication should queue exactly one internal CAP feed entry");
+    if (msg_type === "Cancel") {
+      const cancelledOriginal = await request(`/api/alerts/${actualRow.id}`, { token: forecaster });
+      assert.equal(cancelledOriginal.status, 200);
+      assert.equal(cancelledOriginal.data.alert.workflow, "cancelled",
+        "publishing a CAP Cancel must mark its referenced source warning as cancelled");
+      assert.equal((await request(`/api/alerts/${actualRow.id}/derive`, {
+        token: forecaster, method: "POST", body: { msg_type: "Cancel" }
+      })).status, 409, "a cancelled source warning must not be cancelled again");
+      assert.equal((await request(`/api/alerts/${actualRow.id}/derive`, {
+        token: forecaster, method: "POST", body: { msg_type: "Update" }
+      })).status, 409, "a cancelled source warning must not be updated");
+    }
   }
 
   assert.equal((await request("/api/audit", { token: forecaster })).status, 403,

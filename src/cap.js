@@ -12,6 +12,27 @@ const allowed = {
 const categories = ["Geo","Met","Safety","Security","Rescue","Fire","Health","Env","Transport","Infra","CBRNE","Other"];
 const responseTypes = ["Shelter","Evacuate","Prepare","Execute","Avoid","Monitor","Assess","AllClear","None"];
 
+function validateReferences(value) {
+  const references = String(value || "").trim().split(/\\s+/).filter(Boolean);
+  if (!references.length) throw new Error("CAP Update, Cancel, Ack and Error messages must reference the related message.");
+
+  for (const reference of references) {
+    const parts = reference.split(",");
+    if (parts.length !== 3 || parts.some(part => !part.trim())) {
+      throw new Error("CAP references must be whitespace-separated sender,identifier,sent triplets.");
+    }
+    const [sender, identifier, sent] = parts;
+    if (/[\\s<>]/.test(sender) || /[\\s<>]/.test(identifier)) {
+      throw new Error("CAP reference sender and identifier cannot contain whitespace or angle brackets.");
+    }
+    if (!/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{2}:\\d{2})$/.test(sent) ||
+        !Number.isFinite(Date.parse(sent))) {
+      throw new Error("CAP reference sent timestamp must be a valid ISO 8601 date-time with a timezone.");
+    }
+  }
+  return references.length;
+}
+
 function capDateTime(value, field) {
   if (!value) return undefined;
   const date = new Date(value);
@@ -143,7 +164,7 @@ export function validateAlert(input) {
     throw new Error("CAP identifier, sender, sent, status, msgType and scope are required.");
   }
   if (/[ ,<>]/.test(input.identifier) || /[ ,<>]/.test(input.sender)) throw new Error("CAP identifier and sender cannot contain spaces, commas or angle brackets.");
-  if (["Update","Cancel","Ack","Error"].includes(input.msg_type) && !input.references_text?.trim()) throw new Error("CAP Update, Cancel, Ack and Error messages must reference the related message.");
+  if (["Update","Cancel","Ack","Error"].includes(input.msg_type)) validateReferences(input.references_text);
   capDateTime(input.sent, "sent");
   const blocks = input.info_blocks?.length ? input.info_blocks : (["Cancel","Ack","Error"].includes(input.msg_type) ? [] : [{
     language: input.language, category: input.category, event: input.event, urgency: input.urgency,

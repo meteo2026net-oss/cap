@@ -351,13 +351,13 @@ test("restore detects dangling WAL and SHM symlinks", async () => {
     await fs.symlink(path.join(directory, "missing-wal-target"), target + "-wal", "file");
     await assert.rejects(
       () => restoreDatabaseBackup(source, target),
-      /WAL\\/SHM sidecar exists/
+      /WAL\/SHM sidecar exists/
     );
     await fs.rm(target + "-wal");
     await fs.symlink(path.join(directory, "missing-shm-target"), target + "-shm", "file");
     await assert.rejects(
       () => restoreDatabaseBackup(source, target),
-      /WAL\\/SHM sidecar exists/
+      /WAL\/SHM sidecar exists/
     );
   } finally {
     database.close();

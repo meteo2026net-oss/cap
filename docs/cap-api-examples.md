@@ -166,3 +166,11 @@ Example: `GET /api/alerts/export.csv?q=rain&workflow=published&severity=Severe`
 - The dashboard provides a direct export action in the restricted audit-history panel. Existing audit role restrictions also apply to export.
 
 Examples: `GET /api/audit/export.csv` and `GET /api/audit/export.csv?action=login_succeeded&q=admin`
+
+## Inspect the CAP message relationship history
+
+`GET /api/alerts/:id/relations` requires authentication and returns the selected message together with CAP messages linked through their `references` triples. Parent messages are resolved by sender, identifier and sent timestamp; child messages are discovered through their stored references. The result is ordered by sent time and capped at 100 messages to keep the response bounded.
+
+The response includes `root_id`, `count`, `truncated` and a `messages` array with CAP identifiers, message types, workflow states, CAP status and reference values. The dashboard exposes this history from each alert card through the “سلسلة الرسائل” action. This is an internal relationship view; it does not change approval, cancellation or publication state.
+
+Example: `GET /api/alerts/42/relations`

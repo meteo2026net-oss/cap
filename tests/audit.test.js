@@ -146,3 +146,37 @@ test("audit append rejects oversized action and details", () => {
     assert.throws(() => appendAuditLog(database, { action: "ok", details: "x".repeat(4001) }), /4000 characters/);
   } finally { database.close(); }
 });
+
+test("audit hash chain detects a modified previous-hash link", () => {
+  const database = new Database(":memory:");
+  try {
+    database.exec(`
+      CREATE TABLE audit_log (
+        id INTEGER PRIMARY KEY,
+        user_id INTEGER,
+        alert_id INTEGER,
+        action TEXT NOT NULL,
+        details TEXT,
+        created_at TEXT NOT NULL,
+        previous_hash TEXT,
+        entry_hash TEXT
+      )
+    `);
+    installAuditLogGuards(database);
+    appendAuditLog(database, { action: "first_event" });
+    const second = appendAuditLog(database, { action: "second_event" });
+
+    database.exec("DROP TRIGGER audit_log_no_update");
+    database.prepare("UPDATE audit_log SET previous_hash=? WHERE id=?")
+      .run("f".repeat(64), second.id);
+
+    const result = verifyAuditChain(database);
+    assert.equal(result.valid, false);
+    assert.equal(result.first_invalid_id, second.id);
+    assert.equal(result.reason, "previous_hash_mismatch");
+    assert.equal(result.verified_entries, 1);
+  } finally {
+    database.close();
+  }
+});
+

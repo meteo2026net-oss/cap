@@ -282,21 +282,32 @@ app.post("/api/alerts",auth,roles("admin","forecaster"),(req,res)=>{
  } catch(e) { res.status(400).json({error:e.message}); }
 });
 app.post("/api/alerts/:id/derive",auth,roles("admin","forecaster"),(req,res)=>{
- const original=db.prepare("SELECT * FROM alerts WHERE id=?").get(req.params.id);
- if(!original) return res.status(404).json({error:"Source alert not found"});
- if(!["approved","published"].includes(original.workflow)) return res.status(409).json({error:"Only reviewed alerts can be used as the source of an update or cancellation"});
  const msgType=req.body?.msg_type;
  if(!["Update","Cancel"].includes(msgType)) return res.status(400).json({error:"msg_type must be Update or Cancel"});
- const sent=new Date().toISOString();
- const {id:_id,approved_by:_approvedBy,published_at:_publishedAt,created_at:_createdAt,updated_at:_updatedAt,...sourceFields}=original;
- const alert={...sourceFields,identifier:makeIdentifier(),sent,status:"Test",msg_type:msgType,
-  references_text:`${original.sender},${original.identifier},${original.sent.replace(/\.\d{3}Z$/, "-00:00")}`,
-  info_json:msgType==="Cancel"?null:original.info_json,workflow:"draft",created_by:req.user.id};
- const result=db.prepare(`INSERT INTO alerts
- (identifier,sender,sent,status,msg_type,scope,references_text,event,category,response_type,urgency,severity,certainty,effective,onset,expires,headline,description,instruction,area_desc,polygon,circle,language,info_json,workflow,created_by)
- VALUES (@identifier,@sender,@sent,@status,@msg_type,@scope,@references_text,@event,@category,@response_type,@urgency,@severity,@certainty,@effective,@onset,@expires,@headline,@description,@instruction,@area_desc,@polygon,@circle,@language,@info_json,@workflow,@created_by)`).run(alert);
- audit(req.user.id,result.lastInsertRowid,msgType.toLowerCase(),`Created ${msgType} referencing ${original.identifier}; held as Test pending review`);
- res.status(201).json({id:result.lastInsertRowid,identifier:alert.identifier,msg_type:msgType,status:"Test",workflow:"draft",references:alert.references_text});
+ const createDerived=db.transaction(()=>{
+  const original=db.prepare("SELECT * FROM alerts WHERE id=?").get(req.params.id);
+  if(!original) return {kind:"missing"};
+  if(!["approved","published"].includes(original.workflow)) return {kind:"source_not_reviewed"};
+  const sent=new Date().toISOString();
+  const references=`${original.sender},${original.identifier},${original.sent.replace(/\\.\\d{3}Z$/, "-00:00")}`;
+  if(msgType==="Cancel") {
+   const existing=db.prepare("SELECT id FROM alerts WHERE msg_type='Cancel' AND references_text=? LIMIT 1").get(references);
+   if(existing) return {kind:"already_cancelled",existingId:existing.id};
+  }
+  const {id:_id,approved_by:_approvedBy,published_at:_publishedAt,created_at:_createdAt,updated_at:_updatedAt,...sourceFields}=original;
+  const alert={...sourceFields,identifier:makeIdentifier(),sent,status:"Test",msg_type:msgType,
+   references_text:references,info_json:msgType==="Cancel"?null:original.info_json,workflow:"draft",created_by:req.user.id};
+  const result=db.prepare(`INSERT INTO alerts
+   (identifier,sender,sent,status,msg_type,scope,references_text,event,category,response_type,urgency,severity,certainty,effective,onset,expires,headline,description,instruction,area_desc,polygon,circle,language,info_json,workflow,created_by)
+   VALUES (@identifier,@sender,@sent,@status,@msg_type,@scope,@references_text,@event,@category,@response_type,@urgency,@severity,@certainty,@effective,@onset,@expires,@headline,@description,@instruction,@area_desc,@polygon,@circle,@language,@info_json,@workflow,@created_by)`).run(alert);
+  audit(req.user.id,result.lastInsertRowid,msgType.toLowerCase(),`Created ${msgType} referencing ${original.identifier}; held as Test pending review`);
+  return {kind:"created",id:Number(result.lastInsertRowid),identifier:alert.identifier,references};
+ });
+ const result=createDerived.immediate();
+ if(result.kind==="missing") return res.status(404).json({error:"Source alert not found"});
+ if(result.kind==="source_not_reviewed") return res.status(409).json({error:"Only reviewed alerts can be used as the source of an update or cancellation"});
+ if(result.kind==="already_cancelled") return res.status(409).json({error:"A cancellation for this CAP message already exists",existing_cancel_id:result.existingId});
+ res.status(201).json({id:result.id,identifier:result.identifier,msg_type:msgType,status:"Test",workflow:"draft",references:result.references});
 });
 
 app.post("/api/alerts/:id/submit",auth,roles("admin","forecaster"),(req,res)=>{
@@ -337,16 +348,35 @@ app.post("/api/alerts/:id/publish",auth,roles("admin","publisher"),(req,res)=>{
   if(!a) return {kind:"missing"};
   if(a.workflow!=="approved") return {kind:"conflict"};
   if(a.approved_by===req.user.id) return {kind:"forbidden"};
+  let cancellationSource=null;
+  if(["Update","Cancel"].includes(a.msg_type)) {
+   const references=(a.references_text || "").trim().split(/\\s+/);
+   if(references.length!==1) return {kind:"invalid_reference"};
+   const parts=references[0].split(",");
+   if(parts.length!==3 || parts.some(part=>!part)) return {kind:"invalid_reference"};
+   cancellationSource=db.prepare("SELECT id,workflow FROM alerts WHERE sender=? AND identifier=? AND sent=?").get(parts[0],parts[1],parts[2]);
+   if(!cancellationSource) return {kind:"source_missing"};
+   if(cancellationSource.workflow!=="published") return {kind:"source_not_active"};
+  }
   const changed=db.prepare("UPDATE alerts SET workflow='published',status=?,published_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE id=? AND workflow='approved'").run(a.status,a.id);
   if(changed.changes!==1) return {kind:"conflict"};
+  if(a.msg_type==="Cancel") {
+   const cancelled=db.prepare("UPDATE alerts SET workflow='cancelled',updated_at=CURRENT_TIMESTAMP WHERE id=? AND workflow='published'").run(cancellationSource.id);
+   if(cancelled.changes!==1) return {kind:"source_not_active"};
+  }
   const published=db.prepare("SELECT * FROM alerts WHERE id=?").get(a.id);
   const delivery=enqueueDelivery(db,{alertId:a.id,channel:"cap_feed",payload:buildCapXml(rowToCap(published))});
-  audit(req.user.id,a.id,"published","Published to internal CAP feed; distribution outbox entry "+delivery.id+" queued");
+  audit(req.user.id,a.id,"published",a.msg_type==="Cancel"
+   ? "Published CAP cancellation; referenced warning moved to cancelled; internal CAP feed entry "+delivery.id+" queued"
+   : "Published to internal CAP feed; distribution outbox entry "+delivery.id+" queued");
   return {kind:"updated",delivery};
  });
  const result=transition.immediate();
  if(result.kind==="missing") return res.status(404).json({error:"Alert not found"});
  if(result.kind==="forbidden") return res.status(403).json({error:"The approving user cannot publish the same warning; a separate publisher is required."});
+ if(result.kind==="invalid_reference") return res.status(409).json({error:"Derived CAP messages must reference exactly one valid prior message"});
+ if(result.kind==="source_missing") return res.status(409).json({error:"The referenced source message is not present in the local alert history"});
+ if(result.kind==="source_not_active") return res.status(409).json({error:"The referenced source message is no longer active and cannot be updated or cancelled"});
  if(result.kind==="conflict") return res.status(409).json({error:"Approval is required before publishing"});
  const delivery=result.delivery;
  res.json({ok:true,workflow:"published",delivery:{id:delivery.id,status:delivery.status,channel:delivery.channel},note:"Internal publication only. External delivery adapters remain disabled; the outbox entry is queued for controlled processing."});

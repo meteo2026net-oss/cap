@@ -156,3 +156,15 @@ test("requires references for CAP Update and Cancel messages", () => {
   assert.throws(() => buildCapXml({ ...valid, msg_type: "Cancel" }), /must reference the related message/);
   assert.throws(() => buildCapXml({ ...valid, msg_type: "Update" }), /must reference the related message/);
 });
+
+test("exports CAP Ack and Error messages with references and without info blocks", () => {
+  const references = "alerts@example.test,urn:uuid:previous-id,2026-11-03T12:00:00-00:00";
+  for (const msg_type of ["Ack", "Error"]) {
+    const xml = buildCapXml({ ...valid, msg_type, references_text: references });
+    assert.match(xml, new RegExp(`<msgType>${msg_type}</msgType>`));
+    assert.match(xml, /<references>/);
+    assert.doesNotMatch(xml, /<info>/);
+    assert.throws(() => buildCapXml({ ...valid, msg_type }),
+      /must reference the related message/);
+  }
+});

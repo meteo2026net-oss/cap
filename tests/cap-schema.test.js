@@ -51,3 +51,44 @@ test("generated CAP XML conforms to the official OASIS CAP 1.2 XSD", { skip: !ha
   assert.equal(result.status, 0, result.stderr || result.stdout || "xmllint schema validation failed");
   fs.rmSync(dir, { recursive: true, force: true });
 });
+
+
+test("all CAP message types conform to the official OASIS CAP 1.2 XSD", { skip: !hasSchema || !hasXmllint }, () => {
+  const base = {
+    sender: "alerts@example.test",
+    sent: "2026-11-04T05:00:00.000Z",
+    status: "Test",
+    scope: "Public",
+    info_blocks: [{
+      language: "en-GB",
+      categories: ["Met"],
+      event: "Heavy rainfall",
+      urgency: "Expected",
+      severity: "Moderate",
+      certainty: "Likely",
+      headline: "Heavy rain warning",
+      description: "Heavy rain is possible.",
+      areas: [{ areaDesc: "Test district", polygon: "51,0 52,0 52,1 51,1 51,0" }]
+    }]
+  };
+  const references = "alerts@example.test,urn:uuid:previous-id,2026-11-03T12:00:00-00:00";
+  const cases = ["Alert", "Update", "Cancel", "Ack", "Error"].map(msg_type => ({
+    msg_type,
+    ...base,
+    identifier: makeIdentifier(),
+    ...(msg_type === "Alert" ? {} : { references_text: references }),
+    ...(["Cancel", "Ack", "Error"].includes(msg_type) ? { info_blocks: undefined } : {})
+  }));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cap-xsd-matrix-"));
+  try {
+    for (const item of cases) {
+      const xmlPath = path.join(dir, `${item.msg_type}.xml`);
+      fs.writeFileSync(xmlPath, buildCapXml(item), "utf8");
+      const result = spawnSync("xmllint", ["--noout", "--schema", schemaPath, xmlPath], { encoding: "utf8" });
+      assert.equal(result.status, 0,
+        `${item.msg_type} failed CAP 1.2 XSD validation: ${result.stderr || result.stdout}`);
+    }
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});

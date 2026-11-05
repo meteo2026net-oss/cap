@@ -27,9 +27,10 @@ A verified SQLite backup can be created from the project directory:
 npm run backup
 npm run backup:verify -- backups/<exact-backup-filename>.sqlite
 npm run backup:list
+npm run backup:health
 ```
 
-Backups are written to `backups/` by default, validated with SQLite integrity checks and audit-chain verification, and old generated backup files are pruned after 30 days. Set `BACKUP_DIR` and `BACKUP_RETENTION_DAYS` to change these defaults.
+Backups are written to `backups/` by default, validated with SQLite integrity checks and audit-chain verification, and old generated backup files are pruned after 30 days. Set `BACKUP_DIR` and `BACKUP_RETENTION_DAYS` to change these defaults. `npm run backup:health` checks that the newest backup candidate exists, passes checksum/SQLite/audit verification, and is no older than 26 hours by default. Set `BACKUP_MAX_AGE_HOURS` to change the freshness limit; the command emits JSON and exits non-zero when backups are missing, invalid, or stale. It is a local check, not a central alerting service.
 
 On Windows, double-click `run-backup-now.bat` for an immediate verified backup, `list-backups.bat` to inventory and verify all saved backups, and `verify-backup.bat <backup-file>` to re-check one saved backup before relying on it. To install an optional daily 02:00 backup task for the current Windows user, double-click `install-daily-backup.bat`; it runs when that user is signed in, starts missed runs when Windows becomes available, and writes execution logs under `logs/`. Use `remove-daily-backup.bat` to remove the scheduled task without deleting existing backups. The task does not require administrator privileges and does not upload data off this computer.
 

@@ -14,7 +14,8 @@
     "setup:local": "node scripts/setup-local.mjs",
     "worker": "node src/delivery-worker.js",
     "backup:verify": "node src/verify-backup.js",
-    "backup:list": "node src/list-backups.js"
+    "backup:list": "node src/list-backups.js",
+    "backup:health": "node src/backup-health.js"
   },
   "engines": {
     "node": ">=22"

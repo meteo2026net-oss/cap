@@ -2,9 +2,9 @@
 
 Standalone Arabic-first weather-warning management starter based on the OASIS Common Alerting Protocol (CAP) 1.2.
 
-## Run locally (without Docker)
+## Run locally
 
-Requirements: Node.js 22+ and npm. Docker is **not required** for this mode. From the repository root, run:
+Requirements: Node.js 22+ and npm. The project runs directly on the host with SQLite; Docker is not part of the project. From the repository root, run:
 
 ```bash
 npm run setup:local
@@ -15,7 +15,7 @@ npm start
 
 The committed `package-lock.json` pins the full dependency tree; `npm ci` installs those exact locked versions and fails if the manifest and lockfile disagree. The setup command creates `.env` (without overwriting an existing file), generates a unique JWT secret, initial administrator password, and persistent MFA encryption key, and creates local data folders. To require MFA for selected roles, set `MFA_REQUIRED_ROLES` in `.env` (for example `admin,approver,publisher`); leave it empty for opt-in MFA. Save the displayed initial password. Open http://localhost:8095. Stop with Ctrl+C. The interactive map uses Leaflet and OpenStreetMap tiles and therefore needs internet access.
 
-For full Windows PowerShell, Linux/macOS, Docker Compose, backup, restore, and troubleshooting instructions, see [Installation guide](docs/INSTALLATION.md).
+For Windows PowerShell, Linux/macOS, backup, restore, and troubleshooting instructions, see [Installation guide](docs/INSTALLATION.md).
 
 Dependency maintenance: use `npm ci` for normal installs and CI. When intentionally adding, removing, or upgrading a dependency, use `npm install <package>@<version>`, review both `package.json` and `package-lock.json`, then run `npm ci`, `npm test`, and `npm audit` before committing both files.
 
@@ -35,27 +35,11 @@ To restore, stop the service first, then run:
 npm run restore -- backups/cap-YYYYMMDDTHHMMSSZ.sqlite
 ```
 
-The restore command refuses to overwrite an existing database unless `--force` is supplied. With `--force`, the previous database is retained beside the restored file as a pre-restore copy. Confirm the restored service and its data before removing that copy. In Docker, create a backup with `docker compose exec cap node src/backup.js`. For restoration, follow the complete Docker procedure in [Installation guide](docs/INSTALLATION.md#mode-b--run-with-docker-compose): stop the app, checkpoint and close SQLite, remove sidecars only after a successful checkpoint, then restore and verify service health. The restore helper intentionally refuses to proceed while WAL/SHM sidecars exist. The backup volume remains mounted in the one-off container. Keep a separate off-host copy; a backup stored on the same host is not disaster recovery.
+The restore command refuses to overwrite an existing database unless `--force` is supplied. With `--force`, the previous database is retained beside the restored file as a pre-restore copy. Confirm the restored service and its data before removing that copy. The restore helper intentionally refuses to proceed while WAL/SHM sidecars exist; ensure all application processes are stopped before restoring. Keep a separate off-host copy; a backup stored on the same host is not disaster recovery.
 
 ## Audit integrity
 
 New audit entries are linked with SHA-256 hashes. Administrators, reviewers, and approvers can check the chain through the authenticated `GET /api/audit/verify` endpoint. Existing audit entries from before this migration are preserved and reported separately as legacy unhashed entries. A local hash chain detects accidental or partial tampering; it is not a substitute for externally anchored signatures or immutable off-host storage.
-
-## Docker deployment
-
-Requirements: Docker Engine with the Compose plugin.
-
-1. Copy `.env.example` to `.env`.
-2. Replace `JWT_SECRET` and `ADMIN_PASSWORD` with unique secrets (32+ and 14+ characters respectively).
-3. Build and start the service:
-
-```bash
-docker compose up -d --build
-docker compose ps
-docker compose logs -f cap
-```
-
-The service listens on `127.0.0.1:8095` by default and stores SQLite data in the persistent `cap-data` volume. Put it behind a properly configured HTTPS reverse proxy before remote access; do not expose the container port directly to the public internet. Back up the Docker volume before upgrades. To stop the service without deleting data, run `docker compose down`.
 
 ## Current starter features
 
@@ -79,7 +63,7 @@ The service listens on `127.0.0.1:8095` by default and stores SQLite data in the
 - Basic validation of required CAP fields, enumerations, date ordering, closed polygons, and circle geometry.
 - CAP `status` is restricted to the four CAP 1.2 values (`Actual`, `Exercise`, `System`, `Test`); `draft`, `pending`, `approved`, and `published` are internal workflow states and are never emitted as CAP status values.
 - Optional internal delivery worker for stale-lease recovery and due-retry/dead-letter maintenance (no outbound network delivery).
-- GitHub Actions runs Node 22 syntax checks, automated tests, official CAP 1.2 XSD validation, npm audit reporting, Docker image build and container health smoke test.
+- GitHub Actions runs Node 22 syntax checks, automated tests, official CAP 1.2 XSD validation, and npm audit reporting.
 - Scheduled CodeQL static analysis and Dependabot dependency updates.
 - Optional signed inbound webhook endpoint (disabled by default) verifies timestamped HMAC-SHA256 signatures, rejects replays, limits JSON bodies to 64 KB, and stores accepted messages in a persistent manual-review inbox without creating or publishing alerts.
 - Role-protected webhook inbox listing and one-way pending-to-reviewed/rejected review decisions for administrators and reviewers, with audit entries.

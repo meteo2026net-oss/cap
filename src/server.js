@@ -287,7 +287,7 @@ app.post("/api/alerts/:id/derive",auth,roles("admin","forecaster"),(req,res)=>{
  const createDerived=db.transaction(()=>{
   const original=db.prepare("SELECT * FROM alerts WHERE id=?").get(req.params.id);
   if(!original) return {kind:"missing"};
-  if(!["approved","published"].includes(original.workflow)) return {kind:"source_not_reviewed"};
+  if(original.workflow!=="published") return {kind:"source_not_reviewed"};
   const sent=new Date().toISOString();
   const references=`${original.sender},${original.identifier},${original.sent.replace(/\.\d{3}Z$/, "-00:00")}`;
   if(msgType==="Cancel") {

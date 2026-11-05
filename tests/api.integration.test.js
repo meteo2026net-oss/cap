@@ -804,3 +804,53 @@ test("API enforces role separation, public-feed filtering and account deactivati
   assert.equal((await request("/api/me", { token: reactivatedSession })).status, 200,
     "a no-op account status update must preserve the current valid session");
 });
+
+test("inbound webhook ingress is disabled by default", { timeout: 15000 }, async t => {
+  const cwd = await mkdtemp(path.join(tmpdir(), "meteo-cap-webhook-disabled-"));
+  const port = await reservePort();
+  const base = "http://127.0.0.1:" + port;
+  const env = { ...process.env };
+  delete env.CAP_WEBHOOK_INGRESS_ENABLED;
+  delete env.CAP_WEBHOOK_SECRET;
+  const child = spawn(process.execPath, [serverEntry], {
+    cwd,
+    env: {
+      ...env,
+      PORT: String(port),
+      HOST: "127.0.0.1",
+      JWT_SECRET: "webhook-disabled-test-secret-at-least-32-characters",
+      ADMIN_PASSWORD: "Webhook-Disabled-Test-Admin-2026"
+    },
+    stdio: "ignore"
+  });
+
+  t.after(async () => {
+    if (child.exitCode === null && child.signalCode === null) child.kill("SIGTERM");
+    if (child.exitCode === null && child.signalCode === null) {
+      await new Promise(resolve => {
+        child.once("exit", resolve);
+        setTimeout(resolve, 2000);
+      });
+    }
+    await rm(cwd, { recursive: true, force: true });
+  });
+
+  let ready = false;
+  for (let attempt = 0; attempt < 100; attempt++) {
+    if (child.exitCode !== null) throw new Error("API server exited before becoming ready.");
+    try {
+      const response = await fetch(base + "/api/health");
+      if (response.ok) { ready = true; break; }
+    } catch {}
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  assert.equal(ready, true, "API server should start without webhook ingress configuration");
+
+  const response = await fetch(base + "/api/webhooks/inbound", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ provider: "synthetic-test", event: "disabled-ingress-test" })
+  });
+  assert.equal(response.status, 404,
+    "inbound webhook requests must be rejected when the feature flag and secret are not configured");
+});

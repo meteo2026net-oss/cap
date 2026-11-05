@@ -27,7 +27,7 @@ SQLite is embedded through `better-sqlite3`; there is no separate database serve
 5. Save the generated administrator password printed by the setup script.
 6. Open http://127.0.0.1:8095.
 
-The setup script never overwrites an existing `.env`. If native dependency installation fails on Windows, install Microsoft C++ Build Tools (Desktop development with C++) and retry `npm install`.
+The setup script never overwrites an existing `.env`. It requires Node.js 22+, generates the JWT, administrator, and MFA encryption secrets, and installs the lockfile-pinned dependencies with `npm ci`. If native dependency installation fails on Windows, install Microsoft C++ Build Tools (Desktop development with C++) and retry `npm ci`.
 
 ## Linux / macOS
 
@@ -47,7 +47,7 @@ openssl rand -base64 24
 Use the first value for `JWT_SECRET` and the second for `ADMIN_PASSWORD`. Then run:
 
 ```bash
-npm install
+npm ci
 npm test
 npm start
 ```

@@ -40,7 +40,8 @@ test("API enforces role separation, public-feed filtering and account deactivati
       CAP_WEBHOOK_INGRESS_ENABLED: "true",
       CAP_WEBHOOK_SECRET: "integration-webhook-secret-that-is-at-least-32-bytes",
       MFA_ENCRYPTION_KEY: "a".repeat(64),
-      MFA_REQUIRED_ROLES: "admin,approver,publisher"
+      MFA_REQUIRED_ROLES: "admin,approver,publisher",
+      API_RATE_LIMIT: "2000"
     },
     stdio: "ignore"
   });

@@ -88,7 +88,7 @@ Keep a separate encrypted copy of backups on another device or off-host storage.
 ## Troubleshooting
 
 - **Server refuses to start:** verify that `.env` exists and that `JWT_SECRET` is at least 32 characters and `ADMIN_PASSWORD` is at least 14 characters; neither may be a placeholder.
-- **Port 8095 is busy:** change `PORT` in `.env` for direct mode. For Docker mode change `CAP_PORT` (the internal container port remains 8095).
+- **Port 8095 is busy:** change `PORT` in `.env` and open the matching localhost URL.
 - **better-sqlite3 installation fails:** use a supported Node.js LTS release (Node 22+) and install the platform's native build tools if npm requests them.
 - **Map tiles do not load:** the dashboard map requires internet access to the OpenStreetMap tile service.
 - **A newly created account cannot access the dashboard after login:** this is intentional. Newly provisioned users must replace the initial temporary password before the application unlocks; the password-change and account-security panels remain available during this step.

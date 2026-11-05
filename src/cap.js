@@ -54,8 +54,8 @@ function capDateTime(value, field) {
     const calendar = new Date(0);
     calendar.setUTCFullYear(year, month - 1, day);
     calendar.setUTCHours(hour, minute, second, 0);
-    const offsetHour = iso[9] === undefined ? 0 : Number(iso[9]);
-    const offsetMinute = iso[10] === undefined ? 0 : Number(iso[10]);
+    const offsetHour = iso[10] === undefined ? 0 : Number(iso[10]);
+    const offsetMinute = iso[11] === undefined ? 0 : Number(iso[11]);
     if (calendar.getUTCFullYear() !== year || calendar.getUTCMonth() !== month - 1 ||
         calendar.getUTCDate() !== day || hour > 23 || minute > 59 || second > 59 ||
         offsetHour > 14 || offsetMinute > 59 || (offsetHour === 14 && offsetMinute !== 0)) {

@@ -376,7 +376,8 @@ app.post("/api/users",auth,roles("admin"),(req,res)=>{
  }
 });
 
-app.post("/api/users/:id/password-reset",auth,roles("admin"),(req,res)=>{
+const adminPasswordResetLimiter=rateLimit({windowMs:15*60*1000,limit:5,standardHeaders:true,legacyHeaders:false});
+app.post("/api/users/:id/password-reset",auth,roles("admin"),adminPasswordResetLimiter,(req,res)=>{
  const id=Number(req.params.id);
  if(!Number.isSafeInteger(id) || id<1) return res.status(400).json({error:"Invalid user id"});
  if(id===req.user.id) return res.status(409).json({error:"Administrators cannot reset their own password through this workflow"});

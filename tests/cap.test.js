@@ -308,10 +308,10 @@ test("serializes optional CAP metadata, response types, parameters and full area
     "senderName", "instruction", "web", "contact", "parameter", "valueName", "altitude",
     "ceiling", "derefUri", "digest"
   ]) assert.match(xml, new RegExp(`<${tag}>`));
-  assert.match(xml, /<category>Safety<\\/category>/);
-  assert.match(xml, /<responseType>Prepare<\\/responseType>/);
-  assert.match(xml, /<value>35<\\/value>/);
-  assert.match(xml, /<size>4096<\\/size>/);
+  assert.match(xml, /<category>Safety<\/category>/);
+  assert.match(xml, /<responseType>Prepare<\/responseType>/);
+  assert.match(xml, /<value>35<\/value>/);
+  assert.match(xml, /<size>4096<\/size>/);
 });
 
 test("rejects invalid CAP categories and response types", () => {

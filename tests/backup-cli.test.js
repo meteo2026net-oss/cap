@@ -10,11 +10,15 @@ const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "
 const node = process.execPath;
 
 function runCli(script, args, cwd) {
+  const env = { ...process.env };
+  delete env.DB_PATH;
+  delete env.BACKUP_DIR;
+  delete env.BACKUP_RETENTION_DAYS;
   return spawnSync(node, [path.join(projectRoot, script), ...args], {
     cwd,
     encoding: "utf8",
     timeout: 30000,
-    env: { ...process.env }
+    env
   });
 }
 

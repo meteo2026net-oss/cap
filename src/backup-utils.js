@@ -214,3 +214,53 @@ export async function restoreDatabaseBackup(source, destination, { force = false
     throw error;
   }
 }
+
+
+export async function listDatabaseBackups(directory) {
+  const root = path.resolve(directory);
+  let names;
+  try {
+    names = await fs.readdir(root);
+  } catch (error) {
+    if (error.code === "ENOENT") return [];
+    throw error;
+  }
+
+  const candidates = names.filter(name =>
+    /^cap-\\d{8}T\\d{6}(?:\\d{3})?Z(?:-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?\\.sqlite$/i.test(name)
+  ).sort().reverse();
+
+  const results = [];
+  for (const name of candidates) {
+    const file = path.join(root, name);
+    try {
+      const stat = await fs.lstat(file);
+      if (!stat.isFile() || stat.isSymbolicLink()) continue;
+      try {
+        const verification = await verifyDatabaseBackup(file);
+        results.push({
+          file,
+          name,
+          size_bytes: stat.size,
+          modified_at: stat.mtime.toISOString(),
+          verified: true,
+          checksum: verification.checksum,
+          integrity: verification.integrity,
+          audit: verification.audit
+        });
+      } catch (error) {
+        results.push({
+          file,
+          name,
+          size_bytes: stat.size,
+          modified_at: stat.mtime.toISOString(),
+          verified: false,
+          error: error.message
+        });
+      }
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error;
+    }
+  }
+  return results;
+}

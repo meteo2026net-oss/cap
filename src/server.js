@@ -28,6 +28,11 @@ if (configuredMfaRoles.some(role=>!validMfaRoles.has(role)) || new Set(configure
  process.exit(1);
 }
 const mfaRequiredRoles = new Set(configuredMfaRoles);
+const apiRateLimit = Number(process.env.API_RATE_LIMIT || 300);
+if (!Number.isSafeInteger(apiRateLimit) || apiRateLimit < 50 || apiRateLimit > 10000) {
+ console.error("FATAL: API_RATE_LIMIT must be an integer between 50 and 10000.");
+ process.exit(1);
+}
 const port = Number(process.env.PORT || 8095);
 const secret = process.env.JWT_SECRET;
 if (!secret || secret.length < 32 || /^REPLACE_WITH_/i.test(secret)) {
@@ -58,7 +63,7 @@ app.use(helmet({
 }));
 const origins = (process.env.CORS_ORIGINS || "").split(",").map(s=>s.trim()).filter(Boolean);
 app.use(cors({ origin: origins.length ? origins : false }));
-app.use("/api", rateLimit({ windowMs: 15*60*1000, limit: 300, standardHeaders: true, legacyHeaders: false }));
+app.use("/api", rateLimit({ windowMs: 15*60*1000, limit: apiRateLimit, standardHeaders: true, legacyHeaders: false }));
 app.use("/api/auth", rateLimit({ windowMs: 15*60*1000, limit: 60, skipSuccessfulRequests: true, standardHeaders: true, legacyHeaders: false }));
 
 const webhookIngressEnabled = process.env.CAP_WEBHOOK_INGRESS_ENABLED === "true";

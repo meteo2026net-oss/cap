@@ -323,3 +323,26 @@ test("rejects invalid CAP categories and response types", () => {
   assert.throws(() => buildCapXml({ ...valid, info_blocks: [{ ...block, category: "Weather" }] }), /valid category/);
   assert.throws(() => buildCapXml({ ...valid, info_blocks: [{ ...block, response_type: "RunAway" }] }), /responseType/);
 });
+
+test("rejects normalized impossible calendar dates and out-of-range offsets in all CAP date fields", () => {
+  for (const [field, value] of [
+    ["sent", "2026-02-30T12:00:00Z"],
+    ["effective", "2026-02-30T12:00:00+01:00"],
+    ["onset", "2026-11-05T25:00:00Z"],
+    ["expires", "2026-11-05T12:00:00+14:01"]
+  ]) {
+    assert.throws(() => validateAlert({ ...valid, [field]: value }), /Invalid date/);
+  }
+  const block = {
+    language: "en-GB", category: "Met", event: "Heavy rainfall",
+    urgency: "Expected", severity: "Moderate", certainty: "Likely",
+    area: { areaDesc: "District", circle: "51.5,-0.1 10" }
+  };
+  for (const [field, value] of [
+    ["effective", "2026-02-30T12:00:00Z"],
+    ["onset", "2026-11-05T25:00:00Z"],
+    ["expires", "2026-11-05T12:00:00-14:01"]
+  ]) {
+    assert.throws(() => validateAlert({ ...valid, info_blocks: [{ ...block, [field]: value }] }), /Invalid date/);
+  }
+});

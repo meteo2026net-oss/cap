@@ -874,4 +874,19 @@ test("inbound webhook ingress is disabled by default", { timeout: 15000 }, async
   });
   assert.equal(response.status, 404,
     "inbound webhook requests must be rejected when the feature flag and secret are not configured");
+
+  for (let attempt = 1; attempt < 30; attempt++) {
+    const allowed = await fetch(base + "/api/webhooks/inbound", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider: "synthetic-test", event: "disabled-rate-limit-" + attempt })
+    });
+    assert.equal(allowed.status, 404, "requests below the ingress rate limit should retain the disabled response");
+  }
+  const rateLimited = await fetch(base + "/api/webhooks/inbound", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ provider: "synthetic-test", event: "disabled-rate-limit-overflow" })
+  });
+  assert.equal(rateLimited.status, 429, "inbound webhook ingress must enforce its 30-request per-minute limit");
 });

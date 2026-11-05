@@ -120,6 +120,8 @@ test("API enforces role separation, public-feed filtering and account deactivati
   assert.equal(malformedJson.status, 400, "signed non-JSON payloads must be rejected");
   const unsupportedContentType = await sendWebhook(webhookBody, webhookTimestamp, webhookSignature, "text/plain");
   assert.equal(unsupportedContentType.status, 415, "webhook ingress must require JSON content type");
+  const oversizedWebhook = await sendWebhook(JSON.stringify({ data: "x".repeat(65 * 1024) }));
+  assert.equal(oversizedWebhook.status, 413, "webhook payloads larger than the 64 KB ingress limit must be rejected");
 
   const request = async (url, { token, method = "GET", body } = {}) => {
     const response = await fetch(base + url, {

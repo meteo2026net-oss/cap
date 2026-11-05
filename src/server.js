@@ -174,6 +174,15 @@ const roles = (...allowed) => (req,res,next) => {
 function audit(userId, alertId, action, details="") {
  appendAuditLog(db, { userId, alertId, action, details });
 }
+function recordAlertVersion(alertId,userId,changeType) {
+ const row=db.prepare("SELECT * FROM alerts WHERE id=?").get(alertId);
+ if(!row)throw new Error("Cannot snapshot a missing alert");
+ const {info_json,...fields}=row;
+ const snapshot={...fields,info_blocks:info_json?JSON.parse(info_json):[]};
+ db.prepare(`INSERT INTO alert_versions(alert_id,version_no,change_type,changed_by,snapshot_json)
+  VALUES(?,(SELECT COALESCE(MAX(version_no),0)+1 FROM alert_versions WHERE alert_id=?),?,?,?)`)
+  .run(alertId,alertId,changeType,userId,JSON.stringify(snapshot));
+}
 function rowToCap(r) {
  return {...r, msg_type:r.msg_type, area_desc:r.area_desc, response_type:r.response_type, info_blocks:r.info_json ? JSON.parse(r.info_json) : undefined};
 }
@@ -642,6 +651,19 @@ app.post("/api/alerts/:id/review-notes",auth,roles("admin","reviewer","approver"
  if(result.kind==="forbidden")return res.status(403).json({error:"The alert creator cannot add an independent review note"});
  res.status(201).set("Cache-Control","no-store").json({ok:true,message:"Review note recorded"});
 });
+app.get("/api/alerts/:id/versions",auth,roles("admin","reviewer","approver"),(req,res)=>{
+ const alert=db.prepare("SELECT id FROM alerts WHERE id=?").get(req.params.id);
+ if(!alert)return res.status(404).json({error:"Alert not found"});
+ const rows=db.prepare(`SELECT v.id,v.version_no,v.change_type,v.created_at,u.username AS changed_by,
+  v.snapshot_json FROM alert_versions v LEFT JOIN users u ON u.id=v.changed_by
+  WHERE v.alert_id=? ORDER BY v.version_no DESC LIMIT 50`).all(alert.id);
+ const versions=rows.map(row=>({id:row.id,version_no:row.version_no,change_type:row.change_type,
+  created_at:row.created_at,changed_by:row.changed_by,snapshot:JSON.parse(row.snapshot_json)}));
+ const current=versions[0]?.snapshot||null;
+ const previous=versions[1]?.snapshot||null;
+ const changed_fields=current&&previous?Object.keys(current).filter(key=>JSON.stringify(current[key])!==JSON.stringify(previous[key])):[];
+ res.set("Cache-Control","no-store").json({versions,count:versions.length,changed_fields,has_comparison:!!previous});
+});
 app.get("/api/alerts/:id",auth,(req,res)=>{
  const row = db.prepare("SELECT * FROM alerts WHERE id=?").get(req.params.id);
  if (!row) return res.status(404).json({error:"Alert not found"});
@@ -686,6 +708,7 @@ app.post("/api/alerts",auth,roles("admin","forecaster"),(req,res)=>{
     (identifier,sender,sent,status,msg_type,scope,references_text,event,category,response_type,urgency,severity,certainty,effective,onset,expires,headline,description,instruction,area_desc,polygon,circle,language,info_json,workflow,created_by)
     VALUES (@identifier,@sender,@sent,@status,@msg_type,@scope,@references_text,@event,@category,@response_type,@urgency,@severity,@certainty,@effective,@onset,@expires,@headline,@description,@instruction,@area_desc,@polygon,@circle,@language,@info_json,@workflow,@created_by )`).run(alertParams);
    audit(req.user.id,inserted.lastInsertRowid,"created","Draft created");
+   recordAlertVersion(inserted.lastInsertRowid,req.user.id,"created");
    return inserted;
   }).immediate();
   res.status(201).json({id:result.lastInsertRowid,identifier:alert.identifier});
@@ -738,6 +761,7 @@ app.patch("/api/alerts/:id",auth,roles("admin","forecaster"),(req,res)=>{
   values.id=alert.id;
   const changed=db.prepare("UPDATE alerts SET "+assignments+",updated_at=CURRENT_TIMESTAMP WHERE id=@id AND workflow='draft'").run(values);
   if(changed.changes!==1) return {kind:"conflict"};
+  recordAlertVersion(alert.id,req.user.id,"draft_updated");
   audit(req.user.id,alert.id,"draft_updated","Updated fields: "+updates.join(", "));
   return {kind:"updated"};
  });

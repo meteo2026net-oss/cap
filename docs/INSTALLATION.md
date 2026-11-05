@@ -73,12 +73,13 @@ npm run dev
 ```
 
 ### Local data and backups
-- SQLite database: `storage/cap.sqlite`
+- SQLite database by default: `storage/cap.sqlite`
+- Optional database override: set `DB_PATH` to an absolute path or a path relative to the process working directory. The application, backup helper, and restore helper use the same setting.
 - Backups: `backups/`
 - Create a verified backup: `npm run backup`
 - Restore while the server is stopped: `npm run restore -- backups/<backup-file>.sqlite`
 
-Keep a separate copy of backups on another device. Do not commit `.env`, database files, or backups to Git.
+For Docker, keep any custom `DB_PATH` inside the persistent `/app/storage` volume; do not point it at the container's ephemeral filesystem. Keep a separate copy of backups on another device. Do not commit `.env`, database files, or backups to Git.
 
 ## Mode B — Run with Docker Compose
 

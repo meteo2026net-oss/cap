@@ -1145,6 +1145,27 @@ test("API enforces role separation, public-feed filtering and account deactivati
   assert.ok(geoFeed.data.features.some(feature => feature.properties?.identifier === actualIdentifier),
     "published Actual/Public warning should appear in public GeoJSON");
 
+  const csvFixture = await request("/api/alerts", {
+    token: forecaster, method: "POST",
+    body: { event: "CSV export fixture", headline: '=SUM(1,1)', description: "CSV safety fixture", area_desc: "CSV test area", status: "Test" }
+  });
+  assert.equal(csvFixture.status, 201, "CSV fixture alert should be created");
+  const csvResponse = await fetch(base + "/api/alerts/export.csv?q=CSV%20export%20fixture&workflow=draft", {
+    headers: { Authorization: "Bearer " + forecaster }
+  });
+  assert.equal(csvResponse.status, 200, "authenticated users should be able to export filtered alerts");
+  assert.match(csvResponse.headers.get("content-type") || "", /text\\/csv/i);
+  assert.match(csvResponse.headers.get("content-disposition") || "", /cap-alerts-export\\.csv/);
+  const csvText = await csvResponse.text();
+  assert.ok(csvText.startsWith("\\uFEFF"), "CSV export should include a UTF-8 BOM");
+  assert.match(csvText, /\'=SUM\\(1,1\\)/, "spreadsheet formula-like cells must be neutralized");
+  assert.match(csvText, /"CSV export fixture"/, "CSV fields should be quoted");
+  const unauthenticatedCsv = await fetch(base + "/api/alerts/export.csv");
+  assert.equal(unauthenticatedCsv.status, 401, "CSV export must require authentication");
+  const invalidCsvFilter = await fetch(base + "/api/alerts/export.csv?severity=invalid", {
+    headers: { Authorization: "Bearer " + forecaster }
+  });
+  assert.equal(invalidCsvFilter.status, 400, "CSV export must reject invalid filters");
   const testIdentifier = await createAndPublish("Test");
   const publicFeed = await request("/api/public/alerts");
   assert.equal(publicFeed.status, 200);

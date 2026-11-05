@@ -466,7 +466,7 @@ test("restore rejects a backup older than the signed external audit checkpoint",
 
     await assert.rejects(
       () => restoreDatabaseBackup(olderBackup, restored),
-      /Audit hash chain verification failed/,
+      /Audit hash chain verification failed: checkpoint_stale_or_database_rollback/,
       "a valid but older backup must not silently roll the database behind the signed checkpoint"
     );
     await assert.rejects(() => fs.stat(restored), { code: "ENOENT" });

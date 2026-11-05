@@ -35,6 +35,8 @@ test("SQLite backup is consistent and can be restored with hash-chain validation
       now: new Date("2026-11-04T12:30:00.000Z")
     });
     assert.match(path.basename(backup), /^cap-20261104T123000\d{3}Z-[0-9a-f-]{36}\.sqlite$/);
+    assert.equal((await fs.stat(backup)).mode & 0o777, 0o600,
+      "backup files must be owner-readable and owner-writable only");
     const sameSecondBackup = await createDatabaseBackup(database, path.join(directory, "backups"), {
       now: new Date("2026-11-04T12:30:00.500Z")
     });
@@ -47,6 +49,8 @@ test("SQLite backup is consistent and can be restored with hash-chain validation
 
     const result = await restoreDatabaseBackup(backup, restored);
     assert.equal(result.target, restored);
+    assert.equal((await fs.stat(restored)).mode & 0o777, 0o600,
+      "restored database files must be owner-readable and owner-writable only");
     const reopened = new Database(restored, { readonly: true });
     try {
       assert.equal(reopened.prepare("SELECT username FROM users").get().username, "backup-test");

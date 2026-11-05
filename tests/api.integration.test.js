@@ -802,6 +802,52 @@ test("API enforces role separation, public-feed filtering and account deactivati
   assert.ok(secondInboxPage.data.messages[0].id < firstInboxPage.data.messages.at(-1).id,
     "cursor pagination must return only older inbox rows");
 
+  const atomicityDatabase = new Database(path.join(cwd, "storage", "cap.sqlite"));
+  let auditFailureDeliveryId;
+  let pendingInboxId;
+  try {
+    const queued = atomicityDatabase.prepare(
+      "INSERT INTO delivery_outbox (alert_id,channel,payload,status,max_attempts) VALUES (?,?,?,'queued',3)"
+    ).run(actualRow.id, "webhook", "<synthetic-atomicity-test/>");
+    auditFailureDeliveryId = Number(queued.lastInsertRowid);
+    pendingInboxId = firstInboxPage.data.messages[0].id;
+    atomicityDatabase.exec(`
+      CREATE TRIGGER fail_delivery_claim_audit
+      BEFORE INSERT ON audit_log WHEN NEW.action='delivery_claimed'
+      BEGIN SELECT RAISE(ABORT, 'synthetic audit failure'); END;
+      CREATE TRIGGER fail_webhook_review_audit
+      BEFORE INSERT ON audit_log WHEN NEW.action='webhook_inbox_reviewed'
+      BEGIN SELECT RAISE(ABORT, 'synthetic audit failure'); END;
+    `);
+  } finally {
+    atomicityDatabase.close();
+  }
+  const failedAuditedClaim = await request(`/api/delivery/outbox/${auditFailureDeliveryId}/claim`, {
+    token: publisher, method: "POST", body: {}
+  });
+  assert.equal(failedAuditedClaim.status, 500,
+    "a failed audit append must fail the claim operation");
+  const failedAuditedReview = await request(`/api/webhooks/inbox/${pendingInboxId}/review`, {
+    token: reviewer, method: "PATCH", body: { status: "reviewed", note: "synthetic rollback test" }
+  });
+  assert.equal(failedAuditedReview.status, 400,
+    "a failed audit append must fail the inbox review operation");
+  const verifyAtomicRollback = new Database(path.join(cwd, "storage", "cap.sqlite"));
+  try {
+    assert.equal(verifyAtomicRollback.prepare("SELECT status,attempts FROM delivery_outbox WHERE id=?")
+      .get(auditFailureDeliveryId).status, "queued",
+      "delivery claim must roll back when its audit event cannot be recorded");
+    assert.equal(verifyAtomicRollback.prepare("SELECT attempts FROM delivery_outbox WHERE id=?")
+      .get(auditFailureDeliveryId).attempts, 0,
+      "failed audited claim must not consume an attempt");
+    assert.equal(verifyAtomicRollback.prepare("SELECT status FROM webhook_inbox WHERE id=?")
+      .get(pendingInboxId).status, "pending",
+      "webhook review must roll back when its audit event cannot be recorded");
+    verifyAtomicRollback.exec("DROP TRIGGER fail_delivery_claim_audit; DROP TRIGGER fail_webhook_review_audit;");
+  } finally {
+    verifyAtomicRollback.close();
+  }
+
   const directDatabase = new Database(path.join(cwd, "storage", "cap.sqlite"));
   try {
     assert.throws(() => directDatabase.prepare("UPDATE delivery_outbox SET lease_token='00000000-0000-4000-8000-000000000000' WHERE alert_id=?").run(actualRow.id),

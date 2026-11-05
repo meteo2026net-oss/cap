@@ -405,3 +405,24 @@ test("restore rejects a missing checksum manifest for a new-format backup", asyn
     await assert.rejects(() => restoreDatabaseBackup(backup, path.join(directory, "restored.sqlite")), /ENOENT/);
   } finally { database.close(); await fs.rm(directory, { recursive: true, force: true }); }
 });
+
+
+test("restore rejects a symbolic-link checksum manifest", async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "cap-backup-manifest-link-"));
+  const source = path.join(directory, "source.sqlite");
+  const database = createFixtureDatabase(source);
+  try {
+    const backup = await createDatabaseBackup(database, path.join(directory, "backups"));
+    const manifest = `${backup}.sha256`;
+    const external = path.join(directory, "external-manifest");
+    await fs.rename(manifest, external);
+    await fs.symlink(external, manifest, "file");
+    await assert.rejects(
+      () => restoreDatabaseBackup(backup, path.join(directory, "restored.sqlite")),
+      /manifest must be a regular file/
+    );
+  } finally {
+    database.close();
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});

@@ -94,7 +94,7 @@ $("#mfaRecoveryRotateForm").addEventListener("submit",async e=>{
   e.preventDefault();const status=$("#mfaActionStatus");
   try{
    const data=await api("/api/auth/mfa/recovery-codes",{method:"POST",body:JSON.stringify(Object.fromEntries(new FormData(e.currentTarget)))});
-   token=data.token;e.currentTarget.reset();$("#mfaRecoveryCodes").textContent=data.recovery_codes.join("\\n");$("#mfaRecoveryPanel").hidden=false;
+   token=data.token;e.currentTarget.reset();$("#mfaRecoveryCodes").textContent=data.recovery_codes.join("\n");$("#mfaRecoveryPanel").hidden=false;
    status.textContent="تم إصدار مجموعة جديدة. أُبطلت جميع الرموز القديمة والجلسات السابقة؛ احفظ الرموز الجديدة الآن.";
    await loadMfaStatus();
   }catch(error){status.textContent=error.message}

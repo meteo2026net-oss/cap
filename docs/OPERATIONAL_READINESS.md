@@ -19,6 +19,7 @@ These are deployment-time decisions; they are not needed to continue repository 
 ## 2. Identity, access, and governance
 
 - [x] Implement TOTP MFA, encrypted secret storage, one-time recovery codes, and single-use login challenges; automated tests cover enrollment, login, recovery, disable, and TOTP replay prevention.
+- [x] Implement recovery-code regeneration after current-password and second-factor verification; invalidate the previous set, revoke existing sessions, and show the replacement set once.
 - [x] Implement configurable `MFA_REQUIRED_ROLES` enforcement; protected operations for listed roles are blocked until MFA enrollment is confirmed, while setup endpoints remain accessible.
 - [ ] Set the deployment's approved `MFA_REQUIRED_ROLES` policy and complete independent security review.
 - [x] Require newly provisioned accounts to replace their initial temporary password before normal access.

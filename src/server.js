@@ -619,7 +619,8 @@ app.get("/api/alerts/:id/relations",auth,(req,res)=>{
    const parent=db.prepare("SELECT "+columns+" FROM alerts WHERE sender=? AND identifier=? AND (sent=? OR replace(sent,char(90),char(45)||'00:00')=?)").get(parts[0],parts[1],parts[2],parts[2]);
    if(parent && !found.has(parent.id)){found.set(parent.id,parent);queue.push(parent);}
   }
-  const currentReference=[current.sender,current.identifier,current.sent].join(",");
+  const normalizedSent=current.sent.replace(/\.\d{3}Z$/,"-00:00");
+  const currentReference=[current.sender,current.identifier,normalizedSent].join(",");
   const children=db.prepare("SELECT "+columns+" FROM alerts WHERE instr(' '||COALESCE(references_text,'')||' ',?)>0 ORDER BY sent,id LIMIT 100").all(" "+currentReference+" ");
   for(const child of children){if(!found.has(child.id)){found.set(child.id,child);queue.push(child);}}
  }

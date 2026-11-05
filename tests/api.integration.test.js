@@ -376,6 +376,8 @@ test("API enforces role separation, public-feed filtering and account deactivati
   assert.equal(passwordStage.status, 200);
   assert.equal(passwordStage.data.mfa_required, true, "password stage must not issue a full session when MFA is enabled");
   assert.equal(passwordStage.data.token, undefined);
+  assert.equal((await request("/api/alerts", { token: passwordStage.data.challenge_token })).status, 401,
+    "an MFA challenge token must never authenticate API requests before the second factor is verified");
   const invalidMfa = await request("/api/auth/mfa/challenge", {
     method: "POST", body: { challenge_token: passwordStage.data.challenge_token, code: "000000" }
   });

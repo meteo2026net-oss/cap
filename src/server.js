@@ -599,6 +599,24 @@ app.get("/api/alerts",auth,(req,res)=>{
  const rows = db.prepare("SELECT id,identifier,event,urgency,severity,certainty,headline,area_desc,workflow,sent,expires,status,msg_type FROM alerts " + where + " ORDER BY sent DESC,id DESC LIMIT ? OFFSET ?").all(...params,limit,offset);
  res.json({alerts:rows,pagination:{total,limit,offset,has_more:offset+rows.length<total}});
 });
+app.get("/api/review/queue",auth,roles("admin","reviewer","approver"),(req,res)=>{
+ const limitRaw=req.query.limit===undefined?"100":String(req.query.limit);
+ if(!/^(0|[1-9]\\d*)$/.test(limitRaw)||Number(limitRaw)<1||Number(limitRaw)>200)
+  return res.status(400).json({error:"Invalid review queue limit"});
+ const severity=req.query.severity;
+ if(severity!==undefined&&!["Extreme","Severe","Moderate","Minor","Unknown"].includes(severity))
+  return res.status(400).json({error:"Invalid severity filter"});
+ const params=[];
+ const severityClause=severity===undefined?"":" AND a.severity=?";
+ if(severity!==undefined)params.push(severity);
+ const rows=db.prepare(`SELECT a.id,a.identifier,a.event,a.headline,a.area_desc,a.urgency,a.severity,a.certainty,a.status,a.sent,a.expires,a.created_at,a.updated_at,a.created_by,u.username AS creator,
+  CAST(MAX(0,(julianday('now')-julianday(a.created_at))*86400) AS INTEGER) AS waiting_seconds
+  FROM alerts a LEFT JOIN users u ON u.id=a.created_by
+  WHERE a.workflow='pending'${severityClause}
+  ORDER BY CASE a.severity WHEN 'Extreme' THEN 0 WHEN 'Severe' THEN 1 WHEN 'Moderate' THEN 2 WHEN 'Minor' THEN 3 ELSE 4 END,
+  a.created_at ASC,a.id ASC LIMIT ?`).all(...params,Number(limitRaw));
+ res.set("Cache-Control","no-store").json({queue:rows,count:rows.length,limit:Number(limitRaw)});
+});
 app.get("/api/alerts/:id",auth,(req,res)=>{
  const row = db.prepare("SELECT * FROM alerts WHERE id=?").get(req.params.id);
  if (!row) return res.status(404).json({error:"Alert not found"});

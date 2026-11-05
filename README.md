@@ -121,6 +121,10 @@ This repository is an initial development foundation, not a certified or product
 
 Before operational use, expand the existing official CAP 1.2 XSD check into a complete conformance suite across all CAP message types, profiles, signatures, edge cases, and institutional interoperability scenarios, complete account lifecycle controls (including MFA and secure password recovery), HTTPS, backups, monitoring, security testing, and institution-specific authorization and approval procedures. Keep deployments private until these controls are completed. Use Test/Exercise messages during development, and configure unique non-placeholder `JWT_SECRET` and `ADMIN_PASSWORD` values before startup.
 
+## Operational readiness
+
+Before any institutional or public-warning deployment, use the [Operational Readiness and Go-Live Checklist](docs/OPERATIONAL_READINESS.md). It records the decisions, independent evidence, and acceptance gates still required; it does not certify the system.
+
 ## Roadmap
 
 See [docs-architecture.md](docs-architecture.md) for the staged delivery plan.

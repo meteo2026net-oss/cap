@@ -37,5 +37,5 @@ if errorlevel 1 (
   exit /b 1
 )
 echo Waiting for the local API to become ready...
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$deadline=(Get-Date).AddSeconds(30); do { try { $response=Invoke-WebRequest -UseBasicParsing -Uri http://127.0.0.1:8095/api/health -TimeoutSec 2; if ($response.StatusCode -eq 200) { Start-Process http://127.0.0.1:8095; exit 0 } } catch {}; Start-Sleep -Milliseconds 500 } while ((Get-Date) -lt $deadline); Write-Host 'The server did not become ready within 30 seconds. Check the server window.'; exit 1"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$deadline=(Get-Date).AddSeconds(30); do { try { $response=Invoke-WebRequest -UseBasicParsing -Uri http://127.0.0.1:8095/api/health/ready -TimeoutSec 2; if ($response.StatusCode -eq 200) { Start-Process http://127.0.0.1:8095; exit 0 } } catch {}; Start-Sleep -Milliseconds 500 } while ((Get-Date) -lt $deadline); Write-Host 'The server did not become ready within 30 seconds. Check the server window.'; exit 1"
 if errorlevel 1 exit /b 1

@@ -73,7 +73,7 @@ $("#mfaEnrollForm").addEventListener("submit",async e=>{
 $("#mfaConfirmForm").addEventListener("submit",async e=>{
  e.preventDefault();const status=$("#mfaActionStatus");
  try{const data=await api("/api/auth/mfa/confirm",{method:"POST",body:JSON.stringify(Object.fromEntries(new FormData(e.currentTarget)))});
-  $("#mfaRecoveryCodes").textContent=data.recovery_codes.join("\n");$("#mfaRecoveryPanel").hidden=false;$("#mfaEnrollment").hidden=true;$("#mfaEnrollForm").reset();e.currentTarget.reset();
+  token=data.token;$("#mfaRecoveryCodes").textContent=data.recovery_codes.join("\n");$("#mfaRecoveryPanel").hidden=false;$("#mfaEnrollment").hidden=true;$("#mfaEnrollForm").reset();e.currentTarget.reset();
   status.textContent="تم تفعيل MFA. احفظ رموز الاسترداد الآن؛ لن تظهر مرة أخرى.";await loadMfaStatus();
  }catch(error){status.textContent=error.message}
 });

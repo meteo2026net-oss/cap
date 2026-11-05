@@ -158,7 +158,7 @@ Example: `GET /api/alerts/export.csv?q=rain&workflow=published&severity=Severe`
 `GET /api/alerts/stats` requires authentication and returns counts across the complete alert table, independent of the current list search, filters or page offset. The `stats` object includes `total`, workflow counts (`drafts`, `pending`, `approved`, `published`, `cancelled`), severity counts (`extreme`, `severe`, `moderate`, `minor`) and CAP status counts (`actual`, `test`, `exercise`, `system`). Empty groups are returned as zero. The dashboard uses this endpoint so its summary counters no longer change when the user moves between pages or filters the alert list.
 ## Export the audit history as CSV
 
-`GET /api/audit/export.csv` exports the append-only audit history for administrators, reviewers and approvers. It supports an exact `action` filter and a `q` substring search across action, details and username. The CSV includes the event ID, timestamp, actor, related alert ID, action, details, previous hash and entry hash.
+`GET /api/audit/export.csv` exports the append-only audit history for administrators, reviewers and approvers. Both `GET /api/audit` and the export endpoint support an exact `action` filter and a `q` substring search across action, details and username. The paginated history endpoint combines these filters with its `before_id` cursor, so older-page navigation stays within the selected filter. The CSV includes the event ID, timestamp, actor, related alert ID, action, details, previous hash and entry hash.
 
 - Export is capped at 10,000 rows; narrow the filters if the cap is exceeded.
 - CSV cells are quoted and formula-like leading characters are neutralized using the same CSV safety helper as alert exports.

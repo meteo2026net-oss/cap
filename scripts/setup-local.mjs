@@ -39,5 +39,5 @@ console.log(`Initial administrator password: ${adminPassword}`);
 console.log("JWT secret: generated and saved in .env");
 console.log("MFA encryption key: generated and saved in .env");
 console.log("\nSave the initial password in a password manager. It is shown only once.");
-console.log("Next steps: npm install, npm test, then npm start");
+console.log("Next steps: npm ci, npm test, then npm start");
 console.log("Open: http://localhost:8095");

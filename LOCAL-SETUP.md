@@ -1,10 +1,10 @@
 # Local installation (without Docker)
 
-This installation runs Node.js directly on Windows, Linux, or macOS. Docker is not installed or used.
+The application runs directly on Windows, Linux, or macOS with Node.js and embedded SQLite. Container deployment is not part of this project.
 
 ## Requirements
 
-- Node.js 20 or newer (Node.js 22 LTS is recommended).
+- Node.js 22 or newer.
 - npm (included with Node.js).
 - Internet access for the first dependency installation and OpenStreetMap map tiles.
 
@@ -12,7 +12,7 @@ SQLite is embedded through `better-sqlite3`; there is no separate database serve
 
 ## Windows quick start
 
-1. Install Node.js 20+ (preferably Node.js 22 LTS).
+1. Install Node.js 22+ (preferably Node.js 22 LTS).
 2. Extract or clone this repository.
 3. Open PowerShell in the project folder.
 4. Run:
@@ -64,4 +64,4 @@ Open http://127.0.0.1:8095.
 
 Keep `.env`, `storage/`, and `backups/` private. Do not commit credentials or live warning data.
 
-The local and Docker installations use the same application code and SQLite schema. Do not run both against the same database file simultaneously.
+Run only one application and worker process against a given SQLite database file at a time.

@@ -260,3 +260,66 @@ test("accepts XML Schema maximum timezone offsets and rejects offsets beyond 14 
       /out-of-range date, time or timezone offset/);
   }
 });
+
+
+test("serializes optional CAP metadata, response types, parameters and full area/resource fields", () => {
+  const xml = buildCapXml({
+    ...valid,
+    source: "National Forecast Centre",
+    codes: ["profile:weather", "region:west"],
+    note: "Exercise message for integration testing",
+    incidents: "INC-2026-0042",
+    info_blocks: [{
+      language: "en-GB",
+      categories: ["Met", "Safety"],
+      event: "Severe rainfall",
+      response_types: ["Prepare", "Monitor"],
+      urgency: "Expected",
+      severity: "Severe",
+      certainty: "Likely",
+      effective: "2026-11-05T08:00:00+01:00",
+      onset: "2026-11-05T09:00:00+01:00",
+      expires: "2026-11-05T18:00:00+01:00",
+      senderName: "Forecast Operations",
+      headline: "Heavy rainfall expected",
+      description: "Periods of heavy rainfall are expected.",
+      instruction: "Monitor official updates.",
+      web: "https://example.org/warnings",
+      contact: "forecast@example.org",
+      parameters: [{ valueName: "rainfall_mm", value: "35" }],
+      areas: [{
+        areaDesc: "Western district",
+        polygon: "51,0 52,0 52,1 51,1 51,0",
+        altitude: 0,
+        ceiling: 2500
+      }],
+      resources: [{
+        resourceDesc: "Rainfall map",
+        mimeType: "image/png",
+        size: 4096,
+        uri: "https://example.org/rain.png",
+        derefUri: "embedded-map",
+        digest: "0123456789abcdef"
+      }]
+    }]
+  });
+  for (const tag of [
+    "source", "code", "note", "incidents", "responseType", "effective", "onset", "expires",
+    "senderName", "instruction", "web", "contact", "parameter", "valueName", "altitude",
+    "ceiling", "derefUri", "digest"
+  ]) assert.match(xml, new RegExp(`<${tag}>`));
+  assert.match(xml, /<category>Safety<\\/category>/);
+  assert.match(xml, /<responseType>Prepare<\\/responseType>/);
+  assert.match(xml, /<value>35<\\/value>/);
+  assert.match(xml, /<size>4096<\\/size>/);
+});
+
+test("rejects invalid CAP categories and response types", () => {
+  const block = {
+    language: "en-GB", event: "Heavy rainfall",
+    urgency: "Expected", severity: "Moderate", certainty: "Likely",
+    area: { areaDesc: "District", circle: "51.5,-0.1 10" }
+  };
+  assert.throws(() => buildCapXml({ ...valid, info_blocks: [{ ...block, category: "Weather" }] }), /valid category/);
+  assert.throws(() => buildCapXml({ ...valid, info_blocks: [{ ...block, response_type: "RunAway" }] }), /responseType/);
+});

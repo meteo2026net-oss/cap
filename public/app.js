@@ -529,7 +529,7 @@ async function loadAlertTimeline(id,container){
    if(item.details){const details=document.createElement("p");details.textContent=item.details;row.append(details);}
    container.append(row);
   }
-  if(data.truncated){const note=document.createElement("p");note.textContent="تم بلوغ حد العرض؛ قد لا تظهر جميع الأحداث.";container.append(note);}
+  if(data.truncated){const note=document.createElement("p");note.textContent="تم بلوغ حد العرض؛ يعرض السجل أحدث الأحداث، وقد حُجبت أحداث أقدم.";container.append(note);}
   if(!data.count)container.append(document.createTextNode("لا توجد أحداث مسجلة لهذا التحذير."));
  }catch(error){container.textContent=error.message;}
 }

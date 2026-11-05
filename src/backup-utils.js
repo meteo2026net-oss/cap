@@ -88,6 +88,29 @@ export async function verifyDatabaseBackup(source) {
   return { file: sourcePath, checksum, ...validation };
 }
 
+export async function verifyRestoredDatabase(source) {
+  const file = path.resolve(source);
+  const stat = await fs.lstat(file);
+  if (!stat.isFile() || stat.isSymbolicLink()) {
+    throw new Error("Restored database must be a regular file, not a symbolic link.");
+  }
+  const validation = await validateDatabaseFile(file);
+  const database = new Database(file, { readonly: true, fileMustExist: true });
+  try {
+    const count = table => database.prepare(`SELECT COUNT(*) AS count FROM "${table}"`).get().count;
+    const tables = new Set(database.prepare(
+      "SELECT name FROM sqlite_master WHERE type='table'"
+    ).all().map(row => row.name));
+    const counts = {};
+    for (const table of ["users", "alerts", "audit_log"]) {
+      if (tables.has(table)) counts[table] = count(table);
+    }
+    return { file, integrity: validation.integrity, audit: validation.audit, counts };
+  } finally {
+    database.close();
+  }
+}
+
 export async function createDatabaseBackup(database, directory, { now = new Date() } = {}) {
   await fs.mkdir(directory, { recursive: true });
   const destination = path.join(directory, `cap-${timestampSlug(now)}-${randomUUID()}.sqlite`);

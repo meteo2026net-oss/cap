@@ -51,3 +51,13 @@ test("rejects malformed polygons and circles instead of emitting invalid GeoJSON
   assert.throws(() => alertsToGeoJSON([{ ...base, polygon: "91,0 52,0 52,1 91,0" }]), /coordinates/);
   assert.throws(() => alertsToGeoJSON([{ ...base, circle: "51,-1 0" }]), /circle/);
 });
+
+
+test("rejects blank and non-decimal GeoJSON coordinates", () => {
+  for (const circle of [",36.2 12", "33.5,36.2 0x10"]) {
+    assert.throws(() => alertsToGeoJSON([{ ...base, area_desc: "District", circle }]), /circle/);
+  }
+  for (const polygon of ["51,0 52,0 52,1 51,1 ,0", "0x33,0 52,0 52,1 0x33,0"]) {
+    assert.throws(() => alertsToGeoJSON([{ ...base, area_desc: "District", polygon }]), /coordinates/);
+  }
+});

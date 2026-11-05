@@ -676,6 +676,16 @@ test("API enforces role separation, public-feed filtering and account deactivati
     ]);
     assert.deepEqual(concurrentSubmissions.map(result => result.status).sort(), [200, 409],
       "concurrent submission attempts must produce exactly one successful transition");
+    const reviewQueue = await request("/api/review/queue?limit=20", { token: reviewer });
+    assert.equal(reviewQueue.status, 200, "reviewers should access the dedicated review queue");
+    const queuedAlert = reviewQueue.data.queue.find(item => item.id === id);
+    assert.ok(queuedAlert, "submitted alert should appear in the review queue");
+    assert.equal(queuedAlert.creator, "forecaster1");
+    assert.ok(Number.isInteger(queuedAlert.waiting_seconds));
+    assert.equal((await request("/api/review/queue", { token: forecaster })).status, 403,
+      "forecasters must not access the reviewer queue");
+    assert.equal((await request("/api/review/queue?limit=201", { token: reviewer })).status, 400,
+      "review queue must enforce its hard page limit");
     assert.equal((await request(`/api/alerts/${id}/approve`, {
       token: forecaster, method: "POST", body: {}
     })).status, 403, "creator cannot approve their own warning");

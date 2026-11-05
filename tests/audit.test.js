@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import Database from "better-sqlite3";
-import { appendAuditLog, installAuditLogGuards, verifyAuditChain } from "../src/audit.js";
+import { appendAuditLog, initializeAuditCheckpoint, installAuditLogGuards, verifyAuditChain } from "../src/audit.js";
 
 test("audit log records cannot be updated or deleted", () => {
   const database = new Database(":memory:");
@@ -299,6 +299,29 @@ test("external audit checkpoint detects unanchored append and forged signature",
     document.signature = "0".repeat(64);
     fs.writeFileSync(checkpointPath, JSON.stringify(document));
     assert.equal(verifyAuditChain(database, { checkpointPath, checkpointSecret }).reason, "checkpoint_signature_invalid");
+  } finally {
+    database.close();
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+
+test("checkpoint initialization anchors an existing verified chain once", async () => {
+  const fs = await import("node:fs");
+  const os = await import("node:os");
+  const path = await import("node:path");
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "cap-audit-bootstrap-"));
+  const checkpointPath = path.join(directory, "anchor.json");
+  const checkpointSecret = "test-only-checkpoint-secret-at-least-32-bytes";
+  const database = new Database(":memory:");
+  try {
+    database.exec("CREATE TABLE audit_log (id INTEGER PRIMARY KEY,user_id INTEGER,alert_id INTEGER,action TEXT NOT NULL,details TEXT,created_at TEXT NOT NULL,previous_hash TEXT,entry_hash TEXT)");
+    installAuditLogGuards(database);
+    appendAuditLog(database, { action: "legacy-chain-event" });
+    const initialized = initializeAuditCheckpoint(database, { checkpointPath, checkpointSecret });
+    assert.equal(initialized.latest_id, 1);
+    assert.equal(verifyAuditChain(database, { checkpointPath, checkpointSecret }).valid, true);
+    assert.throws(() => initializeAuditCheckpoint(database, { checkpointPath, checkpointSecret }), /already exists/);
   } finally {
     database.close();
     fs.rmSync(directory, { recursive: true, force: true });

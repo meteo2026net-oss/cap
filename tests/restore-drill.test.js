@@ -31,13 +31,22 @@ async function fixture(t) {
 }
 
 test("isolated restore drill runs the real restore path and compares every table count", async t => {
-  const { backup } = await fixture(t);
+  const { root, backup } = await fixture(t);
+  const livePath = path.join(root, "live-database.sqlite");
+  const liveDb = new Database(livePath);
+  liveDb.exec("CREATE TABLE live_sentinel (value TEXT); INSERT INTO live_sentinel VALUES ('must-not-change');");
+  liveDb.close();
+  const liveBefore = await fs.readFile(livePath);
   const result = await runIsolatedRestoreDrill(backup);
+  const liveAfter = await fs.readFile(livePath);
+  assert.deepEqual(liveAfter, liveBefore, "the live database must remain byte-for-byte unchanged");
   assert.equal(result.result, "passed");
   assert.equal(result.integrity, "ok");
   assert.equal(result.temporary_workspace_removed, true);
   assert.deepEqual(result.counts, { users: 2, alerts: 1, audit_log: 2 });
   assert.equal(result.table_counts.alert_versions, 1);
+  assert.equal(result.table_fingerprints.alert_versions.rows, 1);
+  assert.match(result.table_fingerprints.alert_versions.sha256, /^[a-f0-9]{64}$/);
 });
 
 test("isolated restore drill rejects a backup whose checksum was changed", async t => {
@@ -56,4 +65,5 @@ test("restore:drill CLI prints a successful machine-readable report", async t =>
   assert.equal(report.result, "passed");
   assert.equal(report.temporary_workspace_removed, true);
   assert.equal(report.counts.users, 2);
+  assert.match(report.table_fingerprints.users.sha256, /^[a-f0-9]{64}$/);
 });

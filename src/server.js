@@ -682,7 +682,12 @@ app.get("/api/alerts/:id/timeline",auth,roles("admin","reviewer","approver"),(re
   const labels={created:"إنشاء التحذير",submitted:"إرسال للمراجعة",approved:"اعتماد التحذير",
    returned_to_author:"إعادة للمُنشئ",published:"نشر التحذير",cancelled:"إلغاء التحذير",
    review_note_added:"إضافة ملاحظة مراجعة",draft_updated:"تعديل المسودة",
-   derived:"إنشاء رسالة مشتقة",webhook_inbox_reviewed:"مراجعة رسالة واردة"};
+   update:"إنشاء مسودة تحديث",cancel:"إنشاء مسودة إلغاء",
+   webhook_inbox_reviewed:"قبول رسالة واردة",webhook_inbox_rejected:"رفض رسالة واردة",
+   delivery_auto_retry_queued:"إعادة إدراج تسليم للمحاولة",delivery_dead_lettered:"نقل تسليم إلى قائمة التعذر",
+   delivery_lease_recovered:"استعادة مهمة تسليم متوقفة",delivery_lease_dead_lettered:"إنهاء مهمة تسليم مستنفدة",
+   delivery_claimed:"حجز مهمة تسليم داخلياً",delivery_delivered:"تسجيل استلام التسليم",
+   delivery_failed:"تسجيل فشل التسليم",delivery_retry_queued:"إعادة جدولة التسليم"};
   return {id:"audit-"+row.id,source:"audit",event_type:row.action,
    summary:labels[row.action]||"حدث: "+row.action,
    details:["review_note_added","returned_to_author"].includes(row.action)?String(row.details||"").slice(0,1000):"",

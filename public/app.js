@@ -5,9 +5,43 @@ const loginPanel=$("#loginPanel"), appPanel=$("#appPanel");
 function headers(){return {"Content-Type":"application/json","Authorization":`Bearer ${token}`}}
 async function api(url,opts={}){const r=await fetch(url,{...opts,headers:{...headers(),...(opts.headers||{})}});const data=await r.json().catch(()=>({}));if(!r.ok)throw new Error(data.error||"Request failed");return data}
 function showApp(on){loginPanel.hidden=on;appPanel.hidden=!on}
-$("#loginForm").addEventListener("submit",async e=>{e.preventDefault();const f=new FormData(e.target);try{const d=await fetch("/api/auth/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(Object.fromEntries(f))}).then(r=>r.json());if(!d.token)throw new Error(d.error||"تعذر تسجيل الدخول");token=d.token;currentRole=d.user.role;auditHistoryGeneration++;auditHistoryLoading=false;$("#userBadge").textContent=`${d.user.username} • ${d.user.role}`;$("#deliveryMonitor").hidden=!["admin","publisher"].includes(currentRole);$("#webhookInboxMonitor").hidden=!["admin","reviewer"].includes(currentRole);$("#userAdmin").hidden=d.user.role!=="admin";const canVerifyAudit=["admin","reviewer","approver"].includes(d.user.role);$("#auditIntegrity").hidden=!canVerifyAudit;$("#auditHistoryPanel").hidden=!canVerifyAudit;showApp(true);await loadAlerts();initWarningMap();await refreshWarningMap();if(d.user.role==="admin")await loadUsers();if(canVerifyAudit){await loadAuditIntegrity();await loadAuditHistory();}if(["admin","publisher"].includes(currentRole))await loadDeliveryOutbox();if(["admin","reviewer"].includes(currentRole))await loadWebhookInbox()}catch(err){$("#loginError").textContent=err.message}});
+let pendingMfaChallenge="";
+async function finishLogin(d){
+ token=d.token;currentRole=d.user.role;auditHistoryGeneration++;auditHistoryLoading=false;
+ $("#userBadge").textContent=d.user.username+" • "+d.user.role;
+ $("#deliveryMonitor").hidden=!["admin","publisher"].includes(currentRole);
+ $("#webhookInboxMonitor").hidden=!["admin","reviewer"].includes(currentRole);
+ $("#userAdmin").hidden=d.user.role!=="admin";
+ const canVerifyAudit=["admin","reviewer","approver"].includes(d.user.role);
+ $("#auditIntegrity").hidden=!canVerifyAudit;$("#auditHistoryPanel").hidden=!canVerifyAudit;
+ showApp(true);await loadAlerts();initWarningMap();await refreshWarningMap();
+ if(d.user.role==="admin")await loadUsers();
+ if(canVerifyAudit){await loadAuditIntegrity();await loadAuditHistory();}
+ if(["admin","publisher"].includes(currentRole))await loadDeliveryOutbox();
+ if(["admin","reviewer"].includes(currentRole))await loadWebhookInbox();
+ await loadMfaStatus();
+}
+$("#loginForm").addEventListener("submit",async e=>{
+ e.preventDefault();const form=e.currentTarget;
+ try{
+  const response=await fetch("/api/auth/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(Object.fromEntries(new FormData(form)))});
+  const d=await response.json();
+  if(d.mfa_required){pendingMfaChallenge=d.challenge_token;form.hidden=true;$("#mfaChallengeForm").hidden=false;$("#mfaChallengeError").textContent="أدخل رمز تطبيق المصادقة أو أحد رموز الاسترداد.";return}
+  if(!d.token)throw new Error(d.error||"تعذر تسجيل الدخول");
+  await finishLogin(d);
+ }catch(err){$("#loginError").textContent=err.message}
+});
+$("#mfaChallengeForm").addEventListener("submit",async e=>{
+ e.preventDefault();const code=new FormData(e.currentTarget).get("code");
+ try{
+  const response=await fetch("/api/auth/mfa/challenge",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({challenge_token:pendingMfaChallenge,code})});
+  const d=await response.json();if(!response.ok||!d.token)throw new Error(d.error||"تعذر إكمال التحقق");
+  pendingMfaChallenge="";e.currentTarget.reset();$("#mfaChallengeForm").hidden=true;$("#loginForm").hidden=false;await finishLogin(d);
+ }catch(err){$("#mfaChallengeError").textContent=err.message}
+});
+$("#mfaBackToLogin").addEventListener("click",()=>{pendingMfaChallenge="";$("#mfaChallengeForm").hidden=true;$("#loginForm").hidden=false;$("#mfaChallengeError").textContent=""});
 let warningMap=null, publishedGeoLayer=null, importedGeoLayer=null, drawnGeoLayer=null, drawControl=null;
-$("#logoutBtn").onclick=()=>{token="";currentRole="";auditHistoryGeneration++;auditHistoryLoading=false;auditHistoryCursor=null;showApp(false);$("#userAdmin").hidden=true;$("#auditIntegrity").hidden=true;$("#auditHistoryPanel").hidden=true;$("#deliveryMonitor").hidden=true;$("#webhookInboxMonitor").hidden=true};
+$("#logoutBtn").onclick=()=>{token="";currentRole="";pendingMfaChallenge="";auditHistoryGeneration++;auditHistoryLoading=false;auditHistoryCursor=null;showApp(false);$("#loginForm").hidden=false;$("#mfaChallengeForm").hidden=true;$("#userAdmin").hidden=true;$("#auditIntegrity").hidden=true;$("#auditHistoryPanel").hidden=true;$("#deliveryMonitor").hidden=true;$("#webhookInboxMonitor").hidden=true};
 $("#passwordForm").addEventListener("submit",async e=>{
  e.preventDefault();
  const form=e.currentTarget, data=Object.fromEntries(new FormData(form));
@@ -20,6 +54,33 @@ $("#passwordForm").addEventListener("submit",async e=>{
   token=result.token;
   form.reset();
   status.textContent="تم تحديث كلمة المرور وإلغاء الجلسات السابقة. هذه الجلسة مستمرة بأمان.";
+ }catch(error){status.textContent=error.message}
+});
+async function loadMfaStatus(){
+ const status=$("#mfaStatus");
+ try{
+  const data=await api("/api/auth/mfa/status");
+  status.textContent=data.enabled?"المصادقة متعددة العوامل مفعّلة. رموز الاسترداد المتبقية: "+data.recovery_codes_remaining:(data.pending?"يوجد إعداد غير مكتمل؛ يمكنك بدء إعداد جديد بعد انتهاء صلاحيته.":"المصادقة متعددة العوامل غير مفعّلة لهذا الحساب.");
+  $("#mfaEnrollForm").hidden=data.enabled;$("#mfaDisableForm").hidden=!data.enabled;$("#mfaEnrollment").hidden=true;
+ }catch(error){status.textContent=error.message}
+}
+$("#mfaEnrollForm").addEventListener("submit",async e=>{
+ e.preventDefault();const status=$("#mfaActionStatus");
+ try{const data=await api("/api/auth/mfa/enroll",{method:"POST",body:JSON.stringify(Object.fromEntries(new FormData(e.currentTarget)))});
+  $("#mfaSecret").textContent=data.secret;$("#mfaOtpAuth").textContent=data.otpauth_url;$("#mfaEnrollment").hidden=false;status.textContent="أدخل الرمز من تطبيق المصادقة لتأكيد التفعيل خلال 10 دقائق.";
+ }catch(error){status.textContent=error.message}
+});
+$("#mfaConfirmForm").addEventListener("submit",async e=>{
+ e.preventDefault();const status=$("#mfaActionStatus");
+ try{const data=await api("/api/auth/mfa/confirm",{method:"POST",body:JSON.stringify(Object.fromEntries(new FormData(e.currentTarget)))});
+  $("#mfaRecoveryCodes").textContent=data.recovery_codes.join("\n");$("#mfaRecoveryPanel").hidden=false;$("#mfaEnrollment").hidden=true;$("#mfaEnrollForm").reset();e.currentTarget.reset();
+  status.textContent="تم تفعيل MFA. احفظ رموز الاسترداد الآن؛ لن تظهر مرة أخرى.";await loadMfaStatus();
+ }catch(error){status.textContent=error.message}
+});
+$("#mfaDisableForm").addEventListener("submit",async e=>{
+ e.preventDefault();const status=$("#mfaActionStatus");
+ try{await api("/api/auth/mfa/disable",{method:"POST",body:JSON.stringify(Object.fromEntries(new FormData(e.currentTarget)))});
+  e.currentTarget.reset();$("#mfaRecoveryPanel").hidden=true;$("#mfaRecoveryCodes").textContent="";status.textContent="تم تعطيل MFA وإلغاء الجلسات السابقة. سجّل الدخول مجدداً.";token="";currentRole="";showApp(false);$("#loginForm").hidden=false;
  }catch(error){status.textContent=error.message}
 });
 function initWarningMap(){

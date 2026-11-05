@@ -349,6 +349,41 @@ test("API enforces role separation, public-feed filtering and account deactivati
   const actualRow = original.data.alerts.find(alert => alert.identifier === actualIdentifier);
   assert.ok(actualRow, "published warning should remain in authenticated history");
 
+  const unreviewedDraft = await request("/api/alerts", {
+    token: forecaster, method: "POST",
+    body: {
+      event: "Integration test draft",
+      headline: "Unreviewed synthetic warning",
+      description: "Synthetic test data only",
+      area_desc: "Synthetic test area",
+      circle: "33.5,36.2 8",
+      category: "Met",
+      urgency: "Expected",
+      severity: "Moderate",
+      certainty: "Likely",
+      status: "Test",
+      scope: "Public"
+    }
+  });
+  assert.equal(unreviewedDraft.status, 201);
+  assert.equal((await request(`/api/alerts/${unreviewedDraft.data.id}/derive`, {
+    token: forecaster, method: "POST", body: { msg_type: "Update" }
+  })).status, 409, "draft alerts must not be used as sources for Update or Cancel messages");
+
+  assert.equal((await request(`/api/alerts/${unreviewedDraft.data.id}/submit`, {
+    token: forecaster, method: "POST", body: {}
+  })).status, 200);
+  assert.equal((await request(`/api/alerts/${unreviewedDraft.data.id}/derive`, {
+    token: forecaster, method: "POST", body: { msg_type: "Cancel" }
+  })).status, 409, "pending alerts must not be used as sources for Update or Cancel messages");
+
+  assert.equal((await request(`/api/alerts/${actualRow.id}/derive`, {
+    token: forecaster, method: "POST", body: { msg_type: "Alert" }
+  })).status, 400, "derive endpoint must reject message types other than Update and Cancel");
+  assert.equal((await request(`/api/alerts/${actualRow.id}/derive`, {
+    token: viewer, method: "POST", body: { msg_type: "Update" }
+  })).status, 403, "viewer accounts must not derive CAP messages");
+
   assert.equal((await request("/api/delivery/outbox", { token: forecaster })).status, 403,
     "forecasters must not access the delivery outbox");
   const outbox = await request("/api/delivery/outbox", { token: publisher });

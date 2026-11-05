@@ -621,4 +621,24 @@ test("API enforces role separation, public-feed filtering and account deactivati
   assert.equal((await request(`/api/users/${adminUser.id}/status`, {
     token: admin, method: "PATCH", body: { active: false }
   })).status, 409, "the active administrator cannot deactivate itself");
+  assert.equal((await request("/api/users/not-a-number/status", {
+    token: admin, method: "PATCH", body: { active: false }
+  })).status, 400, "non-numeric account status ids must be rejected");
+  assert.equal((await request("/api/users/999999/status", {
+    token: admin, method: "PATCH", body: { active: false }
+  })).status, 404, "unknown account ids must return not found");
+  for (const invalidActive of [null, 0, 1, "false", {}]) {
+    assert.equal((await request(`/api/users/${disabledId}/status`, {
+      token: admin, method: "PATCH", body: { active: invalidActive }
+    })).status, 400, "account status must reject non-boolean active values");
+  }
+  const reactivatedSession = await login("disabled1", "Temporary-Password-2026!");
+  const unchangedStatus = await request(`/api/users/${disabledId}/status`, {
+    token: admin, method: "PATCH", body: { active: true }
+  });
+  assert.equal(unchangedStatus.status, 200);
+  assert.equal(unchangedStatus.data.changed, false, "repeating the current account status should be a no-op");
+  assert.equal(unchangedStatus.data.sessions_revoked, false, "a no-op status update must not revoke sessions");
+  assert.equal((await request("/api/me", { token: reactivatedSession })).status, 200,
+    "a no-op account status update must preserve the current valid session");
 });

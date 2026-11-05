@@ -500,6 +500,18 @@ test("API enforces role separation, public-feed filtering and account deactivati
 
   assert.equal((await request("/api/audit", { token: forecaster })).status, 403,
     "forecasters must not read restricted audit history");
+  assert.equal((await request("/api/audit", { token: publisher })).status, 403,
+    "publishers must not read restricted audit history");
+  assert.equal((await request("/api/audit", { token: viewer })).status, 403,
+    "viewers must not read restricted audit history");
+  assert.equal((await request("/api/audit/verify", { token: publisher })).status, 403,
+    "publishers must not verify restricted audit history");
+  assert.equal((await request("/api/audit/verify", { token: viewer })).status, 403,
+    "viewers must not verify restricted audit history");
+  assert.equal((await request("/api/audit", { token: approver })).status, 200,
+    "approvers should be able to inspect audit history");
+  assert.equal((await request("/api/audit/verify", { token: approver })).status, 200,
+    "approvers should be able to verify audit history");
   const auditHistory = await request("/api/audit", { token: reviewer });
   assert.equal(auditHistory.status, 200,
     "reviewers should be able to inspect audit history");

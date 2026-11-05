@@ -692,6 +692,13 @@ test("API enforces role separation, public-feed filtering and account deactivati
     const returned = await request(`/api/alerts/${id}/return`, { token: reviewer, method: "POST", body: { reason: "Please clarify the affected area and expected timing." } });
     assert.equal(returned.status, 200, "reviewer should be able to return a pending warning to its author");
     assert.equal(returned.data.workflow, "draft");
+    assert.equal((await request(`/api/alerts/${id}`, { token: forecaster, method: "PATCH", body: { headline: "x" } })).status, 400,
+      "draft edits must still satisfy CAP headline validation");
+    const correctedDraft = await request(`/api/alerts/${id}`, { token: forecaster, method: "PATCH", body: { headline: "Corrected integration warning headline", description: "Updated description after reviewer feedback." } });
+    assert.equal(correctedDraft.status, 200, "the original author should be able to correct a returned draft");
+    assert.deepEqual(correctedDraft.data.updated_fields.sort(), ["description","headline"]);
+    assert.equal((await request(`/api/alerts/${id}`, { token: reviewer, method: "PATCH", body: { headline: "Unauthorized reviewer edit" } })).status, 403,
+      "reviewers cannot edit another users draft");
     assert.equal((await request(`/api/alerts/${id}/submit`, { token: forecaster, method: "POST", body: {} })).status, 200,
       "the author should be able to resubmit the corrected draft");
     const concurrentApprovals = await Promise.all([

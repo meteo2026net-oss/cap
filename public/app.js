@@ -1,5 +1,6 @@
 let token = "";
 let currentRole = "";
+let currentUserId = null;
 const $ = s => document.querySelector(s);
 const loginPanel=$("#loginPanel"), appPanel=$("#appPanel");
 function headers(){return {"Content-Type":"application/json","Authorization":`Bearer ${token}`}}
@@ -7,14 +8,18 @@ async function api(url,opts={}){const r=await fetch(url,{...opts,headers:{...hea
 function showApp(on){loginPanel.hidden=on;appPanel.hidden=!on}
 let pendingMfaChallenge="";
 async function finishLogin(d){
- token=d.token;currentRole=d.user.role;auditHistoryGeneration++;auditHistoryLoading=false;
+ token=d.token;currentRole=d.user.role;currentUserId=d.user.id;auditHistoryGeneration++;auditHistoryLoading=false;
  $("#userBadge").textContent=d.user.username+" • "+d.user.role;
  $("#deliveryMonitor").hidden=!["admin","publisher"].includes(currentRole);
  $("#webhookInboxMonitor").hidden=!["admin","reviewer"].includes(currentRole);
  $("#userAdmin").hidden=d.user.role!=="admin";
  const canVerifyAudit=["admin","reviewer","approver"].includes(d.user.role);
  $("#auditIntegrity").hidden=!canVerifyAudit;$("#auditHistoryPanel").hidden=!canVerifyAudit;
- showApp(true);await loadAlerts();initWarningMap();await refreshWarningMap();
+ showApp(true);
+ const forcePasswordChange=d.password_change_required===true;
+ appPanel.classList.toggle("password-change-required",forcePasswordChange);
+ if(forcePasswordChange){$("#passwordStatus").textContent="أصدر المسؤول كلمة مرور مؤقتة لهذا الحساب. يجب تعيين كلمة مرور شخصية جديدة قبل متابعة أي عملية.";await loadMfaStatus();return}
+ await loadAlerts();initWarningMap();await refreshWarningMap();
  if(d.user.role==="admin")await loadUsers();
  if(canVerifyAudit){await loadAuditIntegrity();await loadAuditHistory();}
  if(["admin","publisher"].includes(currentRole))await loadDeliveryOutbox();
@@ -41,7 +46,7 @@ $("#mfaChallengeForm").addEventListener("submit",async e=>{
 });
 $("#mfaBackToLogin").addEventListener("click",()=>{pendingMfaChallenge="";$("#mfaChallengeForm").hidden=true;$("#loginForm").hidden=false;$("#mfaChallengeError").textContent=""});
 let warningMap=null, publishedGeoLayer=null, importedGeoLayer=null, drawnGeoLayer=null, drawControl=null;
-$("#logoutBtn").onclick=()=>{token="";currentRole="";pendingMfaChallenge="";auditHistoryGeneration++;auditHistoryLoading=false;auditHistoryCursor=null;showApp(false);$("#loginForm").hidden=false;$("#mfaChallengeForm").hidden=true;$("#userAdmin").hidden=true;$("#auditIntegrity").hidden=true;$("#auditHistoryPanel").hidden=true;$("#deliveryMonitor").hidden=true;$("#webhookInboxMonitor").hidden=true};
+$("#logoutBtn").onclick=()=>{token="";currentRole="";currentUserId=null;appPanel.classList.remove("password-change-required");pendingMfaChallenge="";auditHistoryGeneration++;auditHistoryLoading=false;auditHistoryCursor=null;showApp(false);$("#loginForm").hidden=false;$("#mfaChallengeForm").hidden=true;$("#userAdmin").hidden=true;$("#auditIntegrity").hidden=true;$("#auditHistoryPanel").hidden=true;$("#deliveryMonitor").hidden=true;$("#webhookInboxMonitor").hidden=true};
 $("#passwordForm").addEventListener("submit",async e=>{
  e.preventDefault();
  const form=e.currentTarget, data=Object.fromEntries(new FormData(form));
@@ -53,7 +58,8 @@ $("#passwordForm").addEventListener("submit",async e=>{
   const result=await api("/api/auth/change-password",{method:"POST",body:JSON.stringify(data)});
   token=result.token;
   form.reset();
-  status.textContent="تم تحديث كلمة المرور وإلغاء الجلسات السابقة. هذه الجلسة مستمرة بأمان.";
+  if(result.password_change_required===false){await finishLogin(result);status.textContent="تم تغيير كلمة المرور المؤقتة. يمكنك الآن استخدام النظام."}
+  else status.textContent="تم تحديث كلمة المرور وإلغاء الجلسات السابقة. هذه الجلسة مستمرة بأمان.";
  }catch(error){status.textContent=error.message}
 });
 async function loadMfaStatus(){
@@ -297,13 +303,22 @@ async function loadUsers(){
    Object.entries(labels).forEach(([role,title])=>{const option=document.createElement("option");option.value=role;option.textContent=title;option.selected=role===user.role;select.append(option)});
    label.append(select);
    const actions=document.createElement("div");actions.className="actions";
+   const reset=document.createElement("button");reset.type="button";reset.className="secondary";reset.textContent="إعادة تعيين كلمة المرور";reset.disabled=user.id===currentUserId;reset.onclick=()=>resetUserPassword(user.id,user.username);
    const save=document.createElement("button");save.type="button";save.textContent="حفظ الدور";save.onclick=()=>changeUserRole(user.id,user.role,select.value);
    const toggle=document.createElement("button");toggle.type="button";toggle.className="secondary";toggle.textContent=user.active?"إيقاف الحساب":"إعادة تفعيل الحساب";toggle.onclick=()=>toggleUser(user.id,!user.active);
-   actions.append(save,toggle);controls.append(label,actions);card.append(heading,mfaState,lastLogin,controls);return card;
+   actions.append(save,toggle,reset);controls.append(label,actions);card.append(heading,mfaState,lastLogin,controls);return card;
   });
   const container=$("#usersList");container.replaceChildren(...cards);
   if(!users.length){const empty=document.createElement("p");empty.className="muted";empty.textContent="لا توجد حسابات.";container.append(empty)}
  }catch(e){$("#usersList").textContent=e.message}
+}
+async function resetUserPassword(id,username){
+ if(!confirm("إصدار كلمة مرور مؤقتة جديدة للحساب "+username+"؟ سيتم إلغاء جميع جلساته الحالية وإجباره على تغيير كلمة المرور عند تسجيل الدخول التالي."))return;
+ try{
+  const result=await api("/api/users/"+id+"/password-reset",{method:"POST",body:"{}"});
+  alert("كلمة المرور المؤقتة للحساب "+result.username+" (تظهر مرة واحدة فقط):\\n\\n"+result.temporary_password+"\\n\\nانقلها إلى صاحب الحساب عبر قناة آمنة. يجب عليه تغييرها فور تسجيل الدخول.");
+  await loadUsers();
+ }catch(error){alert(error.message)}
 }
 async function changeUserRole(id,currentRole,selectedRole){
  const role=selectedRole||$("#user-role-"+id)?.value;

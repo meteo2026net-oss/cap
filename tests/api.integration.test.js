@@ -509,10 +509,6 @@ test("API enforces role separation, public-feed filtering and account deactivati
     "creating an account should record the target username and assigned role");
   assert.ok(auditHistory.data.entries.some(entry => entry.action === "user_role_changed" && entry.details.includes("rolechange1") && entry.details.includes("viewer") && entry.details.includes("publisher")),
     "role changes should record the target account and old/new roles");
-  assert.ok(auditHistory.data.entries.some(entry => entry.action === "user_deactivated" && entry.details.includes("disabled1")),
-    "account deactivation should be represented in the audit history");
-  assert.ok(auditHistory.data.entries.some(entry => entry.action === "user_activated" && entry.details.includes("disabled1")),
-    "account reactivation should be represented in the audit history");
   const firstAuditPage = await request("/api/audit?limit=1", { token: reviewer });
   assert.equal(firstAuditPage.status, 200);
   assert.equal(firstAuditPage.data.entries.length, 1);
@@ -608,6 +604,12 @@ test("API enforces role separation, public-feed filtering and account deactivati
   assert.equal((await request(`/api/users/${disabledId}/status`, {
     token: admin, method: "PATCH", body: { active: true }
   })).status, 200, "administrator should be able to reactivate an account");
+  const statusAudit = await request("/api/audit", { token: reviewer });
+  assert.equal(statusAudit.status, 200);
+  assert.ok(statusAudit.data.entries.some(entry => entry.action === "user_deactivated" && entry.details.includes("disabled1")),
+    "account deactivation should be represented in the audit history");
+  assert.ok(statusAudit.data.entries.some(entry => entry.action === "user_activated" && entry.details.includes("disabled1")),
+    "account reactivation should be represented in the audit history");
   assert.equal((await request("/api/me", { token: disabledOldSession })).status, 401,
     "reactivation must not revive a token issued before deactivation");
 

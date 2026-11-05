@@ -26,7 +26,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
       - name: Generate npm lockfile v3 from package.json
         run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund --lockfile-version=3
       - name: Verify lockfile format and root manifest

@@ -12,7 +12,7 @@ This matrix records the automated conformance coverage currently present in this
 | Update references | `tests/cap.test.js`: required references, multiple triplets, timestamp/calendar/offset validation; XSD validates the generated Update | Implemented locally |
 | Cancel references | `tests/cap.test.js`: required references and no-info message structure | Basic coverage |
 | Ack and Error | `tests/cap.test.js`: references required, XML export, no-info structure; XSD matrix validates both | Basic coverage |
-| Date/time values | `tests/cap.test.js`: invalid dates, expiry/onset order, effective/onset/expires serialization and reference timestamp calendar/offset cases | Partial; broaden malformed calendar cases for all date-time fields |
+| Date/time values | `tests/cap.test.js`: invalid dates, expiry/onset order, effective/onset/expires serialization, impossible calendar dates, invalid clock values and ±14:00 offset boundaries | Expanded local coverage |
 | Multilingual content | `tests/cap.test.js`: English and Arabic info blocks; language-tag validation | Basic coverage |
 | Geometry | `tests/cap.test.js`: closed polygons, coordinate bounds, circles and positive radius, geocodes, altitude/ceiling ordering and area serialization | Expanded local coverage |
 | Resources | `tests/cap.test.js`: mandatory resource description and MIME type, size, URI, dereferenced URI and digest serialization | Expanded local coverage |

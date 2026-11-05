@@ -4,6 +4,7 @@ import Database from "better-sqlite3";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { spawnSync } from "node:child_process";
 import { createDatabaseBackup, listDatabaseBackups } from "../src/backup-utils.js";
 
 test("backup inventory verifies generated files, reports corruption, and ignores unrelated files and symlinks", async () => {
@@ -43,4 +44,24 @@ test("backup inventory verifies generated files, reports corruption, and ignores
 test("backup inventory returns an empty list when the directory does not exist", async () => {
   const missing = path.join(os.tmpdir(), "cap-backup-inventory-missing-" + Date.now());
   assert.deepEqual(await listDatabaseBackups(missing), []);
+});
+
+
+test("backup:list CLI emits a machine-readable inventory for an explicit directory", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "cap-backup-inventory-cli-"));
+  try {
+    const result = spawnSync(process.execPath, ["src/list-backups.js", root], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+      env: { ...process.env, BACKUP_DIR: "" }
+    });
+    assert.equal(result.status, 0, result.stderr);
+    const output = JSON.parse(result.stdout);
+    assert.equal(output.directory, root);
+    assert.equal(output.total, 0);
+    assert.equal(output.verified, 0);
+    assert.equal(output.invalid, 0);
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
 });

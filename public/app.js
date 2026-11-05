@@ -231,11 +231,18 @@ async function loadAuditIntegrity(){
  try{
   const data=await api("/api/audit/verify");
   const status=$("#auditStatus");
-  status.className=data.valid?"pill":"pill red";
-  if(!data.valid)status.textContent="تحذير: اكتُشف خلل في سلسلة سجل التدقيق.";
-  else if(data.legacy_unhashed_entries)status.textContent="سلسلة السجلات الجديدة سليمة، مع وجود سجلات تاريخية غير مجزأة.";
-  else status.textContent="سلسلة سجل التدقيق سليمة.";
-  $("#auditMeta").textContent="سجلات تم التحقق منها: "+data.verified_entries+" • سجلات تاريخية غير مجزأة: "+data.legacy_unhashed_entries+(data.first_invalid_id?" • أول سجل متأثر: "+data.first_invalid_id:"");
+  const capabilities=data.integrity_capabilities||{};
+  const verified=data.valid===true;
+  const hasLegacy=Number(data.legacy_unhashed_entries||0)>0;
+  const hasNoCheckpoint=capabilities.external_checkpoint_configured!==true;
+  status.className=verified&&!hasLegacy&& !hasNoCheckpoint?"pill":"pill red";
+  if(!verified)status.textContent="تحذير: اكتُشف خلل في سلسلة سجل التدقيق.";
+  else if(hasLegacy)status.textContent="تحقق جزئي: توجد سجلات تاريخية غير مجزأة.";
+  else if(hasNoCheckpoint)status.textContent="السلسلة متسقة، لكن لا توجد نقطة تحقق خارجية لكشف حذف ذيل السجل.";
+  else status.textContent="تم التحقق من سلسلة سجل التدقيق ونقطة التحقق الخارجية.";
+  const tail=capabilities.detects_final_tail_truncation===true?"كشف حذف نهاية السلسلة: مفعّل":"كشف حذف نهاية السلسلة: غير متاح";
+  const checkpoint=capabilities.external_checkpoint_configured===true?"نقطة تحقق خارجية: مهيأة":"نقطة تحقق خارجية: غير مهيأة";
+  $("#auditMeta").textContent="سجلات تم التحقق منها: "+data.verified_entries+" • سجلات تاريخية غير مجزأة: "+data.legacy_unhashed_entries+" • "+tail+" • "+checkpoint+(data.first_invalid_id?" • أول سجل متأثر: "+data.first_invalid_id:"");
  }catch(error){
   $("#auditStatus").className="pill red";
   $("#auditStatus").textContent="تعذر التحقق من سجل التدقيق.";

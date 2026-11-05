@@ -19,7 +19,7 @@ async function finishLogin(d){
  const forcePasswordChange=d.password_change_required===true;
  appPanel.classList.toggle("password-change-required",forcePasswordChange);
  if(forcePasswordChange){$("#passwordStatus").textContent="أصدر المسؤول كلمة مرور مؤقتة لهذا الحساب. يجب تعيين كلمة مرور شخصية جديدة قبل متابعة أي عملية.";
-  $("#mfaDisableForm").hidden=true;await loadMfaStatus();if(d.user&&d.user.mfa_enabled)$("#mfaDisableForm").hidden=true;return}
+  await loadMfaStatus();$("#mfaDisableForm").hidden=true;return}
  await loadAlerts();initWarningMap();await refreshWarningMap();
  if(d.user.role==="admin")await loadUsers();
  if(canVerifyAudit){await loadAuditIntegrity();await loadAuditHistory();}

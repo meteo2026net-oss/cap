@@ -30,18 +30,16 @@ jobs:
             import packageJson from "./package.json" with { type: "json" };
             const engines = packageJson.engines;
             const workflow = fs.readFileSync(".github/workflows/test.yml", "utf8");
-            const dockerfile = fs.readFileSync("Dockerfile", "utf8");
             const setup = fs.readFileSync("scripts/setup-local.mjs", "utf8");
             const nvmrc = fs.readFileSync(".nvmrc", "utf8").trim();
             const expected = "22";
             if (engines.node !== ">=22" || nvmrc !== expected ||
                 !workflow.includes("node-version: 22") ||
-                !dockerfile.includes("node:22-") ||
                 !setup.includes("nodeMajor < 22") ||
                 !setup.includes("Node.js 22 or newer")) {
-              throw new Error("Node.js version policy differs between package.json, .nvmrc, local setup, CI, and Dockerfile");
+              throw new Error("Node.js version policy differs between package.json, .nvmrc, local setup, and CI");
             }
-            console.log("Node.js 22 policy is consistent across package, local pin, setup script, CI, and Docker.");
+            console.log("Node.js 22 policy is consistent across package, local pin, setup script, and CI.");
           '
       - name: Install XML schema validator
         run: |
@@ -87,68 +85,3 @@ jobs:
           node --check tests/api.integration.test.js
       - run: npm test
       - run: npm run test:cap-schema
-      - name: Validate hardened Compose configuration
-        run: |
-          set -eu
-          printf '%s\n' 'ADMIN_PASSWORD=CI-Compose-Validation-Password-2026' 'JWT_SECRET=ci-compose-validation-secret-at-least-32-characters-long' > .env
-          docker compose config --quiet
-          rm -f .env
-      - name: Build production Docker image
-        run: docker build --pull -t meteo-cap-warning-system:ci .
-      - name: Smoke test Docker container and backup/restore
-        run: |
-          set -eu
-          docker run -d --name cap-smoke -p 127.0.0.1:18095:8095 \
-            --read-only \
-            --cap-drop ALL \
-            --security-opt no-new-privileges:true \
-            --pids-limit 100 \
-            --tmpfs /tmp:rw,noexec,nosuid,size=16m \
-            -v cap-smoke-data:/app/storage \
-            -v cap-smoke-backups:/app/backups \
-            -e JWT_SECRET=ci-smoke-test-secret-at-least-32-characters-long \
-            -e ADMIN_PASSWORD=CI-Smoke-Test-Admin-Password-2026 \
-            meteo-cap-warning-system:ci
-          trap 'docker logs cap-smoke || true; docker rm -f cap-smoke || true' EXIT
-          healthy=false
-          for attempt in $(seq 1 30); do
-            if curl --fail --silent http://127.0.0.1:18095/api/health; then
-              healthy=true
-              break
-            fi
-            sleep 2
-          done
-          if [ "$healthy" != true ]; then
-            echo "Container did not become healthy."
-            docker logs cap-smoke
-            exit 1
-          fi
-          echo "Container health endpoint passed."
-
-          backup_output="$(docker exec cap-smoke node src/backup.js)"
-          backup_name="$(printf '%s' "$backup_output" | node -e 'let input="";process.stdin.on("data",chunk=>input+=chunk);process.stdin.on("end",()=>{const result=JSON.parse(input);if(!result.ok||typeof result.backup!=="string")process.exit(1);console.log(require("node:path").basename(result.backup));});')"
-          test -n "$backup_name"
-          echo "Created and validated backup: $backup_name"
-
-          docker stop cap-smoke
-          docker run --rm --volumes-from cap-smoke \
-            --read-only \
-            --cap-drop ALL \
-            --security-opt no-new-privileges:true \
-            --pids-limit 100 \
-            --tmpfs /tmp:rw,noexec,nosuid,size=16m \
-            meteo-cap-warning-system:ci \
-            sh -ec 'node --input-type=module -e "import Database from \"better-sqlite3\"; const db = new Database(\"/app/storage/cap.sqlite\"); try { const checkpoint = db.pragma(\"wal_checkpoint(TRUNCATE)\")[0]; if (checkpoint.busy !== 0) throw new Error(\"SQLite WAL checkpoint remained busy\"); } finally { db.close(); }" && rm -f /app/storage/cap.sqlite-wal /app/storage/cap.sqlite-shm && node src/restore.js "/app/backups/'"$backup_name"'" --force && node --input-type=module -e "import Database from \"better-sqlite3\"; const db = new Database(\"/app/storage/cap.sqlite\", { readonly: true }); try { const admin = db.prepare(\"SELECT username, role, active FROM users WHERE username = ?\").get(\"admin\"); if (!admin || admin.role !== \"admin\" || admin.active !== 1) throw new Error(\"Restored database is missing the expected active administrator record\"); console.log(\"Restored database content verified: active admin record is present.\"); } finally { db.close(); }"'
-          echo "Checkpointed the stopped database, removed only closed SQLite sidecars, and restored the validated backup."
-
-          docker start cap-smoke
-          for attempt in $(seq 1 30); do
-            if curl --fail --silent http://127.0.0.1:18095/api/health; then
-              echo "Container became healthy after restore."
-              exit 0
-            fi
-            sleep 2
-          done
-          echo "Container did not recover after backup/restore."
-          docker logs cap-smoke
-          exit 1

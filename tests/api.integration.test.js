@@ -805,6 +805,8 @@ test("API enforces role separation, public-feed filtering and account deactivati
     assert.equal(correctedReadback.data.alert.event, "Updated integration weather event");
     assert.equal(correctedReadback.data.alert.area_desc, "Northern test district");
     assert.equal(correctedReadback.data.alert.response_type, "Shelter");
+    assert.equal(correctedReadback.data.alert.status, status,
+      "draft correction must preserve the fixture CAP status requested by the test");
     assert.ok(correctedReadback.data.alert.effective);
     assert.equal(correctedReadback.data.alert.info_blocks[0].headline, "تحذير تجريبي محدث");
     assert.equal(correctedReadback.data.alert.info_blocks[0].area.circle, "33.5,36.2 10");

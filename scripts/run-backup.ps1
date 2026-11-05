@@ -1,6 +1,7 @@
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
+if (-not (Test-Path (Join-Path $root ".env"))) { throw "Local .env is missing. Run start-local.bat or npm run setup:local before scheduling backups." }
 $logDirectory = Join-Path $root "logs"
 New-Item -ItemType Directory -Path $logDirectory -Force | Out-Null
 $stamp = Get-Date -Format "yyyyMMdd-HHmmss"

@@ -651,6 +651,13 @@ test("API enforces role separation, public-feed filtering and account deactivati
     assert.equal(filteredAlerts.data.pagination.limit, 1);
     assert.ok(filteredAlerts.data.pagination.total >= 1);
     assert.equal(filteredAlerts.data.pagination.has_more, filteredAlerts.data.pagination.total > 1);
+    const alertStats = await request("/api/alerts/stats", { token: forecaster });
+    assert.equal(alertStats.status, 200, "global alert statistics endpoint should be available to authenticated users");
+    assert.ok(alertStats.data.stats.total >= 1);
+    assert.ok(alertStats.data.stats.drafts >= 1, "draft count should include records beyond the current alert page");
+    assert.equal(alertStats.data.stats.total, alertStats.data.stats.drafts + alertStats.data.stats.pending + alertStats.data.stats.approved + alertStats.data.stats.published + alertStats.data.stats.cancelled,
+      "workflow totals should reconcile with the total alert count");
+    assert.equal((await request("/api/alerts/stats")).status, 401, "global alert statistics must require authentication");
     assert.equal((await request("/api/alerts?workflow=invalid", { token: forecaster })).status, 400, "unknown workflow filters must be rejected");
     assert.equal((await request("/api/alerts?limit=501", { token: forecaster })).status, 400, "page sizes above the hard maximum must be rejected");
 

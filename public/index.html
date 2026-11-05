@@ -44,6 +44,12 @@
     <label>رمز التطبيق أو رمز استرداد غير مستخدم<input name="code" maxlength="64" required></label>
     <button type="submit" class="secondary">تعطيل MFA</button>
    </form>
+   <form id="mfaRecoveryRotateForm" class="formGrid" hidden>
+    <p class="wide muted small">يمكنك إصدار مجموعة جديدة من رموز الاسترداد. يتطلب ذلك كلمة المرور الحالية ورمز مصادقة جديداً أو رمز استرداد غير مستخدم. ستُلغى جميع الرموز القديمة والجلسات السابقة.</p>
+    <label>كلمة المرور الحالية<input name="password" type="password" autocomplete="current-password" required></label>
+    <label>رمز التطبيق أو رمز استرداد غير مستخدم<input name="code" maxlength="64" required></label>
+    <button type="submit" class="secondary">إعادة إصدار رموز الاسترداد</button>
+   </form>
    <p id="mfaActionStatus" class="muted small" aria-live="polite"></p>
   </section>
   <section id="userAdmin" class="card" hidden style="margin-bottom:18px"><div class="sectionHead"><h2>إدارة حسابات الفريق</h2><span class="tag">ADMIN</span></div><form id="userForm" class="formGrid"><label>اسم المستخدم<input name="username" minlength="3" maxlength="64" required></label><label>كلمة مرور مؤقتة (14 حرفاً على الأقل)<input name="password" type="password" minlength="14" required></label><label>الدور الوظيفي<select name="role"><option value="forecaster">متنبئ جوي</option><option value="reviewer">مراجع</option><option value="approver">معتمد</option><option value="publisher">ناشر</option><option value="viewer">مشاهد</option><option value="admin">مدير نظام</option></select></label><button>إنشاء الحساب</button></form><p class="muted small">الحسابات الجديدة وكلمات المرور المعاد تعيينها مؤقتة، ويجب على المستخدم تغييرها قبل الوصول إلى بيانات النظام. يمكنك تعديل الدور وإيقاف الحساب أو إعادة تفعيله أو إصدار كلمة مرور مؤقتة جديدة؛ تغييرات الدور والحالة وإعادة التعيين تلغي الجلسات الحالية.</p><div id="usersList" class="alertsList" style="margin-top:14px" aria-live="polite"></div></section>

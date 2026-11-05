@@ -262,7 +262,7 @@ async function loadAlerts(){
   $("#published").textContent=alerts.filter(a=>a.workflow==="published").length;
   $("#alertsList").innerHTML=alerts.map(a=>{
    const actions=[];
-   const id=String(a.id);
+   const id=esc(a.id);
    if(a.workflow==="draft")actions.push("<button data-alert-action='submit' data-alert-id='"+id+"'>إرسال للمراجعة</button>");
    if(a.workflow==="pending")actions.push("<button data-alert-action='approve' data-alert-id='"+id+"'>اعتماد</button>");
    if(a.workflow==="approved")actions.push("<button data-alert-action='publish' data-alert-id='"+id+"'>نشر داخلي</button>");
@@ -315,7 +315,7 @@ async function loadDeliveryOutbox(){
    const label={queued:"بانتظار المعالجة",sending:"قيد المعالجة",delivered:"تم التسليم المسجل",failed:"فشل - بانتظار المحاولة",dead_letter:"معزولة نهائياً"}[row.status]||row.status;
    const next=row.next_attempt_at?" • المحاولة التالية: "+esc(row.next_attempt_at):"";
    const error=row.last_error?'<p class="small error">'+esc(row.last_error)+'</p>':"";
-   return '<article class="alertItem"><b>'+esc(row.headline||row.identifier||("مهمة #"+row.id))+'</b><div class="alertMeta"><span class="pill">'+esc(label)+'</span><span>القناة: '+esc(row.channel)+'</span><span>المحاولات: '+row.attempts+'/'+row.max_attempts+'</span><span>المعرف: #'+row.id+'</span>'+next+'</div>'+error+'</article>';
+   return '<article class="alertItem"><b>'+esc(row.headline||row.identifier||("مهمة #"+row.id))+'</b><div class="alertMeta"><span class="pill">'+esc(label)+'</span><span>القناة: '+esc(row.channel)+'</span><span>المحاولات: '+esc(row.attempts)+'/'+esc(row.max_attempts)+'</span><span>المعرف: #'+esc(row.id)+'</span>'+next+'</div>'+error+'</article>';
   }).join("")||'<p class="muted">قائمة التوزيع فارغة.</p>';
   status.textContent="تم تحديث "+rows.length+" مهمة. الموصلات الخارجية: "+(result.external_adapters_enabled?"مفعّلة":"معطّلة");
  }catch(error){status.textContent=error.message}
@@ -350,8 +350,8 @@ async function loadWebhookInbox(append=false){
    const payload=esc(JSON.stringify(row.payload,null,2));
    const reviewer=row.reviewer_username?'<p class="small muted">راجع الرسالة: '+esc(row.reviewer_username)+' • '+esc(row.reviewed_at||"")+"</p>":"";
    const note=row.review_note?'<p class="small muted">ملاحظة المراجعة: '+esc(row.review_note)+'</p>':"";
-   const actions=row.status==="pending"?'<div class="actions"><button type="button" data-webhook-review="reviewed" data-webhook-id="'+row.id+'">تأكيد المراجعة</button><button class="secondary" type="button" data-webhook-review="rejected" data-webhook-id="'+row.id+'">رفض الرسالة</button></div>':"";
-   return '<article class="alertItem"><b>رسالة واردة #'+row.id+'</b><div class="alertMeta"><span class="pill">'+esc(label)+'</span><span>وقت الاستلام: '+esc(row.received_at)+'</span><span>وقت المصدر: '+esc(new Date(row.source_timestamp*1000).toISOString())+'</span></div>'+reviewer+note+'<details><summary>عرض محتوى JSON</summary><pre class="webhookPayload">'+payload+'</pre></details>'+actions+'</article>';
+   const actions=row.status==="pending"?'<div class="actions"><button type="button" data-webhook-review="reviewed" data-webhook-id="'+esc(row.id)+'">تأكيد المراجعة</button><button class="secondary" type="button" data-webhook-review="rejected" data-webhook-id="'+esc(row.id)+'">رفض الرسالة</button></div>':"";
+   return '<article class="alertItem"><b>رسالة واردة #'+esc(row.id)+'</b><div class="alertMeta"><span class="pill">'+esc(label)+'</span><span>وقت الاستلام: '+esc(row.received_at)+'</span><span>وقت المصدر: '+esc(new Date(row.source_timestamp*1000).toISOString())+'</span></div>'+reviewer+note+'<details><summary>عرض محتوى JSON</summary><pre class="webhookPayload">'+payload+'</pre></details>'+actions+'</article>';
   }).join("");
   if(append)list.insertAdjacentHTML("beforeend",html);
   else list.innerHTML=html||'<p class="muted">لا توجد رسائل ضمن هذا التصنيف.</p>';

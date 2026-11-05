@@ -26,6 +26,11 @@ This guide describes the current security controls and the precautions required 
 9. Review dependency alerts and update pull requests. Run `npm audit`, the automated tests, the official CAP schema validation, Docker smoke tests, and CodeQL against the exact release commit before deployment.
 10. Establish institutional operating procedures for alert authoring, review, approval, publication, revocation, escalation, incident response, retention, and staff training before any operational use.
 
+## Supply-chain and browser-asset considerations
+
+- The dashboard loads Leaflet and Leaflet.draw assets from the third-party `unpkg.com` CDN. The Leaflet 1.9.4 CSS and JavaScript references include Subresource Integrity attributes; the Leaflet.draw 1.0.4 CSS and JavaScript references currently do not. The Content Security Policy permits these CDN resources. CDN compromise, package replacement, or availability failures can therefore affect the browser dashboard. Before operational deployment, evaluate self-hosting reviewed, pinned assets or adding verified integrity metadata for every external asset.
+- The repository currently has no committed `package-lock.json`. CI and the Docker build resolve semver dependency ranges at install time, so separate builds may not install an identical dependency tree. Treat this as a reproducibility and supply-chain limitation: generate and review a lockfile, use `npm ci` in CI and image builds, and update dependencies through reviewed changes before relying on repeatable releases.
+
 ## Important limitations
 
 - The audit hash chain is stored in the same SQLite database. It can detect changes within the retained chain, but cannot independently prove that the database or the complete chain was not replaced, truncated, or deleted by an attacker with database-level control. Use externally retained, signed checkpoints or an independent append-only audit service for stronger evidence.

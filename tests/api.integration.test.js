@@ -306,12 +306,12 @@ test("API enforces role separation, public-feed filtering and account deactivati
     assert.equal((await request(`/api/alerts/${id}/submit`, {
       token: viewer, method: "POST", body: {}
     })).status, 403, "viewers must not submit warnings for review");
-    assert.equal((await request(`/api/alerts/${id}/submit`, {
-      token: forecaster, method: "POST", body: {}
-    })).status, 200);
-    assert.equal((await request(`/api/alerts/${id}/submit`, {
-      token: forecaster, method: "POST", body: {}
-    })).status, 409, "a submitted warning must not be submitted twice");
+    const concurrentSubmissions = await Promise.all([
+      request(`/api/alerts/${id}/submit`, { token: forecaster, method: "POST", body: {} }),
+      request(`/api/alerts/${id}/submit`, { token: forecaster, method: "POST", body: {} })
+    ]);
+    assert.deepEqual(concurrentSubmissions.map(result => result.status).sort(), [200, 409],
+      "concurrent submission attempts must produce exactly one successful transition");
     assert.equal((await request(`/api/alerts/${id}/approve`, {
       token: forecaster, method: "POST", body: {}
     })).status, 403, "creator cannot approve their own warning");
@@ -330,12 +330,12 @@ test("API enforces role separation, public-feed filtering and account deactivati
     assert.equal((await request(`/api/alerts/${id}/publish`, {
       token: reviewer, method: "POST", body: {}
     })).status, 403, "approver cannot publish the same warning");
-    assert.equal((await request(`/api/alerts/${id}/publish`, {
-      token: publisher, method: "POST", body: {}
-    })).status, 200);
-    assert.equal((await request(`/api/alerts/${id}/publish`, {
-      token: publisher, method: "POST", body: {}
-    })).status, 409, "a published warning must not be published twice");
+    const concurrentPublications = await Promise.all([
+      request(`/api/alerts/${id}/publish`, { token: publisher, method: "POST", body: {} }),
+      request(`/api/alerts/${id}/publish`, { token: publisher, method: "POST", body: {} })
+    ]);
+    assert.deepEqual(concurrentPublications.map(result => result.status).sort(), [200, 409],
+      "concurrent publication attempts must produce exactly one successful transition");
     const outboxAfterPublish = await request("/api/delivery/outbox", { token: publisher });
     assert.equal(outboxAfterPublish.status, 200);
     assert.equal(outboxAfterPublish.data.deliveries.filter(item => item.alert_id === id && item.channel === "cap_feed").length, 1,

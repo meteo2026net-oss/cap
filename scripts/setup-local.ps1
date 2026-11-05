@@ -43,11 +43,7 @@ if (-not (Test-Path ".env")) {
   }
 }
 
-if (-not (Test-Path "node_modules")) {
-  Write-Host "Installing exact locked dependencies with npm ci..."
-  npm ci
-  if ($LASTEXITCODE -ne 0) { throw "npm ci failed." }
-} else {
-  Write-Host "node_modules already exists; skipping dependency installation."
-}
+Write-Host "Verifying and installing exact locked dependencies with npm ci..."
+npm ci
+if ($LASTEXITCODE -ne 0) { throw "npm ci failed. Check internet access and Windows native build tools." }
 Write-Host "Local setup is ready. Start the app with: npm start"

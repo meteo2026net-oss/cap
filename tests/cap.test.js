@@ -205,3 +205,37 @@ test("counts CAP headline Unicode code points rather than UTF-16 code units", ()
   assert.equal(validateAlert({ ...valid, info_blocks: [{ ...base, headline: "😀".repeat(80) + "x" }] }), true);
   assert.throws(() => validateAlert({ ...valid, info_blocks: [{ ...base, headline: "😀".repeat(161) }] }), /160 characters/);
 });
+
+
+test("validates CAP references as complete sender,identifier,sent triplets", () => {
+  const references = [
+    "alerts@example.test,urn:uuid:previous-one,2026-11-03T12:00:00-00:00",
+    "alerts@example.test,urn:uuid:previous-two,2026-11-04T06:30:00Z"
+  ].join(" ");
+  const xml = buildCapXml({ ...valid, msg_type: "Update", references_text: references });
+  assert.match(xml, /<msgType>Update<\\/msgType>/);
+  assert.match(xml, /urn:uuid:previous-one/);
+  assert.match(xml, /urn:uuid:previous-two/);
+});
+
+test("rejects incomplete CAP reference triplets and invalid referenced timestamps", () => {
+  const invalidReferences = [
+    "alerts@example.test,urn:uuid:only-two-fields",
+    "alerts@example.test,,2026-11-03T12:00:00Z",
+    "alerts@example.test,urn:uuid:missing-timezone,2026-11-03T12:00:00",
+    "alerts@example.test,urn:uuid:invalid-date,2026-99-99T12:00:00Z",
+    "alerts@example.test,urn:uuid:bad-time,2026-11-03T25:61:00Z"
+  ];
+  for (const references_text of invalidReferences) {
+    assert.throws(() => validateAlert({ ...valid, msg_type: "Update", references_text }),
+      /CAP references|reference sent timestamp/);
+  }
+});
+
+test("allows multiple CAP references separated by whitespace only", () => {
+  const references_text = [
+    "alerts@example.test,urn:uuid:one,2026-11-03T12:00:00-00:00",
+    "alerts@example.test,urn:uuid:two,2026-11-04T12:00:00-00:00"
+  ].join("\\n");
+  assert.equal(validateAlert({ ...valid, msg_type: "Cancel", references_text }), true);
+});

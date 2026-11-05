@@ -21,7 +21,7 @@ This guide describes the current security controls and the precautions required 
 4. Change the initial administrator password after first sign-in. Create named accounts with the minimum required roles; avoid shared accounts and unnecessary administrator privileges. Transfer administrator-issued temporary passwords to the account owner through a separate, institution-approved secure channel; never place them in GitHub, audit notes, ordinary chat, or shared tickets.
 5. Keep `CAP_WEBHOOK_INGRESS_ENABLED=false` unless a reviewed integration requires inbound messages. If enabled, use a unique secret of at least 32 bytes, restrict the sender/network at the perimeter, rotate the secret under a documented procedure, and review every inbox item manually.
 6. Keep external delivery adapters disabled. The current outbox is an internal queue; a recorded receipt is not proof that a real-world warning was transmitted or received.
-7. Back up the database regularly and copy encrypted backups to a separate, access-controlled host or storage account. A backup on the same machine or Docker host is not disaster recovery. Test restoration periodically in an isolated environment.
+7. Back up the database regularly and copy encrypted backups to a separate, access-controlled host or storage account. A backup on the same machine is not disaster recovery. Test restoration periodically in an isolated environment.
 8. Protect access to the host account, database files, backup locations, GitHub repository settings, and CI secrets. A person with host/database control can alter or replace the database and its local audit history.
 9. Review dependency alerts and update pull requests. Run `npm audit`, the automated tests, the official CAP schema validation, direct-mode startup, backup, and restore tests, and CodeQL against the exact release commit before deployment.
 10. Establish institutional operating procedures for alert authoring, review, approval, publication, revocation, escalation, incident response, retention, and staff training before any operational use.
@@ -29,7 +29,7 @@ This guide describes the current security controls and the precautions required 
 ## Supply-chain and browser-asset considerations
 
 - The dashboard loads Leaflet and Leaflet.draw assets from the third-party `unpkg.com` CDN. The Leaflet 1.9.4 CSS and JavaScript references include Subresource Integrity attributes; the Leaflet.draw 1.0.4 CSS and JavaScript references currently do not. The Content Security Policy permits these CDN resources. CDN compromise, package replacement, or availability failures can therefore affect the browser dashboard. Before operational deployment, evaluate self-hosting reviewed, pinned assets or adding verified integrity metadata for every external asset.
-- The repository commits `package-lock.json`; CI and Docker production builds use `npm ci` so dependency resolution is reproducible against the reviewed lockfile. Review dependency updates and vulnerability reports before merging.
+- The repository commits `package-lock.json`; CI uses `npm ci` so dependency resolution is reproducible against the reviewed lockfile. Review dependency updates and vulnerability reports before merging.
 
 ## Important limitations
 

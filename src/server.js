@@ -305,7 +305,7 @@ app.post("/api/alerts/:id/derive",auth,roles("admin","forecaster"),(req,res)=>{
  });
  const result=createDerived.immediate();
  if(result.kind==="missing") return res.status(404).json({error:"Source alert not found"});
- if(result.kind==="source_not_reviewed") return res.status(409).json({error:"Only reviewed alerts can be used as the source of an update or cancellation"});
+ if(result.kind==="source_not_reviewed") return res.status(409).json({error:"Only published CAP messages can be used as the source of an update or cancellation"});
  if(result.kind==="already_cancelled") return res.status(409).json({error:"A cancellation for this CAP message already exists",existing_cancel_id:result.existingId});
  res.status(201).json({id:result.id,identifier:result.identifier,msg_type:msgType,status:"Test",workflow:"draft",references:result.references});
 });

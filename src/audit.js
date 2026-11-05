@@ -1,4 +1,6 @@
-import { createHash, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, randomUUID, timingSafeEqual } from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
 
 const GENESIS_HASH = "0".repeat(64);
 
@@ -42,7 +44,60 @@ export function installAuditLogGuards(database) {
   }
 }
 
-export function appendAuditLog(database, { userId = null, alertId = null, action, details = "" }) {
+
+function checkpointPayload(latestId, latestHash) {
+  return { version: 1, latest_id: latestId, latest_hash: latestHash };
+}
+function checkpointSignature(payload, secret) {
+  return createHmac("sha256", secret).update(JSON.stringify(payload), "utf8").digest("hex");
+}
+function writeExternalCheckpoint(checkpointPath, secret, latestId, latestHash) {
+  if (!checkpointPath && !secret) return;
+  if (!checkpointPath || typeof secret !== "string" || Buffer.byteLength(secret, "utf8") < 32) {
+    throw new Error("AUDIT_CHECKPOINT_PATH and an AUDIT_CHECKPOINT_SECRET of at least 32 bytes must both be configured");
+  }
+  const payload = checkpointPayload(latestId, latestHash);
+  const document = { ...payload, signature: checkpointSignature(payload, secret), created_at: new Date().toISOString() };
+  const destination = path.resolve(checkpointPath);
+  fs.mkdirSync(path.dirname(destination), { recursive: true });
+  const temporary = destination + "." + randomUUID() + ".tmp";
+  try {
+    fs.writeFileSync(temporary, JSON.stringify(document) + "\n", { encoding: "utf8", mode: 0o600, flag: "wx" });
+    fs.renameSync(temporary, destination);
+    try { fs.chmodSync(destination, 0o600); } catch {}
+  } finally { try { fs.rmSync(temporary, { force: true }); } catch {} }
+}
+function verifyExternalCheckpoint(database, checkpointPath, secret, latestId, latestHash) {
+  const configured = Boolean(checkpointPath || secret);
+  if (!configured) return { configured: false, valid: null, detects_final_tail_truncation: false };
+  if (!checkpointPath || typeof secret !== "string" || Buffer.byteLength(secret, "utf8") < 32) {
+    return { configured: true, valid: false, reason: "checkpoint_configuration_invalid" };
+  }
+  let document;
+  try { document = JSON.parse(fs.readFileSync(path.resolve(checkpointPath), "utf8")); }
+  catch { return { configured: true, valid: false, reason: "checkpoint_unavailable_or_invalid" }; }
+  const payload = checkpointPayload(document.latest_id, document.latest_hash);
+  if (document.version !== 1 || !Number.isSafeInteger(payload.latest_id) || payload.latest_id < 1 ||
+      typeof payload.latest_hash !== "string" || !/^[a-f0-9]{64}$/.test(payload.latest_hash) ||
+      typeof document.signature !== "string") {
+    return { configured: true, valid: false, reason: "checkpoint_format_invalid" };
+  }
+  const expected = Buffer.from(checkpointSignature(payload, secret), "hex");
+  const actual = Buffer.from(document.signature, "hex");
+  if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) {
+    return { configured: true, valid: false, reason: "checkpoint_signature_invalid" };
+  }
+  const anchor = database.prepare("SELECT entry_hash FROM audit_log WHERE id=?").get(payload.latest_id);
+  if (!anchor || anchor.entry_hash !== payload.latest_hash) {
+    return { configured: true, valid: false, reason: "checkpoint_anchor_missing_or_changed" };
+  }
+  if (latestId !== payload.latest_id || latestHash !== payload.latest_hash) {
+    return { configured: true, valid: false, reason: "checkpoint_stale_or_database_rollback" };
+  }
+  return { configured: true, valid: true, detects_final_tail_truncation: true, checkpoint_latest_id: payload.latest_id };
+}
+
+export function appendAuditLog(database, { userId = null, alertId = null, action, details = "" }, options = {}) {
   if (typeof action !== "string" || !action.trim() || action.trim().length > 128) {
     throw new TypeError("Audit action must be a non-empty string up to 128 characters");
   }
@@ -77,15 +132,21 @@ export function appendAuditLog(database, { userId = null, alertId = null, action
     return { id, entry_hash: entryHash, previous_hash: previousHash };
   });
 
-  return append.immediate();
+  const result = append.immediate();
+  const checkpointPath = options.checkpointPath ?? process.env.AUDIT_CHECKPOINT_PATH;
+  const checkpointSecret = options.checkpointSecret ?? process.env.AUDIT_CHECKPOINT_SECRET;
+  if (checkpointPath || checkpointSecret) writeExternalCheckpoint(checkpointPath, checkpointSecret, result.id, result.entry_hash);
+  return result;
 }
 
-export function verifyAuditChain(database) {
+export function verifyAuditChain(database, options = {}) {
+  const checkpointPath = options.checkpointPath ?? process.env.AUDIT_CHECKPOINT_PATH;
+  const checkpointSecret = options.checkpointSecret ?? process.env.AUDIT_CHECKPOINT_SECRET;
   const integrityCapabilities = {
     detects_entry_tampering: true,
     detects_internal_deletions: true,
     detects_final_tail_truncation: false,
-    external_checkpoint_configured: false
+    external_checkpoint_configured: Boolean(checkpointPath && checkpointSecret)
   };
   const totalHashedEntries = database.prepare(
     "SELECT COUNT(*) AS count FROM audit_log WHERE entry_hash IS NOT NULL"
@@ -164,12 +225,16 @@ export function verifyAuditChain(database) {
     verifiedEntries++;
   }
 
-  return {
-    valid: true,
-    integrity_capabilities: integrityCapabilities,
-    verified_entries: verifiedEntries,
-    total_hashed_entries: totalHashedEntries,
-    legacy_unhashed_entries: legacyEntries,
-    latest_hash: previousHash === GENESIS_HASH ? null : previousHash
-  };
+  const latestHash = previousHash === GENESIS_HASH ? null : previousHash;
+  const checkpoint = verifyExternalCheckpoint(database, checkpointPath, checkpointSecret, previousId, latestHash);
+  integrityCapabilities.external_checkpoint_configured = checkpoint.configured;
+  integrityCapabilities.detects_final_tail_truncation = checkpoint.valid === true;
+  if (checkpoint.configured && checkpoint.valid !== true) {
+    return { valid: false, integrity_capabilities: integrityCapabilities, verified_entries: verifiedEntries,
+      total_hashed_entries: totalHashedEntries, legacy_unhashed_entries: legacyEntries,
+      latest_hash: latestHash, reason: checkpoint.reason || "checkpoint_invalid" };
+  }
+  return { valid: true, integrity_capabilities: integrityCapabilities, verified_entries: verifiedEntries,
+    total_hashed_entries: totalHashedEntries, legacy_unhashed_entries: legacyEntries,
+    latest_hash: latestHash, checkpoint: checkpoint.configured ? checkpoint : null };
 }

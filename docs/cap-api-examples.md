@@ -183,3 +183,12 @@ Reviewers, approvers and administrators can return a pending warning to its auth
 Request body: `{"reason":"Please clarify the affected area and expected timing."}`
 
 The reason is mandatory (5–1000 characters). The creator cannot return their own warning. A successful return moves the warning from `pending` back to `draft`, clears any approval attribution, and appends a `returned_to_author` audit event containing the reviewer feedback. The author can then edit and resubmit the draft for a fresh independent review. The endpoint does not publish or distribute the warning.
+## Edit a draft warning
+
+The original forecaster (or an administrator) can edit a warning while its workflow is `draft`, including after a reviewer returns it for correction:
+
+`PATCH /api/alerts/:id`
+
+Example body: `{"headline":"Updated warning headline","description":"Revised impact and affected area.","instruction":"Follow local authority guidance."}`
+
+Only recognized CAP alert fields are updated. CAP validation is applied to supplied values, and an audit event records the names of changed fields. Editing is rejected for pending, approved, published or cancelled warnings. Reviewers cannot edit another users draft; they must return it with a reason and let its author make corrections.

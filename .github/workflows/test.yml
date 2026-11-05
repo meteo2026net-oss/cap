@@ -42,10 +42,13 @@ jobs:
                 !setupPs1.includes("$nodeMajor -lt 22") || !setupPs1.includes("npm ci") ||
                 !setupPs1.includes("$mfaBytes = New-Object byte[] 32") ||
                 !setupPs1.includes("MFA_ENCRYPTION_KEY=$mfaEncryptionKey") ||
-                !startBat.includes("LSS 22") || !startBat.includes("npm ci")) {
-              throw new Error("Node.js version policy differs between package.json, .nvmrc, Windows setup scripts, and CI");
+                !setupPs1.includes("npm ci") ||
+                !startBat.includes("LSS 22") || !startBat.includes("where npm") ||
+                !startBat.includes("call npm ci") ||
+                /if\\s+not\\s+exist\\s+"node_modules"/i.test(startBat)) {
+              throw new Error("Node.js policy or Windows dependency-bootstrap behavior differs from the tested setup contract");
             }
-            console.log("Node.js 22 policy is consistent across package, local pin, Windows and cross-platform setup scripts, and CI.");
+            console.log("Node.js 22 policy and reproducible Windows dependency bootstrap are consistent across package, local pin, setup scripts, and CI.");
           '
       - name: Install XML schema validator
         run: |

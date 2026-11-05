@@ -60,6 +60,10 @@
   </section>
   <section id="auditHistoryPanel" class="card" hidden style="margin-bottom:18px">
    <div class="sectionHead"><div><h2>سجل الأحداث والتدقيق</h2><p class="muted small">عرض تسلسلي للأنشطة المسجلة. السجل للقراءة فقط ويستخدم مؤشراً لتحميل الصفحات الأقدم.</p></div><div class="mapActions"><button id="auditExportCsvBtn" class="secondary" type="button">تصدير CSV</button><button id="auditHistoryRefreshBtn" class="secondary" type="button">تحديث السجل</button></div></div>
+   <div class="mapTools">
+    <label>بحث في سجل التدقيق<input id="auditSearch" type="search" maxlength="160" placeholder="ابحث في الحدث أو التفاصيل أو اسم المستخدم"></label>
+    <label>نوع الحدث<select id="auditActionFilter"><option value="">كل الأحداث</option><option value="login_succeeded">تسجيل الدخول</option><option value="user_created">إنشاء مستخدم</option><option value="user_role_changed">تغيير الصلاحية</option><option value="user_activated">تفعيل مستخدم</option><option value="user_deactivated">تعطيل مستخدم</option><option value="created">إنشاء تحذير</option><option value="submitted">إرسال للمراجعة</option><option value="approved">اعتماد</option><option value="published">نشر</option><option value="password_changed">تغيير كلمة المرور</option><option value="mfa_enabled">تفعيل MFA</option></select></label>
+   </div>
    <p id="auditHistoryStatus" class="muted small" aria-live="polite">لم يتم تحميل السجل بعد.</p>
    <div id="auditHistoryList" class="alertsList"></div>
    <div class="mapActions" style="justify-content:center;margin-top:12px"><button id="auditHistoryLoadMoreBtn" class="secondary" type="button" hidden>تحميل سجلات أقدم</button></div>

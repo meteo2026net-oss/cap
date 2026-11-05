@@ -551,19 +551,19 @@ app.get("/api/alerts/export.csv",auth,(req,res)=>{
 app.get("/api/alerts/stats",auth,(req,res)=>{
  const stats=db.prepare(`SELECT
   COUNT(*) AS total,
-  SUM(CASE WHEN workflow="draft" THEN 1 ELSE 0 END) AS drafts,
-  SUM(CASE WHEN workflow="pending" THEN 1 ELSE 0 END) AS pending,
-  SUM(CASE WHEN workflow="approved" THEN 1 ELSE 0 END) AS approved,
-  SUM(CASE WHEN workflow="published" THEN 1 ELSE 0 END) AS published,
-  SUM(CASE WHEN workflow="cancelled" THEN 1 ELSE 0 END) AS cancelled,
-  SUM(CASE WHEN severity="Extreme" THEN 1 ELSE 0 END) AS extreme,
-  SUM(CASE WHEN severity="Severe" THEN 1 ELSE 0 END) AS severe,
-  SUM(CASE WHEN severity="Moderate" THEN 1 ELSE 0 END) AS moderate,
-  SUM(CASE WHEN severity="Minor" THEN 1 ELSE 0 END) AS minor,
-  SUM(CASE WHEN status="Actual" THEN 1 ELSE 0 END) AS actual,
-  SUM(CASE WHEN status="Test" THEN 1 ELSE 0 END) AS test,
-  SUM(CASE WHEN status="Exercise" THEN 1 ELSE 0 END) AS exercise,
-  SUM(CASE WHEN status="System" THEN 1 ELSE 0 END) AS system
+  SUM(CASE WHEN workflow='draft' THEN 1 ELSE 0 END) AS drafts,
+  SUM(CASE WHEN workflow='pending' THEN 1 ELSE 0 END) AS pending,
+  SUM(CASE WHEN workflow='approved' THEN 1 ELSE 0 END) AS approved,
+  SUM(CASE WHEN workflow='published' THEN 1 ELSE 0 END) AS published,
+  SUM(CASE WHEN workflow='cancelled' THEN 1 ELSE 0 END) AS cancelled,
+  SUM(CASE WHEN severity='Extreme' THEN 1 ELSE 0 END) AS extreme,
+  SUM(CASE WHEN severity='Severe' THEN 1 ELSE 0 END) AS severe,
+  SUM(CASE WHEN severity='Moderate' THEN 1 ELSE 0 END) AS moderate,
+  SUM(CASE WHEN severity='Minor' THEN 1 ELSE 0 END) AS minor,
+  SUM(CASE WHEN status='Actual' THEN 1 ELSE 0 END) AS actual,
+  SUM(CASE WHEN status='Test' THEN 1 ELSE 0 END) AS test,
+  SUM(CASE WHEN status='Exercise' THEN 1 ELSE 0 END) AS exercise,
+  SUM(CASE WHEN status='System' THEN 1 ELSE 0 END) AS system
  FROM alerts`).get();
  const normalized=Object.fromEntries(Object.entries(stats).map(([key,value])=>[key,value??0]));
  res.set("Cache-Control","no-store").json({stats:normalized});

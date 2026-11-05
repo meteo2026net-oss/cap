@@ -50,6 +50,15 @@ jobs:
             }
             console.log("Node.js 22 policy and reproducible Windows dependency bootstrap are consistent across package, local pin, setup scripts, and CI.");
           '
+      - name: Enforce direct Node.js and SQLite deployment (no Docker)
+        run: |
+          node --input-type=module -e '
+            import fs from "node:fs";
+            const forbidden = ["Dockerfile", "docker-compose.yml", "docker-compose.yaml", "compose.yml", "compose.yaml", ".dockerignore"];
+            const present = forbidden.filter((file) => fs.existsSync(file));
+            if (present.length) throw new Error("Docker artifacts are not permitted in this repository: " + present.join(", "));
+            console.log("Direct host deployment policy verified: no Docker or Compose artifacts.");
+          '
       - name: Install XML schema validator
         run: |
           sudo apt-get update

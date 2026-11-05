@@ -33,8 +33,8 @@ function validateReferences(value) {
     const calendar = new Date(0);
     calendar.setUTCFullYear(year, month - 1, day);
     calendar.setUTCHours(hour, minute, second, 0);
-    const offsetHour = timestamp[9] === undefined ? 0 : Number(timestamp[9]);
-    const offsetMinute = timestamp[10] === undefined ? 0 : Number(timestamp[10]);
+    const offsetHour = timestamp[10] === undefined ? 0 : Number(timestamp[10]);
+    const offsetMinute = timestamp[11] === undefined ? 0 : Number(timestamp[11]);
     if (calendar.getUTCFullYear() !== year || calendar.getUTCMonth() !== month - 1 ||
         calendar.getUTCDate() !== day || hour > 23 || minute > 59 || second > 59 ||
         offsetHour > 23 || offsetMinute > 59) {

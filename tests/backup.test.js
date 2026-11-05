@@ -276,3 +276,42 @@ test("failed SQLite backup removes a partially created artifact", async () => {
     await fs.rm(directory, { recursive: true, force: true });
   }
 });
+
+
+test("backup pruning never follows or removes symbolic links", async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "cap-prune-symlink-test-"));
+  const external = path.join(directory, "external.sqlite");
+  const link = path.join(directory, "cap-20260101T000000000Z.sqlite");
+  try {
+    await fs.writeFile(external, "keep external target");
+    const oldDate = new Date("2026-01-01T00:00:00.000Z");
+    await fs.utimes(external, oldDate, oldDate);
+    await fs.symlink(external, link, "file");
+    const removed = await pruneDatabaseBackups(directory, {
+      retentionDays: 30,
+      now: new Date("2026-11-04T00:00:00.000Z")
+    });
+    assert.deepEqual(removed, []);
+    assert.equal((await fs.lstat(link)).isSymbolicLink(), true);
+    assert.equal(await fs.readFile(external, "utf8"), "keep external target");
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("restore rejects symbolic-link backup sources", async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "cap-restore-symlink-test-"));
+  const source = path.join(directory, "source.sqlite");
+  const link = path.join(directory, "backup-link.sqlite");
+  const database = createFixtureDatabase(source);
+  try {
+    await fs.symlink(source, link, "file");
+    await assert.rejects(
+      () => restoreDatabaseBackup(link, path.join(directory, "restored.sqlite")),
+      /regular file, not a symbolic link/
+    );
+  } finally {
+    database.close();
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});

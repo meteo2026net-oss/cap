@@ -1338,7 +1338,7 @@ test("API enforces role separation, public-feed filtering and account deactivati
 
   const csvFixture = await request("/api/alerts", {
     token: forecaster, method: "POST",
-    body: { event: "CSV export fixture", headline: '=SUM(1,1)', description: "CSV safety fixture", area_desc: "CSV test area", status: "Test" }
+    body: { event: "CSV export fixture", headline: '=SUM(1,1)', description: "CSV safety fixture", area_desc: "CSV test area", circle: "33.5,36.2 8", status: "Test" }
   });
   assert.equal(csvFixture.status, 201, "CSV fixture alert should be created");
   const csvResponse = await fetch(base + "/api/alerts/export.csv?q=CSV%20export%20fixture&workflow=draft", {

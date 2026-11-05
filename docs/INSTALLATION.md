@@ -107,6 +107,7 @@ Copy-Item .env.example .env
 
 Edit `.env` and replace:
 - `JWT_SECRET` with a unique random secret of at least 32 characters.
+- `API_RATE_LIMIT` (optional) with an integer from 50 to 10000 requests per client IP per 15 minutes; default is 300. Keep the default unless observed legitimate traffic requires adjustment.
 - `ADMIN_PASSWORD` with a unique password of at least 14 characters.
 - `MFA_ENCRYPTION_KEY` with 32 random bytes encoded as 64 hexadecimal characters if you intend to enable MFA. Generate it with `node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"`. Keep it stable and protected separately from the database.
 - `MFA_REQUIRED_ROLES` with a comma-separated list of roles that must complete MFA before using role-protected operations, for example `admin,approver,publisher`. Leave it empty to keep MFA optional for all roles. Required-role accounts can still sign in and open MFA setup, but their protected operations remain blocked until enrollment is confirmed.

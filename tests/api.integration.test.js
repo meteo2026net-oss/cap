@@ -685,6 +685,15 @@ test("API enforces role separation, public-feed filtering and account deactivati
     assert.equal((await request(`/api/alerts/${id}/approve`, {
       token: viewer, method: "POST", body: {}
     })).status, 403, "viewers must not approve warnings");
+    assert.equal((await request(`/api/alerts/${id}/return`, { token: forecaster, method: "POST", body: { reason: "Needs correction" } })).status, 403,
+      "the creator cannot return their own pending warning");
+    assert.equal((await request(`/api/alerts/${id}/return`, { token: reviewer, method: "POST", body: { reason: "no" } })).status, 400,
+      "review feedback must include a meaningful reason");
+    const returned = await request(`/api/alerts/${id}/return`, { token: reviewer, method: "POST", body: { reason: "Please clarify the affected area and expected timing." } });
+    assert.equal(returned.status, 200, "reviewer should be able to return a pending warning to its author");
+    assert.equal(returned.data.workflow, "draft");
+    assert.equal((await request(`/api/alerts/${id}/submit`, { token: forecaster, method: "POST", body: {} })).status, 200,
+      "the author should be able to resubmit the corrected draft");
     const concurrentApprovals = await Promise.all([
       request(`/api/alerts/${id}/approve`, { token: reviewer, method: "POST", body: {} }),
       request(`/api/alerts/${id}/approve`, { token: reviewer, method: "POST", body: {} })

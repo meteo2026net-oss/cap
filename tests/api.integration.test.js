@@ -1347,8 +1347,10 @@ test("API enforces role separation, public-feed filtering and account deactivati
   assert.equal(csvResponse.status, 200, "authenticated users should be able to export filtered alerts");
   assert.match(csvResponse.headers.get("content-type") || "", /text\/csv/i);
   assert.match(csvResponse.headers.get("content-disposition") || "", /cap-alerts-export\.csv/);
-  const csvText = await csvResponse.text();
-  assert.ok(csvText.startsWith("\uFEFF"), "CSV export should include a UTF-8 BOM");
+  const csvBytes = Buffer.from(await csvResponse.arrayBuffer());
+  assert.deepEqual([...csvBytes.subarray(0, 3)], [0xef, 0xbb, 0xbf],
+    "CSV export should begin with the UTF-8 BOM bytes");
+  const csvText = csvBytes.toString("utf8");
   assert.match(csvText, /'=SUM\(1,1\)/, "spreadsheet formula-like cells must be neutralized");
   assert.match(csvText, /"CSV export fixture"/, "CSV fields should be quoted");
   const unauthenticatedCsv = await fetch(base + "/api/alerts/export.csv");

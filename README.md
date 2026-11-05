@@ -4,7 +4,7 @@ Standalone Arabic-first weather-warning management starter based on the OASIS Co
 
 ## Run locally
 
-Requirements: Node.js 22+ and npm. The project runs directly on the host with SQLite; Docker is not part of the project. From the repository root, run:
+Requirements: Node.js 22+ and npm. The project runs directly on the host with SQLite. From the repository root, run:
 
 ```bash
 npm run setup:local

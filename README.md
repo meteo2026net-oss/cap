@@ -13,7 +13,7 @@ npm test
 npm start
 ```
 
-The committed `package-lock.json` pins the full dependency tree; `npm ci` installs those exact locked versions and fails if the manifest and lockfile disagree. The setup command creates `.env` (without overwriting an existing file), generates a unique JWT secret and initial administrator password, and creates local data folders. Save the displayed initial password. Open http://localhost:8095. Stop with Ctrl+C. The interactive map uses Leaflet and OpenStreetMap tiles and therefore needs internet access.
+The committed `package-lock.json` pins the full dependency tree; `npm ci` installs those exact locked versions and fails if the manifest and lockfile disagree. The setup command creates `.env` (without overwriting an existing file), generates a unique JWT secret, initial administrator password, and persistent MFA encryption key, and creates local data folders. To require MFA for selected roles, set `MFA_REQUIRED_ROLES` in `.env` (for example `admin,approver,publisher`); leave it empty for opt-in MFA. Save the displayed initial password. Open http://localhost:8095. Stop with Ctrl+C. The interactive map uses Leaflet and OpenStreetMap tiles and therefore needs internet access.
 
 For full Windows PowerShell, Linux/macOS, Docker Compose, backup, restore, and troubleshooting instructions, see [Installation guide](docs/INSTALLATION.md).
 
@@ -61,7 +61,7 @@ The service listens on `127.0.0.1:8095` by default and stores SQLite data in the
 
 - Arabic RTL dashboard.
 - SQLite schema and initial administrator bootstrap.
-- JWT login, authenticated password changes, administrator provisioning for institutional roles, and optional per-account TOTP MFA.
+- JWT login, authenticated password changes, administrator provisioning for institutional roles, and TOTP MFA with configurable enforcement for selected roles through `MFA_REQUIRED_ROLES`.
 - Login uses a dummy bcrypt comparison for unknown/inactive accounts to reduce username-enumeration timing differences; malformed and oversized credentials are rejected before password verification.
 - Per-user token-version enforcement: password changes revoke all previously issued sessions and return a replacement token for the current session.
 - Draft -> pending review -> approved -> internal publication workflow with independent creator/reviewer/publisher separation; submit, approve, and publish transitions use immediate SQLite transactions and conditional state updates to reject duplicate/stale transitions, with audit records committed atomically.
@@ -91,6 +91,7 @@ The service listens on `127.0.0.1:8095` by default and stores SQLite data in the
 - `POST /api/auth/login`
 - `GET /api/me`
 - `POST /api/auth/change-password`
+- `GET /api/auth/mfa/status`, `POST /api/auth/mfa/enroll`, `POST /api/auth/mfa/confirm`, and `POST /api/auth/mfa/disable`
 - `GET /api/users` (admin only)
 - `POST /api/users` (admin only; provisions admin/forecaster/reviewer/approver/publisher/viewer accounts)
 - `PATCH /api/users/:id/status` (admin only; activates/deactivates an account with last-admin safeguards and revokes existing sessions on state changes)

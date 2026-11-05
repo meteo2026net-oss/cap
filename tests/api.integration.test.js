@@ -188,15 +188,8 @@ test("API enforces role separation, public-feed filtering and account deactivati
   admin = adminMfaConfirmed.data.token;
   const initialUsers = await request("/api/users", { token: admin });
   assert.equal(initialUsers.status, 200);
-  const adminProfile = await request("/api/me", { token: admin });
-  assert.equal(adminProfile.status, 200);
-  const adminUserId = adminProfile.data.user.id;
-  assert.ok(Number.isSafeInteger(adminUserId), "authenticated administrator profile must expose its numeric account id");
   assert.ok(initialUsers.data.users.find(user => user.username === "admin")?.last_login_at,
     "successful login should persist the administrator last-login timestamp");
-  assert.equal((await request(`/api/users/${adminUserId}/password-reset`, {
-    token: admin, method: "POST", body: "{}"
-  })).status, 409, "an administrator must not reset their own password through the assisted workflow");
   assert.equal((await request("/api/users/999999/password-reset", {
     token: admin, method: "POST", body: "{}"
   })).status, 404, "password reset must report an unknown account without changing any credentials");

@@ -1,9 +1,14 @@
+function parseDecimal(value) {
+  if (typeof value !== "string" || !/^[+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)$/.test(value.trim())) return NaN;
+  return Number(value);
+}
+
 function parsePolygon(value) {
   if (typeof value !== "string" || !value.trim()) return null;
-  const pairs = value.trim().split(/\s+/).map(pair => {
+  const pairs = value.trim().split(/\\s+/).map(pair => {
     const parts = pair.split(",");
     if (parts.length !== 2) throw new Error("Invalid CAP polygon coordinates: malformed coordinate pair.");
-    const lat = Number(parts[0]), lon = Number(parts[1]);
+    const lat = parseDecimal(parts[0]), lon = parseDecimal(parts[1]);
     if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) {
       throw new Error("Invalid CAP polygon coordinates.");
     }
@@ -50,7 +55,7 @@ export function alertsToGeoJSON(alerts) {
       for (const circle of circles) {
         const parts = circle.trim().split(/\s+/);
         if (parts.length !== 2) throw new Error("Invalid CAP circle.");
-        const coords = parts[0].split(",").map(Number), radius = Number(parts[1]);
+        const coords = parts[0].split(",").map(parseDecimal), radius = parseDecimal(parts[1]);
         const [lat, lon] = coords;
         if (coords.length !== 2 || !Number.isFinite(lat) || !Number.isFinite(lon) ||
             Math.abs(lat) > 90 || Math.abs(lon) > 180 || !Number.isFinite(radius) || radius <= 0) {

@@ -692,6 +692,25 @@ app.post("/api/alerts/:id/submit",auth,roles("admin","forecaster"),(req,res)=>{
  if(result.kind==="conflict") return res.status(409).json({error:"Only drafts can be submitted"});
  res.json({ok:true,workflow:"pending"});
 });
+app.post("/api/alerts/:id/return",auth,roles("admin","reviewer","approver"),(req,res)=>{
+ const reason=typeof req.body?.reason==="string"?req.body.reason.trim():"";
+ if(reason.length<5 || reason.length>1000) return res.status(400).json({error:"A return reason between 5 and 1000 characters is required"});
+ const transition=db.transaction(()=>{
+  const alert=db.prepare("SELECT id,workflow,created_by FROM alerts WHERE id=?").get(req.params.id);
+  if(!alert) return {kind:"missing"};
+  if(alert.workflow!=="pending") return {kind:"conflict"};
+  if(alert.created_by===req.user.id) return {kind:"forbidden"};
+  const changed=db.prepare("UPDATE alerts SET workflow='draft',approved_by=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=? AND workflow='pending'").run(alert.id);
+  if(changed.changes!==1) return {kind:"conflict"};
+  audit(req.user.id,alert.id,"returned_to_author",reason);
+  return {kind:"updated"};
+ });
+ const result=transition.immediate();
+ if(result.kind==="missing") return res.status(404).json({error:"Alert not found"});
+ if(result.kind==="forbidden") return res.status(403).json({error:"The creator cannot return their own warning"});
+ if(result.kind==="conflict") return res.status(409).json({error:"Only pending alerts can be returned"});
+ res.json({ok:true,workflow:"draft",message:"Returned to author with review feedback"});
+});
 app.post("/api/alerts/:id/approve",auth,roles("admin","reviewer","approver"),(req,res)=>{
  const transition=db.transaction(()=>{
   const a=db.prepare("SELECT id,workflow,created_by FROM alerts WHERE id=?").get(req.params.id);

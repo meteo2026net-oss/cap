@@ -63,7 +63,7 @@ export function alertsToGeoJSON(alerts) {
             identifier: alert.identifier, event: alert.event, headline: alert.headline,
             sent: alert.sent, status: alert.status, msg_type: alert.msg_type,
             urgency: alert.urgency, severity: alert.severity, certainty: alert.certainty,
-            language: alert.language, area_description: area.areaDesc,
+            language: area.language || alert.language, area_description: area.areaDesc,
             geometry_kind: "circle", radius_km: radius
           }
         });

@@ -373,17 +373,18 @@ async function loadAlerts(){
   if(workflow)params.set("workflow",workflow);
   if(severity)params.set("severity",severity);
   if(status)params.set("status",status);
-  const result=await api("/api/alerts?"+params.toString());
+  const [result,statsResult]=await Promise.all([api("/api/alerts?"+params.toString()),api("/api/alerts/stats")]);
   const alerts=result.alerts;
+  const stats=statsResult.stats;
   const pagination=result.pagination;
   alertHasMore=!!pagination.has_more;
   $("#alertPageStatus").textContent="النتائج "+(pagination.total?alertOffset+1:0)+"–"+(alertOffset+alerts.length)+" من "+pagination.total;
   $("#alertPrevPage").disabled=alertOffset===0;
   $("#alertNextPage").disabled=!alertHasMore;
-  $("#total").textContent=pagination.total;
-  $("#drafts").textContent=alerts.filter(a=>a.workflow==="draft").length;
-  $("#pending").textContent=alerts.filter(a=>a.workflow==="pending").length;
-  $("#published").textContent=alerts.filter(a=>a.workflow==="published").length;
+  $("#total").textContent=stats.total;
+  $("#drafts").textContent=stats.drafts;
+  $("#pending").textContent=stats.pending;
+  $("#published").textContent=stats.published;
   $("#alertsList").innerHTML=alerts.map(a=>{
    const actions=[];
    const id=esc(a.id);

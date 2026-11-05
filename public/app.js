@@ -484,12 +484,46 @@ async function loadReviewQueue(){
  const panel=document.getElementById("reviewQueuePanel");if(!panel)return;
  const allowed=["admin","reviewer","approver"].includes(currentRole);panel.hidden=!allowed;if(!allowed)return;
  const list=document.getElementById("reviewQueueList"),status=document.getElementById("reviewQueueStatus");
- try{const params=new URLSearchParams({limit:"200"});const severity=document.getElementById("reviewQueueSeverity")?.value;if(severity)params.set("severity",severity);const data=await api("/api/review/queue?"+params.toString());status.textContent="التحذيرات المنتظرة: "+data.count;list.replaceChildren();
- for(const item of data.queue){const card=document.createElement("article");card.className="alertItem";const title=document.createElement("b");title.textContent=item.headline;card.append(title);
- const meta=document.createElement("p");meta.className="alertMeta";meta.textContent=[item.event,item.severity,"المنشئ: "+(item.creator||"غير معروف"),"مدة الانتظار: "+Math.floor(item.waiting_seconds/3600)+" ساعة"].join(" • ");card.append(meta);
- for(const [action,label] of [["approve","اعتماد"],["return","إعادة للمُنشئ"]]){const button=document.createElement("button");button.type="button";button.textContent=label;button.dataset.alertAction=action;button.dataset.alertId=item.id;button.addEventListener("click",()=>act(item.id,action));card.append(button);}list.append(card);}
- if(!data.count)list.textContent="لا توجد تحذيرات بانتظار المراجعة";
+ try{
+  const params=new URLSearchParams({limit:"200"});
+  const severity=document.getElementById("reviewQueueSeverity")?.value;
+  if(severity)params.set("severity",severity);
+  const data=await api("/api/review/queue?"+params.toString());
+  status.textContent="التحذيرات المنتظرة: "+data.count;list.replaceChildren();
+  for(const item of data.queue){
+   const card=document.createElement("article");card.className="alertItem";
+   const title=document.createElement("b");title.textContent=item.headline;card.append(title);
+   const meta=document.createElement("p");meta.className="alertMeta";
+   meta.textContent=[item.event,item.severity,"المنشئ: "+(item.creator||"غير معروف"),"مدة الانتظار: "+Math.floor(item.waiting_seconds/3600)+" ساعة"].join(" • ");card.append(meta);
+   const noteLabel=document.createElement("label");noteLabel.className="small";noteLabel.textContent="ملاحظة المراجعة";
+   const note=document.createElement("textarea");note.rows=2;note.maxLength=1000;note.placeholder="اكتب ملاحظة واضحة للمراجعة (5 أحرف على الأقل)";noteLabel.append(note);card.append(noteLabel);
+   const actions=document.createElement("div");actions.className="actions";
+   const save=document.createElement("button");save.type="button";save.textContent="حفظ الملاحظة";save.addEventListener("click",async()=>{
+    save.disabled=true;try{await api("/api/alerts/"+encodeURIComponent(item.id)+"/review-notes",{method:"POST",body:JSON.stringify({note:note.value})});note.value="";history.hidden=false;await loadReviewHistory(item.id,history);status.textContent="تم حفظ ملاحظة التحذير #"+item.id+" في سجل التدقيق.";}catch(error){alert(error.message)}finally{save.disabled=false}
+   });
+   const historyButton=document.createElement("button");historyButton.type="button";historyButton.className="secondary";historyButton.textContent="سجل قرارات المراجعة";historyButton.addEventListener("click",async()=>{history.hidden=false;await loadReviewHistory(item.id,history)});
+   actions.append(save,historyButton);
+   for(const [action,label] of [["approve","اعتماد"],["return","إعادة للمُنشئ"]]){const button=document.createElement("button");button.type="button";button.textContent=label;button.dataset.alertAction=action;button.dataset.alertId=item.id;button.addEventListener("click",()=>act(item.id,action));actions.append(button);}
+   card.append(actions);
+   const history=document.createElement("div");history.className="reviewHistory small";history.hidden=true;history.textContent="اضغط لعرض سجل المراجعة.";card.append(history);
+   list.append(card);
+  }
+  if(!data.count)list.textContent="لا توجد تحذيرات بانتظار المراجعة";
  }catch(error){status.textContent=error.message;list.textContent=error.message;}
+}
+async function loadReviewHistory(id,container){
+ container.textContent="جارٍ تحميل سجل المراجعة...";
+ try{
+  const data=await api("/api/alerts/"+encodeURIComponent(id)+"/review-history");
+  container.replaceChildren();
+  for(const entry of data.entries){
+   const row=document.createElement("p");
+   const label=entry.action==="review_note_added"?"ملاحظة مراجعة":entry.action==="approved"?"تم الاعتماد":"أُعيد إلى المنشئ";
+   row.textContent=label+" • "+(entry.username||"النظام")+" • "+formatAuditTimestamp(entry.created_at)+"\n"+(entry.details||"");
+   container.append(row);
+  }
+  if(!data.count)container.textContent="لا توجد ملاحظات أو قرارات مراجعة مسجلة لهذا التحذير.";
+ }catch(error){container.textContent=error.message;}
 }
 document.getElementById("reviewQueueRefresh")?.addEventListener("click",loadReviewQueue);
 async function loadAlertRelations(id){

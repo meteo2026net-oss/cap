@@ -694,9 +694,43 @@ test("API enforces role separation, public-feed filtering and account deactivati
     assert.equal(returned.data.workflow, "draft");
     assert.equal((await request(`/api/alerts/${id}`, { token: forecaster, method: "PATCH", body: { headline: "x" } })).status, 400,
       "draft edits must still satisfy CAP headline validation");
-    const correctedDraft = await request(`/api/alerts/${id}`, { token: forecaster, method: "PATCH", body: { headline: "Corrected integration warning headline", description: "Updated description after reviewer feedback." } });
-    assert.equal(correctedDraft.status, 200, "the original author should be able to correct a returned draft");
-    assert.deepEqual(correctedDraft.data.updated_fields.sort(), ["description","headline"]);
+    const correctedDraft = await request(`/api/alerts/${id}`, { token: forecaster, method: "PATCH", body: {
+      event: "Updated integration weather event",
+      category: "Met",
+      urgency: "Expected",
+      severity: "Moderate",
+      certainty: "Likely",
+      scope: "Public",
+      status: "Test",
+      headline: "Corrected integration warning headline",
+      description: "Updated description after reviewer feedback.",
+      instruction: "Follow official updates and avoid exposed areas.",
+      area_desc: "Northern test district",
+      polygon: "",
+      circle: "",
+      onset: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+      expires: new Date(Date.now() + 6 * 60 * 60 * 1000).toISOString(),
+      language: "ar",
+      info_blocks: [{
+        language: "ar",
+        category: "Met",
+        event: "أمطار غزيرة تجريبية",
+        urgency: "Expected",
+        severity: "Moderate",
+        certainty: "Likely",
+        headline: "تحذير تجريبي محدث",
+        description: "تفاصيل محدثة للاختبار.",
+        instruction: "تابع التحديثات الرسمية.",
+        area: { areaDesc: "القطاع الشمالي التجريبي", circle: "33.5,36.2 10" }
+      }]
+    } });
+    assert.equal(correctedDraft.status, 200, "the original author should be able to correct all editable CAP draft fields");
+    assert.deepEqual(correctedDraft.data.updated_fields.sort(), ["area_desc","category","certainty","circle","description","event","expires","headline","info_json","instruction","language","onset","polygon","scope","severity","status","urgency"]);
+    const correctedReadback = await request(`/api/alerts/${id}`, { token: forecaster });
+    assert.equal(correctedReadback.data.alert.event, "Updated integration weather event");
+    assert.equal(correctedReadback.data.alert.area_desc, "Northern test district");
+    assert.equal(correctedReadback.data.alert.info_blocks[0].headline, "تحذير تجريبي محدث");
+    assert.equal(correctedReadback.data.alert.info_blocks[0].area.circle, "33.5,36.2 10");
     assert.equal((await request(`/api/alerts/${id}`, { token: reviewer, method: "PATCH", body: { headline: "Unauthorized reviewer edit" } })).status, 403,
       "reviewers cannot edit another users draft");
     assert.equal((await request(`/api/alerts/${id}/submit`, { token: forecaster, method: "POST", body: {} })).status, 200,

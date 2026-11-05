@@ -575,7 +575,7 @@ app.get("/api/alerts",auth,(req,res)=>{
  const search = typeof req.query.q === "string" ? req.query.q.trim().slice(0,160) : "";
  const parseBoundedInteger = (value, fallback, maximum) => {
   if (value === undefined) return fallback;
-  if (!/^(0|[1-9]\\d*)$/.test(String(value))) return null;
+  if (!/^(0|[1-9]\d*)$/.test(String(value))) return null;
   const parsed = Number(value);
   return Number.isSafeInteger(parsed) && parsed <= maximum ? parsed : null;
  };

@@ -2,6 +2,12 @@
 
 This repository supports two equivalent operating modes. Both use the same application code, SQLite schema, API, dashboard and security checks. Choose either mode; Docker is optional.
 
+## Dependency installation and updates
+
+`package-lock.json` is committed and is the source of truth for the exact dependency tree. Use `npm ci` for clean, repeatable installs; it removes an existing `node_modules` directory and installs only the versions recorded in the lockfile. It also fails if `package.json` and the lockfile are out of sync.
+
+When deliberately changing dependencies, run `npm install <package>@<version>` (or `npm uninstall <package>`) to update both manifest and lockfile, review the diff, then verify with `npm ci`, `npm test`, and `npm audit` before committing both files. Do not hand-edit the lockfile.
+
 ## Mode A — Run directly (no Docker)
 
 ### Requirements
@@ -17,7 +23,7 @@ From the repository folder:
 node --version
 npm --version
 npm run setup:local
-npm install
+npm ci
 npm test
 npm start
 ```
@@ -34,7 +40,7 @@ Run the same commands from the repository root:
 node --version
 npm --version
 npm run setup:local
-npm install
+npm ci
 npm test
 npm start
 ```

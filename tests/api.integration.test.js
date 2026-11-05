@@ -644,6 +644,16 @@ test("API enforces role separation, public-feed filtering and account deactivati
     assert.equal(created.status, 201, "forecaster should create a draft");
     const id = created.data.id;
 
+    const filteredAlerts = await request("/api/alerts?q=Synthetic%20test%20warning&workflow=draft&limit=1&offset=0", { token: forecaster });
+    assert.equal(filteredAlerts.status, 200, "alert list should support search, workflow filters and pagination");
+    assert.equal(filteredAlerts.data.alerts.length, 1);
+    assert.equal(filteredAlerts.data.alerts[0].id, id);
+    assert.equal(filteredAlerts.data.pagination.limit, 1);
+    assert.ok(filteredAlerts.data.pagination.total >= 1);
+    assert.equal(filteredAlerts.data.pagination.has_more, filteredAlerts.data.pagination.total > 1);
+    assert.equal((await request("/api/alerts?workflow=invalid", { token: forecaster })).status, 400, "unknown workflow filters must be rejected");
+    assert.equal((await request("/api/alerts?limit=501", { token: forecaster })).status, 400, "page sizes above the hard maximum must be rejected");
+
     assert.equal((await request(`/api/alerts/${id}/submit`, {
       token: reviewer, method: "POST", body: {}
     })).status, 403, "reviewers must not submit warnings for review");

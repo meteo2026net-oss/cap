@@ -679,7 +679,7 @@ app.get("/api/alerts/:id/timeline",auth,roles("admin","reviewer","approver"),(re
   WHERE l.alert_id=? ORDER BY l.created_at DESC,l.id DESC LIMIT 500`).all(alertId);
  const versionEvents=versions.map(row=>({id:"version-"+row.id,source:"version",
   event_type:row.change_type,summary:row.change_type==="created"?"إنشاء النسخة الأولى":"تحديث مسودة التحذير",
-  version_no:row.version_no,actor:row.actor,created_at:row.created_at}));
+  details:"",version_no:row.version_no,actor:row.actor,created_at:row.created_at}));
  const auditEvents=auditRows.map(row=>{
   const labels={created:"إنشاء التحذير",submitted:"إرسال للمراجعة",approved:"اعتماد التحذير",
    returned_to_author:"إعادة للمُنشئ",published:"نشر التحذير",cancelled:"إلغاء التحذير",

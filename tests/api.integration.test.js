@@ -68,6 +68,12 @@ test("API enforces role separation, public-feed filtering and account deactivati
   }
   assert.equal(ready, true, "API server should become ready");
 
+  const readinessResponse = await fetch(base + "/api/health/ready");
+  assert.equal(readinessResponse.status, 200, "readiness must verify the database before reporting ready");
+  const readiness = await readinessResponse.json();
+  assert.equal(readiness.ok, true);
+  assert.deepEqual(readiness.checks, { database: "ok", foreign_keys: "ok" });
+
   const dashboard = await fetch(base + "/");
   assert.equal(dashboard.status, 200, "dashboard should be served independently of process.cwd()");
   const csp = dashboard.headers.get("content-security-policy") || "";

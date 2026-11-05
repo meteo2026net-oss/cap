@@ -21,6 +21,19 @@ test("rejects invalid CAP enumerations", () => {
   assert.throws(() => validateAlert({ ...valid, severity: "Critical" }), /Invalid CAP severity/);
 });
 
+test("validates urgency, severity and certainty in every multilingual info block", () => {
+  const block = {
+    language: "en-GB", category: "Met", event: "Heavy rainfall",
+    urgency: "Expected", severity: "Moderate", certainty: "Likely",
+    area: { areaDesc: "District", circle: "51.5,-0.1 10" }
+  };
+  for (const [field, value] of [["urgency", "Immediate-ish"], ["severity", "Critical"], ["certainty", "Confirmed"]]) {
+    assert.throws(() => buildCapXml({ ...valid, info_blocks: [{ ...block, [field]: value }] }),
+      new RegExp(`Invalid CAP info ${field}`));
+  }
+  assert.equal(validateAlert({ ...valid, info_blocks: [block] }), true);
+});
+
 test("rejects unclosed or malformed polygons", () => {
   assert.throws(() => validateAlert({ ...valid, polygon: "51,0 52,0 52,1 51,1" }), /must be closed/);
   assert.throws(() => validateAlert({ ...valid, polygon: "91,0 52,0 52,1 91,0" }), /valid latitude/);

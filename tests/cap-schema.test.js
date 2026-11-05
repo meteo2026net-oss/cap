@@ -92,3 +92,60 @@ test("all CAP message types conform to the official OASIS CAP 1.2 XSD", { skip: 
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("optional CAP metadata, response types, parameters, resources and area fields conform to the official XSD", { skip: !hasSchema || !hasXmllint }, () => {
+  const xml = buildCapXml({
+    identifier: makeIdentifier(),
+    sender: "alerts@example.test",
+    sent: "2026-11-05T05:00:00.000Z",
+    status: "Test",
+    msg_type: "Alert",
+    source: "National Forecast Centre",
+    scope: "Public",
+    codes: ["profile:weather"],
+    note: "Schema conformance fixture",
+    incidents: "INC-2026-0042",
+    info_blocks: [{
+      language: "en-GB",
+      categories: ["Met", "Safety"],
+      event: "Severe rainfall",
+      response_types: ["Prepare", "Monitor"],
+      urgency: "Expected",
+      severity: "Severe",
+      certainty: "Likely",
+      effective: "2026-11-05T08:00:00+01:00",
+      onset: "2026-11-05T09:00:00+01:00",
+      expires: "2026-11-05T18:00:00+01:00",
+      senderName: "Forecast Operations",
+      headline: "Heavy rainfall expected",
+      description: "Periods of heavy rainfall are expected.",
+      instruction: "Monitor official updates.",
+      web: "https://example.org/warnings",
+      contact: "forecast@example.org",
+      parameters: [{ valueName: "rainfall_mm", value: "35" }],
+      areas: [{
+        areaDesc: "Western district",
+        polygon: "51,0 52,0 52,1 51,1 51,0",
+        altitude: 0,
+        ceiling: 2500
+      }],
+      resources: [{
+        resourceDesc: "Rainfall map",
+        mimeType: "image/png",
+        size: 4096,
+        uri: "https://example.org/rain.png",
+        derefUri: "embedded-map",
+        digest: "0123456789abcdef"
+      }]
+    }]
+  });
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cap-xsd-optional-"));
+  try {
+    const xmlPath = path.join(dir, "optional-alert.xml");
+    fs.writeFileSync(xmlPath, xml, "utf8");
+    const result = spawnSync("xmllint", ["--noout", "--schema", schemaPath, xmlPath], { encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr || result.stdout || "optional CAP elements failed XSD validation");
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});

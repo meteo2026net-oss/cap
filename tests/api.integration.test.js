@@ -1152,6 +1152,14 @@ test("API enforces role separation, public-feed filtering and account deactivati
     });
     assert.equal(publishedDerived.status, 200, msg_type + " should be internally published after approval");
     assert.equal(publishedDerived.data.workflow, "published");
+    const derivedTimeline = await request(`/api/alerts/${derived.data.id}/timeline`, { token: reviewer });
+    assert.equal(derivedTimeline.status, 200);
+    assert.ok(derivedTimeline.data.timeline.some(item => item.source === "version" && item.version_no === 1),
+      msg_type + " timeline should retain its initial immutable snapshot");
+    assert.ok(derivedTimeline.data.timeline.some(item => item.event_type === msg_type.toLowerCase()),
+      msg_type + " timeline should identify the derived message type");
+    assert.ok(derivedTimeline.data.timeline.some(item => item.event_type === "published"),
+      msg_type + " timeline should include publication");
     const relationHistory = await request(`/api/alerts/${actualRow.id}/relations`, { token: forecaster });
     assert.equal(relationHistory.status, 200);
     assert.ok(relationHistory.data.messages.some(message => message.id === derived.data.id),

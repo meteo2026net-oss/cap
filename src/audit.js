@@ -106,6 +106,7 @@ export function verifyAuditChain(database) {
   }
 
   let previousHash = GENESIS_HASH;
+  let previousId = null;
   let verifiedEntries = 0;
   const rows = database.prepare(`
     SELECT id,user_id,alert_id,action,details,created_at,previous_hash,entry_hash
@@ -114,6 +115,16 @@ export function verifyAuditChain(database) {
     ORDER BY id ASC
   `);
   for (const row of rows.iterate()) {
+    if (previousId !== null && row.id !== previousId + 1) {
+      return {
+        valid: false,
+        verified_entries: verifiedEntries,
+        total_hashed_entries: totalHashedEntries,
+        legacy_unhashed_entries: legacyEntries,
+        first_invalid_id: row.id,
+        reason: "sequence_gap"
+      };
+    }
     if (row.previous_hash !== previousHash) {
       return {
         valid: false,
@@ -139,6 +150,7 @@ export function verifyAuditChain(database) {
       };
     }
     previousHash = row.entry_hash;
+    previousId = row.id;
     verifiedEntries++;
   }
 

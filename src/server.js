@@ -870,6 +870,19 @@ app.get("/api/audit/verify",auth,roles("admin","reviewer","approver"),(_req,res)
  res.json(verifyAuditChain(db));
 });
 
+app.get("/api/audit/export.csv",auth,roles("admin","reviewer","approver"),(req,res)=>{
+ const action=typeof req.query.action==="string"?req.query.action.trim().slice(0,80):"";
+ const search=typeof req.query.q==="string"?req.query.q.trim().slice(0,160):"";
+ const clauses=[],params=[];
+ if(action){clauses.push("l.action=?");params.push(action);}
+ if(search){clauses.push("(instr(lower(COALESCE(l.action,'')),lower(?))>0 OR instr(lower(COALESCE(l.details,'')),lower(?))>0 OR instr(lower(COALESCE(u.username,'')),lower(?))>0)");params.push(search,search,search);}
+ const where=clauses.length?"WHERE "+clauses.join(" AND "):"";
+ const rows=db.prepare("SELECT l.id,l.created_at,u.username,l.alert_id,l.action,l.details,l.previous_hash,l.entry_hash FROM audit_log l LEFT JOIN users u ON u.id=l.user_id "+where+" ORDER BY l.id DESC LIMIT 10001").all(...params);
+ if(rows.length>10000)return res.status(413).json({error:"Audit export exceeds 10000 rows; narrow the filters",maximum_rows:10000});
+ const columns=["id","created_at","username","alert_id","action","details","previous_hash","entry_hash"];
+ const csv=[columns.map(csvCell).join(","),...rows.map(row=>columns.map(key=>csvCell(row[key])).join(","))];
+ res.status(200).set({"Content-Type":"text/csv; charset=utf-8","Content-Disposition":'attachment; filename="cap-audit-export.csv"',"Cache-Control":"no-store"}).send("\uFEFF"+csv.join("\r\n")+"\r\n");
+});
 app.get("/api/audit",auth,roles("admin","reviewer","approver"),(req,res)=>{
  const rawLimit=req.query.limit===undefined?"500":req.query.limit;
  const limit=Number(rawLimit);

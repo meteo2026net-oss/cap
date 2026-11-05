@@ -677,6 +677,33 @@ app.post("/api/alerts/:id/derive",auth,roles("admin","forecaster"),(req,res)=>{
  res.status(201).json({id:result.id,identifier:result.identifier,msg_type:msgType,status:"Test",workflow:"draft",references:result.references});
 });
 
+app.patch("/api/alerts/:id",auth,roles("admin","forecaster"),(req,res)=>{
+ let data;
+ try{data=schema.partial().parse(req.body);}catch(error){return res.status(400).json({error:error.message});}
+ const fields=["event","category","response_type","urgency","severity","certainty","effective","onset","expires","headline","description","instruction","area_desc","polygon","circle","language","scope","status"];
+ const updates=fields.filter(field=>Object.hasOwn(data,field));
+ if(Object.hasOwn(data,"info_blocks")) updates.push("info_json");
+ if(!updates.length) return res.status(400).json({error:"No editable alert fields supplied"});
+ const transition=db.transaction(()=>{
+  const alert=db.prepare("SELECT id,workflow,created_by FROM alerts WHERE id=?").get(req.params.id);
+  if(!alert) return {kind:"missing"};
+  if(alert.workflow!=="draft") return {kind:"conflict"};
+  if(alert.created_by!==req.user.id && req.user.role!=="admin") return {kind:"forbidden"};
+  const assignments=updates.map(field=>field+"=@"+field).join(",");
+  const values={...data};
+  if(Object.hasOwn(data,"info_blocks")) values.info_json=JSON.stringify(data.info_blocks);
+  values.id=alert.id;
+  const changed=db.prepare("UPDATE alerts SET "+assignments+",updated_at=CURRENT_TIMESTAMP WHERE id=@id AND workflow='draft'").run(values);
+  if(changed.changes!==1) return {kind:"conflict"};
+  audit(req.user.id,alert.id,"draft_updated","Updated fields: "+updates.join(", "));
+  return {kind:"updated"};
+ });
+ const result=transition.immediate();
+ if(result.kind==="missing") return res.status(404).json({error:"Alert not found"});
+ if(result.kind==="forbidden") return res.status(403).json({error:"Only the draft author or an administrator can edit this warning"});
+ if(result.kind==="conflict") return res.status(409).json({error:"Only draft warnings can be edited"});
+ res.json({ok:true,workflow:"draft",updated_fields:updates});
+});
 app.post("/api/alerts/:id/submit",auth,roles("admin","forecaster"),(req,res)=>{
  const transition=db.transaction(()=>{
   const a=db.prepare("SELECT id,workflow FROM alerts WHERE id=?").get(req.params.id);

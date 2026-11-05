@@ -18,7 +18,7 @@ These are deployment-time decisions; they are not needed to continue repository 
 
 ## 2. Identity, access, and governance
 
-- [ ] Implement and independently test MFA for privileged accounts.
+- [x] Implement opt-in TOTP MFA, encrypted secret storage, one-time recovery codes, and single-use login challenges; automated tests cover enrollment, login, recovery, disable, and TOTP replay prevention.\n- [ ] Define and enforce the institution's MFA requirement for privileged accounts; complete independent security review.
 - [ ] Implement secure password recovery with expiring, single-use tokens and abuse/rate controls.
 - [ ] Enforce institutional identity lifecycle: onboarding, approval, suspension, offboarding, and periodic access review.
 - [ ] Review role separation and last-administrator safeguards against the institution's approved policy.

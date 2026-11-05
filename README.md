@@ -29,6 +29,10 @@ npm run backup
 
 Backups are written to `backups/` by default, validated with SQLite integrity checks and audit-chain verification, and old generated backup files are pruned after 30 days. Set `BACKUP_DIR` and `BACKUP_RETENTION_DAYS` to change these defaults.
 
+On Windows, double-click `run-backup-now.bat` for an immediate verified backup. To install an optional daily 02:00 backup task for the current Windows user, double-click `install-daily-backup.bat`; it runs when that user is signed in, starts missed runs when Windows becomes available, and writes execution logs under `logs/`. Use `remove-daily-backup.bat` to remove the scheduled task without deleting existing backups. The task does not require administrator privileges and does not upload data off this computer.
+
+The backup and restore command-line tools load `.env`, including a configured `DB_PATH`. On Windows, `restore-backup.bat <backup-file> [--force]` provides a guided wrapper; stop the server and delivery worker first. Keep a separate encrypted off-device copy because local scheduled backups do not protect against loss of the computer.
+
 To restore, stop the service first, then run:
 
 ```bash

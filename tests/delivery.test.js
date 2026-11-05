@@ -184,3 +184,20 @@ test("delivery receipts reject stale workers after lease recovery",()=>{
   assert.equal(recordDeliveryReceipt(db,queued.id,{status:"delivered",leaseToken:secondClaim.lease_token}).status,"delivered");
  } finally { db.close(); }
 });
+
+test("concurrent outbox claims grant exactly one worker the lease", async () => {
+ const db=fixture();
+ try {
+  const queued=enqueueDelivery(db,{alertId:1,payload:"<concurrent-claim/>"});
+  const claims=await Promise.all([
+   Promise.resolve().then(()=>claimDelivery(db,queued.id)),
+   Promise.resolve().then(()=>claimDelivery(db,queued.id))
+  ]);
+  const winners=claims.filter(Boolean);
+  assert.equal(winners.length,1,"only one competing worker may claim a queued delivery");
+  assert.equal(winners[0].status,"sending");
+  assert.ok(winners[0].lease_token);
+  assert.equal(db.prepare("SELECT attempts FROM delivery_outbox WHERE id=?").get(queued.id).attempts,1);
+  assert.equal(claimDelivery(db,queued.id),null,"the claimed job must no longer be available");
+ } finally { db.close(); }
+});

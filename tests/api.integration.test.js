@@ -531,10 +531,22 @@ test("API enforces role separation, public-feed filtering and account deactivati
   assert.equal(secondAuditPage.data.entries.length, 1);
   assert.ok(secondAuditPage.data.entries[0].id < firstAuditPage.data.entries[0].id,
     "audit cursor pagination must return strictly older entries without overlap");
-  assert.equal((await request("/api/audit?before_id=0", { token: reviewer })).status, 400,
-    "zero is not a valid audit cursor");
-  assert.equal((await request("/api/audit?limit=501", { token: reviewer })).status, 400,
-    "audit page size must be capped");
+  assert.equal((await request("/api/audit", { token: admin })).status, 200,
+    "administrators should be able to inspect audit history");
+  assert.equal((await request("/api/audit/verify", { token: admin })).status, 200,
+    "administrators should be able to verify audit history");
+  assert.equal((await request("/api/audit?limit=500", { token: reviewer })).status, 200,
+    "the maximum supported audit page size should be accepted");
+  for (const invalidLimit of ["0", "-1", "1.5", "abc", "501", "9007199254740992"]) {
+    assert.equal((await request("/api/audit?limit=" + encodeURIComponent(invalidLimit), { token: reviewer })).status, 400,
+      "invalid audit page size should be rejected: " + invalidLimit);
+  }
+  for (const invalidCursor of ["0", "-1", "1.5", "abc", "9007199254740992"]) {
+    assert.equal((await request("/api/audit?before_id=" + encodeURIComponent(invalidCursor), { token: reviewer })).status, 400,
+      "invalid audit cursor should be rejected: " + invalidCursor);
+  }
+  assert.equal((await request("/api/audit?limit=1&before_id=1", { token: reviewer })).status, 200,
+    "the smallest positive audit cursor should be accepted");
 
   const auditPaginationDatabase = new Database(path.join(cwd, "storage", "cap.sqlite"));
   try {

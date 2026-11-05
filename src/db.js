@@ -6,9 +6,9 @@ import { installAuditLogGuards } from "./audit.js";
 import { migrateLeaseTokenStorage } from "./lease-migration.js";
 import { initializeWebhookReplayStore } from "./webhook-replay.js";
 
-const storage = path.resolve("storage");
-fs.mkdirSync(storage, { recursive: true });
-export const db = new Database(path.join(storage, "cap.sqlite"));
+const databasePath = path.resolve(process.env.DB_PATH || path.join("storage", "cap.sqlite"));
+fs.mkdirSync(path.dirname(databasePath), { recursive: true });
+export const db = new Database(databasePath);
 db.pragma("journal_mode = WAL");
 db.pragma("foreign_keys = ON");
 

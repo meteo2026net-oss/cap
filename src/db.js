@@ -88,6 +88,20 @@ CREATE INDEX IF NOT EXISTS idx_delivery_alert ON delivery_outbox(alert_id);
 `);
 
  // Forward-compatible, idempotent SQLite migrations for existing installations.
+ db.exec(`
+  CREATE TABLE IF NOT EXISTS alert_versions (
+   id INTEGER PRIMARY KEY AUTOINCREMENT,
+   alert_id INTEGER NOT NULL REFERENCES alerts(id) ON DELETE CASCADE,
+   version_no INTEGER NOT NULL CHECK(version_no > 0),
+   change_type TEXT NOT NULL CHECK(change_type IN ('created','draft_updated')),
+   changed_by INTEGER REFERENCES users(id),
+   snapshot_json TEXT NOT NULL,
+   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+   UNIQUE(alert_id,version_no)
+  );
+  CREATE INDEX IF NOT EXISTS idx_alert_versions_alert ON alert_versions(alert_id,version_no DESC);
+ `);
+
  const alertColumns = db.prepare("PRAGMA table_info(alerts)").all().map(column => column.name);
  if (!alertColumns.includes("info_json")) db.exec("ALTER TABLE alerts ADD COLUMN info_json TEXT");
 

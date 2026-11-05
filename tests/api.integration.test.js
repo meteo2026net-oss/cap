@@ -39,7 +39,8 @@ test("API enforces role separation, public-feed filtering and account deactivati
       CAP_DELIVERY_ENABLED: "true",
       CAP_WEBHOOK_INGRESS_ENABLED: "true",
       CAP_WEBHOOK_SECRET: "integration-webhook-secret-that-is-at-least-32-bytes",
-      MFA_ENCRYPTION_KEY: "a".repeat(64)
+      MFA_ENCRYPTION_KEY: "a".repeat(64),
+      MFA_REQUIRED_ROLES: "admin,approver,publisher"
     },
     stdio: "ignore"
   });
@@ -156,7 +157,22 @@ test("API enforces role separation, public-feed filtering and account deactivati
     method: "POST", body: { username: "account-that-does-not-exist", password: "Wrong-Password-2026!" }
   })).status, 401, "unknown accounts must receive the same generic authentication failure");
 
-  const admin = await login("admin", "Integration-Test-Admin-Password-2026");
+  let admin = await login("admin", "Integration-Test-Admin-Password-2026");
+  assert.equal((await request("/api/users", { token: admin })).status, 403,
+    "an administrator without required MFA must not access protected administrator operations");
+  const adminMfaStatus = await request("/api/auth/mfa/status", { token: admin });
+  assert.equal(adminMfaStatus.data.required, true);
+  const adminEnrollment = await request("/api/auth/mfa/enroll", {
+    token: admin, method: "POST", body: { password: "Integration-Test-Admin-Password-2026" }
+  });
+  assert.equal(adminEnrollment.status, 200, "required-role users must be able to enroll while privileged operations are blocked");
+  const adminMfaConfirmed = await request("/api/auth/mfa/confirm", {
+    token: admin, method: "POST", body: {
+      password: "Integration-Test-Admin-Password-2026", code: totpAt(adminEnrollment.data.secret)
+    }
+  });
+  assert.equal(adminMfaConfirmed.status, 200);
+  admin = adminMfaConfirmed.data.token;
   const initialUsers = await request("/api/users", { token: admin });
   assert.equal(initialUsers.status, 200);
   assert.ok(initialUsers.data.users.find(user => user.username === "admin")?.last_login_at,
@@ -265,6 +281,24 @@ test("API enforces role separation, public-feed filtering and account deactivati
   assert.equal((await request("/api/delivery/outbox", { token: roleChangeOldSession })).status, 401,
     "a session issued before a role change must be revoked");
   const roleChangeNewSession = await login("rolechange1", "Temporary-Password-2026!");
+  const blockedPublisherAccess = await request("/api/delivery/outbox", { token: roleChangeNewSession });
+  assert.equal(blockedPublisherAccess.status, 403, "publisher operations must be blocked until required MFA is enabled");
+  assert.equal(blockedPublisherAccess.data.code, "MFA_REQUIRED");
+  const publisherMfaStatus = await request("/api/auth/mfa/status", { token: roleChangeNewSession });
+  assert.equal(publisherMfaStatus.data.required, true);
+  const publisherEnrollment = await request("/api/auth/mfa/enroll", {
+    token: roleChangeNewSession, method: "POST", body: { password: "Temporary-Password-2026!" }
+  });
+  assert.equal(publisherEnrollment.status, 200);
+  const publisherMfaConfirmed = await request("/api/auth/mfa/confirm", {
+    token: roleChangeNewSession, method: "POST", body: {
+      password: "Temporary-Password-2026!", code: totpAt(publisherEnrollment.data.secret)
+    }
+  });
+  assert.equal(publisherMfaConfirmed.status, 200);
+  const publisherMfaToken = publisherMfaConfirmed.data.token;
+  assert.equal((await request("/api/delivery/outbox", { token: publisherMfaToken })).status, 200,
+    "publisher operations should be available after MFA enrollment is confirmed");
   const usersAfterLogin = await request("/api/users", { token: admin });
   assert.ok(usersAfterLogin.data.users.find(user => user.id === roleChangeId)?.last_login_at,
     "last-login timestamp should be refreshed after a new successful login");

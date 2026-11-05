@@ -227,7 +227,7 @@ export async function listDatabaseBackups(directory) {
   }
 
   const candidates = names.filter(name =>
-    /^cap-\\d{8}T\\d{6}(?:\\d{3})?Z(?:-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?\\.sqlite$/i.test(name)
+    /^cap-\d{8}T\d{6}(?:\d{3})?Z(?:-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?\.sqlite$/i.test(name)
   ).sort().reverse();
 
   const results = [];

@@ -71,6 +71,15 @@ test("API enforces role separation, public-feed filtering and account deactivati
   assert.ok(csp.includes("object-src"));
   assert.ok(csp.includes("script-src"));
   assert.ok(csp.includes("script-src-attr 'none'"), "inline event handler attributes must be blocked");
+  assert.equal(dashboard.headers.get("x-content-type-options"), "nosniff",
+    "responses should prevent MIME type sniffing");
+  assert.ok(dashboard.headers.get("referrer-policy"),
+    "responses should include a referrer policy");
+  const crossOriginDashboard = await fetch(base + "/", {
+    headers: { Origin: "https://untrusted.example" }
+  });
+  assert.equal(crossOriginDashboard.headers.get("access-control-allow-origin"), null,
+    "cross-origin browser access must remain disabled unless an explicit CORS allowlist is configured");
   const dashboardScriptResponse = await fetch(base + "/app.js");
   assert.equal(dashboardScriptResponse.status, 200);
   const dashboardScript = await dashboardScriptResponse.text();

@@ -37,6 +37,16 @@ test("exports multiple multilingual areas as separate features", () => {
   assert.deepEqual(result.features.map(feature => feature.properties.language), ["en-GB", "ar"]);
 });
 
+test("preserves each language tag on multilingual circle features", () => {
+  const result = alertsToGeoJSON([{
+    ...base,
+    info_json: JSON.stringify([
+      { language: "ar", area: { areaDesc: "دمشق", circle: "33.5,36.2 12" } }
+    ])
+  }]);
+  assert.equal(result.features[0].properties.language, "ar");
+});
+
 test("rejects malformed polygons and circles instead of emitting invalid GeoJSON", () => {
   assert.throws(() => alertsToGeoJSON([{ ...base, polygon: "91,0 52,0 52,1 91,0" }]), /coordinates/);
   assert.throws(() => alertsToGeoJSON([{ ...base, circle: "51,-1 0" }]), /circle/);

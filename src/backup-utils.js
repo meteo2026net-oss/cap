@@ -1,6 +1,7 @@
 import Database from "better-sqlite3";
 import fs from "node:fs/promises";
 import path from "node:path";
+import os from "node:os";
 import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { verifyAuditChain } from "./audit.js";
@@ -105,10 +106,62 @@ export async function verifyRestoredDatabase(source) {
     for (const table of ["users", "alerts", "audit_log"]) {
       if (tables.has(table)) counts[table] = count(table);
     }
-    return { file, integrity: validation.integrity, audit: validation.audit, counts };
+    const tableCounts = Object.fromEntries(
+      [...tables].filter(name => !name.startsWith("sqlite_")).sort().map(name => [
+        name,
+        database.prepare(`SELECT COUNT(*) AS count FROM "${name.replaceAll('"', '""')}"`).get().count
+      ])
+    );
+    return {
+      file,
+      integrity: validation.integrity,
+      audit: validation.audit,
+      counts,
+      table_counts: tableCounts
+    };
   } finally {
     database.close();
   }
+}
+
+
+export async function runIsolatedRestoreDrill(source) {
+  const sourcePath = path.resolve(source);
+  const startedAt = new Date();
+  const workspace = await fs.mkdtemp(path.join(os.tmpdir(), "cap-restore-drill-"));
+  const targetPath = path.join(workspace, "restored.sqlite");
+  let report;
+  try {
+    const sourceBackup = await verifyDatabaseBackup(sourcePath);
+    const sourceState = await verifyRestoredDatabase(sourcePath);
+
+    // Exercise the same restore implementation used by the real restore CLI,
+    // but point it at a fresh temporary target rather than the live DB_PATH.
+    await restoreDatabaseBackup(sourcePath, targetPath);
+    const restoredState = await verifyRestoredDatabase(targetPath);
+
+    if (JSON.stringify(sourceState.table_counts) !== JSON.stringify(restoredState.table_counts)) {
+      throw new Error("Restore drill failed: table record counts differ between source and restored database");
+    }
+    if ((sourceState.audit?.valid ?? null) !== (restoredState.audit?.valid ?? null)) {
+      throw new Error("Restore drill failed: audit-chain validity differs after restore");
+    }
+
+    report = {
+      result: "passed",
+      source: sourcePath,
+      started_at: startedAt.toISOString(),
+      duration_ms: Date.now() - startedAt.getTime(),
+      source_checksum: sourceBackup.checksum,
+      integrity: restoredState.integrity,
+      audit: restoredState.audit,
+      counts: restoredState.counts,
+      table_counts: restoredState.table_counts
+    };
+  } finally {
+    await fs.rm(workspace, { recursive: true, force: true });
+  }
+  return { ...report, temporary_workspace_removed: true };
 }
 
 export async function createDatabaseBackup(database, directory, { now = new Date() } = {}) {

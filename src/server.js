@@ -522,7 +522,7 @@ app.patch("/api/users/:id/status",auth,roles("admin"),(req,res)=>{
 
 function csvCell(value) {
  const text = value === null || value === undefined ? "" : String(value);
- const safe = /^[\\s]*[=+@\\-\\t\\r]/.test(text) ? "'" + text : text;
+ const safe = /^[\s]*[=+@\-\t\r]/.test(text) ? "'" + text : text;
  return '"' + safe.replace(/"/g, '""') + '"';
 }
 
@@ -546,7 +546,7 @@ app.get("/api/alerts/export.csv",auth,(req,res)=>{
   "Content-Type":"text/csv; charset=utf-8",
   "Content-Disposition":'attachment; filename="cap-alerts-export.csv"',
   "Cache-Control":"no-store"
- }).send("\\uFEFF"+lines.join("\\r\\n")+"\\r\\n");
+ }).send("\uFEFF"+lines.join("\r\n")+"\r\n");
 });
 app.get("/api/alerts",auth,(req,res)=>{
  const workflow = req.query.workflow;

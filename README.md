@@ -84,7 +84,7 @@ New audit entries are linked with SHA-256 hashes. Administrators, reviewers, and
 
 ## API
 
-- `GET /api/health`
+- `GET /api/health` (process liveness) and `GET /api/health/ready` (SQLite quick-check and foreign-key integrity readiness; returns HTTP 503 when checks fail)
 - `POST /api/auth/login`
 - `GET /api/me`
 - `POST /api/auth/change-password`

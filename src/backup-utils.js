@@ -63,7 +63,7 @@ async function validateDatabaseFile(filePath) {
 
     const auditColumns = database.prepare("PRAGMA table_info(audit_log)").all().map(row => row.name);
     const audit = auditColumns.includes("entry_hash") ? verifyAuditChain(database) : null;
-    if (audit && !audit.valid) throw new Error("Audit hash chain verification failed");
+    if (audit && !audit.valid) throw new Error("Audit hash chain verification failed: " + (audit.reason || "verification_failed"));
     return { integrity: "ok", audit };
   } finally {
     database.close();

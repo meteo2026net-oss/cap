@@ -2,6 +2,7 @@ import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 
 const CHANNELS = new Set(["cap_feed", "webhook", "email", "sms", "push"]);
 const MAX_BACKOFF_SECONDS = 3600;
+const MAINTENANCE_BATCH_SIZE = 500;
 
 function hashLeaseToken(token) {
   return createHash("sha256").update(token, "utf8").digest("hex");
@@ -78,7 +79,7 @@ export function processDueRetries(database) {
     const due = database.prepare(
       `SELECT id,alert_id FROM delivery_outbox
        WHERE status='failed' AND dead_letter_at IS NULL AND attempts >= max_attempts
-       ORDER BY id ASC`
+       ORDER BY id ASC LIMIT ${MAINTENANCE_BATCH_SIZE}`
     ).all();
     if (due.length) {
       const ids = due.map(row => row.id);
@@ -92,7 +93,7 @@ export function processDueRetries(database) {
       `SELECT id,alert_id FROM delivery_outbox
        WHERE status='failed' AND dead_letter_at IS NULL AND attempts < max_attempts
          AND next_attempt_at IS NOT NULL AND julianday(next_attempt_at) <= julianday('now')
-       ORDER BY id ASC`
+       ORDER BY id ASC LIMIT ${MAINTENANCE_BATCH_SIZE}`
     ).all();
     if (ready.length) {
       const ids = ready.map(row => row.id);
@@ -118,7 +119,7 @@ export function recoverStaleDeliveries(database, staleMinutes = 10) {
       `SELECT id, alert_id, attempts, max_attempts FROM delivery_outbox
        WHERE status='sending' AND last_attempt_at IS NOT NULL
          AND julianday(last_attempt_at) <= julianday('now', ?)
-       ORDER BY id ASC`
+       ORDER BY id ASC LIMIT ${MAINTENANCE_BATCH_SIZE}`
     ).all(`-${staleMinutes} minutes`);
     if (stale.length) {
       const ids = stale.map(row => row.id);

@@ -97,6 +97,20 @@ function verifyExternalCheckpoint(database, checkpointPath, secret, latestId, la
   return { configured: true, valid: true, detects_final_tail_truncation: true, checkpoint_latest_id: payload.latest_id };
 }
 
+export function initializeAuditCheckpoint(database, { checkpointPath, checkpointSecret }) {
+  if (!checkpointPath || typeof checkpointSecret !== "string" || Buffer.byteLength(checkpointSecret, "utf8") < 32) {
+    throw new Error("A checkpoint path and secret of at least 32 bytes are required");
+  }
+  if (fs.existsSync(path.resolve(checkpointPath))) throw new Error("Checkpoint already exists; refusing to overwrite the trust anchor");
+  const baseline = verifyAuditChain(database, { checkpointPath: "", checkpointSecret: "" });
+  if (!baseline.valid) throw new Error("Cannot anchor an invalid audit chain: " + (baseline.reason || "verification_failed"));
+  if (!baseline.latest_hash) throw new Error("There are no hashed audit entries to anchor");
+  const latest = database.prepare("SELECT id FROM audit_log WHERE entry_hash=? ORDER BY id DESC LIMIT 1").get(baseline.latest_hash);
+  if (!latest) throw new Error("Unable to locate the latest verified audit entry");
+  writeExternalCheckpoint(checkpointPath, checkpointSecret, latest.id, baseline.latest_hash);
+  return { latest_id: latest.id, latest_hash: baseline.latest_hash };
+}
+
 export function appendAuditLog(database, { userId = null, alertId = null, action, details = "" }, options = {}) {
   if (typeof action !== "string" || !action.trim() || action.trim().length > 128) {
     throw new TypeError("Audit action must be a non-empty string up to 128 characters");
@@ -105,6 +119,17 @@ export function appendAuditLog(database, { userId = null, alertId = null, action
     throw new TypeError("Audit details must not exceed 4000 characters");
   }
 
+  const checkpointPath = options.checkpointPath ?? process.env.AUDIT_CHECKPOINT_PATH;
+  const checkpointSecret = options.checkpointSecret ?? process.env.AUDIT_CHECKPOINT_SECRET;
+  if (checkpointPath || checkpointSecret) {
+    const hashedCount = database.prepare("SELECT COUNT(*) AS count FROM audit_log WHERE entry_hash IS NOT NULL").get().count;
+    if (hashedCount > 0) {
+      const checkpointStatus = verifyAuditChain(database, { checkpointPath, checkpointSecret });
+      if (!checkpointStatus.valid) {
+        throw new Error("Audit checkpoint verification failed; refusing to append: " + (checkpointStatus.reason || "invalid_checkpoint"));
+      }
+    }
+  }
   const append = database.transaction(() => {
     const previous = database.prepare(
       "SELECT entry_hash FROM audit_log WHERE entry_hash IS NOT NULL ORDER BY id DESC LIMIT 1"

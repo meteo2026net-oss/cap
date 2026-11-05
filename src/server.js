@@ -617,6 +617,31 @@ app.get("/api/review/queue",auth,roles("admin","reviewer","approver"),(req,res)=
   a.created_at ASC,a.id ASC LIMIT ?`).all(...params,Number(limitRaw));
  res.set("Cache-Control","no-store").json({queue:rows,count:rows.length,limit:Number(limitRaw)});
 });
+app.get("/api/alerts/:id/review-history",auth,roles("admin","reviewer","approver"),(req,res)=>{
+ const alert=db.prepare("SELECT id FROM alerts WHERE id=?").get(req.params.id);
+ if(!alert)return res.status(404).json({error:"Alert not found"});
+ const entries=db.prepare(`SELECT l.id,l.action,l.details,l.created_at,u.username
+  FROM audit_log l LEFT JOIN users u ON u.id=l.user_id
+  WHERE l.alert_id=? AND l.action IN ('review_note_added','approved','returned_to_author')
+  ORDER BY l.id DESC LIMIT 100`).all(alert.id);
+ res.set("Cache-Control","no-store").json({entries,count:entries.length});
+});
+app.post("/api/alerts/:id/review-notes",auth,roles("admin","reviewer","approver"),(req,res)=>{
+ const note=typeof req.body?.note==="string"?req.body.note.trim():"";
+ if(note.length<5||note.length>1000)return res.status(400).json({error:"A review note between 5 and 1000 characters is required"});
+ const result=db.transaction(()=>{
+  const alert=db.prepare("SELECT id,workflow,created_by FROM alerts WHERE id=?").get(req.params.id);
+  if(!alert)return {kind:"missing"};
+  if(alert.workflow!=="pending")return {kind:"conflict"};
+  if(alert.created_by===req.user.id)return {kind:"forbidden"};
+  audit(req.user.id,alert.id,"review_note_added",note);
+  return {kind:"saved"};
+ }).immediate();
+ if(result.kind==="missing")return res.status(404).json({error:"Alert not found"});
+ if(result.kind==="conflict")return res.status(409).json({error:"Review notes can only be added while an alert is pending"});
+ if(result.kind==="forbidden")return res.status(403).json({error:"The alert creator cannot add an independent review note"});
+ res.status(201).set("Cache-Control","no-store").json({ok:true,message:"Review note recorded"});
+});
 app.get("/api/alerts/:id",auth,(req,res)=>{
  const row = db.prepare("SELECT * FROM alerts WHERE id=?").get(req.params.id);
  if (!row) return res.status(404).json({error:"Alert not found"});

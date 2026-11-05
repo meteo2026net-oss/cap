@@ -33,6 +33,17 @@ These are deployment-time decisions; they are not needed to continue repository 
 - [x] Commit alert/user creation, MFA enrollment initiation, privileged delivery transitions, and webhook-inbox review atomically with their audit events; integration tests verify rollback when an audit append fails.
 - [ ] Confirm that no shared accounts or default credentials are used.
 
+## External audit checkpoint deployment
+
+The application can maintain an HMAC-SHA256 signed checkpoint after every successful audit append. Configure both variables before enabling it:
+
+- `AUDIT_CHECKPOINT_PATH`: an absolute path on a separately protected, off-host or separately mounted persistent volume. Do not place this file beside the SQLite database on the same writable disk if it is intended to protect against host/database rollback.
+- `AUDIT_CHECKPOINT_SECRET`: a unique random secret of at least 32 bytes, stored in the host secret manager and never committed to Git.
+
+For an existing installation, first take a backup and review the current audit-chain verification result. Then initialize the anchor exactly once with `npm run audit:checkpoint:init`. The command refuses to overwrite an existing checkpoint and refuses to anchor an invalid chain. New audit appends update the signed checkpoint; if the checkpoint is missing, stale, or has an invalid signature, subsequent audit writes are refused until an administrator investigates and performs an approved recovery. A stale checkpoint after an interrupted write must not be silently replaced.
+
+A valid checkpoint detects deletion or rollback of the anchored tail. The checkpoint storage and secret must be protected independently of the database for this control to provide meaningful off-host assurance. If the checkpoint is stored on the same host and under the same administrator control as SQLite, it does not provide independent protection against a privileged attacker. Back up and monitor the checkpoint separately. Do not claim institutional certification based on this control alone.
+
 ## 3. CAP 1.2 conformance and interoperability
 
 - [x] Document the current CAP 1.2 automated conformance matrix, test evidence, coverage boundaries, and remaining receiver-interoperability work in [CAP conformance matrix](CAP_CONFORMANCE_MATRIX.md).

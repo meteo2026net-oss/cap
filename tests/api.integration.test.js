@@ -1065,6 +1065,22 @@ test("API enforces role separation, public-feed filtering and account deactivati
     "approvers should be able to inspect audit history");
   assert.equal((await request("/api/audit/verify", { token: approver })).status, 200,
     "approvers should be able to verify audit history");
+  const auditCsv = await fetch(base + "/api/audit/export.csv", { headers: { Authorization: "Bearer " + reviewer } });
+  assert.equal(auditCsv.status, 200, "authorized audit reviewers should be able to export the audit log");
+  assert.match(auditCsv.headers.get("content-type") || "", /text\\/csv/i);
+  const auditCsvText = await auditCsv.text();
+  assert.ok(auditCsvText.startsWith("\\uFEFF"), "audit CSV should include a UTF-8 BOM");
+  assert.match(auditCsvText, /"entry_hash"/, "audit export should include integrity hash columns");
+  assert.match(auditCsvText, /"login_succeeded"/, "audit export should include recorded actions");
+  const filteredAuditCsv = await fetch(base + "/api/audit/export.csv?action=login_succeeded", {
+    headers: { Authorization: "Bearer " + reviewer }
+  });
+  assert.equal(filteredAuditCsv.status, 200);
+  const filteredAuditText = await filteredAuditCsv.text();
+  assert.match(filteredAuditText, /"login_succeeded"/);
+  assert.doesNotMatch(filteredAuditText, /"user_created"/, "action filter should exclude unrelated audit events");
+  assert.equal((await fetch(base + "/api/audit/export.csv")).status, 401, "audit export must require authentication");
+  assert.equal((await request("/api/audit/export.csv", { token: forecaster })).status, 403, "audit export must preserve restricted audit roles");
   const auditHistory = await request("/api/audit", { token: reviewer });
   assert.equal(auditHistory.status, 200,
     "reviewers should be able to inspect audit history");

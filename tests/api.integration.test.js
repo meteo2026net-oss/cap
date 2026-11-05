@@ -830,8 +830,8 @@ test("API enforces role separation, public-feed filtering and account deactivati
   const failedAuditedReview = await request(`/api/webhooks/inbox/${pendingInboxId}/review`, {
     token: reviewer, method: "PATCH", body: { status: "reviewed", note: "synthetic rollback test" }
   });
-  assert.equal(failedAuditedReview.status, 400,
-    "a failed audit append must fail the inbox review operation");
+  assert.equal(failedAuditedReview.status, 500,
+    "a failed audit append must fail the inbox review operation without exposing database details");
   const verifyAtomicRollback = new Database(path.join(cwd, "storage", "cap.sqlite"));
   try {
     assert.equal(verifyAtomicRollback.prepare("SELECT status,attempts FROM delivery_outbox WHERE id=?")

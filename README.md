@@ -36,7 +36,7 @@ The backup and restore command-line tools load `.env`, including a configured `D
 To restore, stop the service first, then run:
 
 ```bash
-npm run restore -- backups/cap-YYYYMMDDTHHMMSSZ.sqlite
+npm run restore -- backups/<exact-backup-filename>.sqlite
 ```
 
 The restore command refuses to overwrite an existing database unless `--force` is supplied. With `--force`, the previous database is retained beside the restored file as a pre-restore copy. Confirm the restored service and its data before removing that copy. The restore helper intentionally refuses to proceed while WAL/SHM sidecars exist; ensure all application processes are stopped before restoring. Keep a separate off-host copy; a backup stored on the same host is not disaster recovery.

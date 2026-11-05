@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 import Database from "better-sqlite3";
 import { createWebhookSignature } from "../src/webhook-signature.js";
 import { appendAuditLog } from "../src/audit.js";
+import { totpAt } from "../src/mfa.js";
 
 const serverEntry = fileURLToPath(new URL("../src/server.js", import.meta.url));
 
@@ -37,7 +38,8 @@ test("API enforces role separation, public-feed filtering and account deactivati
       ADMIN_PASSWORD: "Integration-Test-Admin-Password-2026",
       CAP_DELIVERY_ENABLED: "true",
       CAP_WEBHOOK_INGRESS_ENABLED: "true",
-      CAP_WEBHOOK_SECRET: "integration-webhook-secret-that-is-at-least-32-bytes"
+      CAP_WEBHOOK_SECRET: "integration-webhook-secret-that-is-at-least-32-bytes",
+      MFA_ENCRYPTION_KEY: "a".repeat(64)
     },
     stdio: "ignore"
   });
@@ -167,6 +169,65 @@ test("API enforces role separation, public-feed filtering and account deactivati
     assert.equal(result.status, 201, "user should be created: " + username);
     return result.data.id;
   };
+
+  const mfaUserId = await createUser("mfauser", "forecaster");
+  const mfaPassword = "Temporary-Password-2026!";
+  const mfaInitialToken = await login("mfauser", mfaPassword);
+  const mfaStatusBefore = await request("/api/auth/mfa/status", { token: mfaInitialToken });
+  assert.equal(mfaStatusBefore.status, 200);
+  assert.equal(mfaStatusBefore.data.enabled, false, "MFA must remain opt-in for existing accounts");
+  const enrollment = await request("/api/auth/mfa/enroll", {
+    token: mfaInitialToken, method: "POST", body: { password: mfaPassword }
+  });
+  assert.equal(enrollment.status, 200, "valid password should start pending MFA enrollment");
+  assert.match(enrollment.data.otpauth_url, /^otpauth:\/\/totp\//);
+  assert.equal((await request("/api/auth/mfa/confirm", {
+    token: mfaInitialToken, method: "POST", body: { password: mfaPassword, code: "000000" }
+  })).status, 401, "an invalid authenticator code must not enable MFA");
+  const enrollmentCode = totpAt(enrollment.data.secret);
+  const confirmed = await request("/api/auth/mfa/confirm", {
+    token: mfaInitialToken, method: "POST", body: { password: mfaPassword, code: enrollmentCode }
+  });
+  assert.equal(confirmed.status, 200, "valid TOTP should enable MFA");
+  assert.equal(confirmed.data.enabled, true);
+  assert.equal(confirmed.data.recovery_codes.length, 10);
+  const mfaStatusAfter = await request("/api/auth/mfa/status", { token: mfaInitialToken });
+  assert.equal(mfaStatusAfter.data.enabled, true);
+  assert.equal(mfaStatusAfter.data.recovery_codes_remaining, 10);
+  const passwordStage = await request("/api/auth/login", {
+    method: "POST", body: { username: "mfauser", password: mfaPassword }
+  });
+  assert.equal(passwordStage.status, 200);
+  assert.equal(passwordStage.data.mfa_required, true, "password stage must not issue a full session when MFA is enabled");
+  assert.equal(passwordStage.data.token, undefined);
+  const invalidMfa = await request("/api/auth/mfa/challenge", {
+    method: "POST", body: { challenge_token: passwordStage.data.challenge_token, code: "000000" }
+  });
+  assert.equal(invalidMfa.status, 401, "invalid second factors must not create a session");
+  const completedMfa = await request("/api/auth/mfa/challenge", {
+    method: "POST", body: { challenge_token: passwordStage.data.challenge_token, code: confirmed.data.recovery_codes[0] }
+  });
+  assert.equal(completedMfa.status, 200, "a valid one-time recovery code should complete login");
+  assert.ok(completedMfa.data.token);
+  const replayedChallenge = await request("/api/auth/mfa/challenge", {
+    method: "POST", body: { challenge_token: passwordStage.data.challenge_token, code: confirmed.data.recovery_codes[0] }
+  });
+  assert.equal(replayedChallenge.status, 401, "a login challenge and recovery code must not be reusable");
+  const disabledMfa = await request("/api/auth/mfa/disable", {
+    token: completedMfa.data.token, method: "POST",
+    body: { password: mfaPassword, code: confirmed.data.recovery_codes[1] }
+  });
+  assert.equal(disabledMfa.status, 200, "MFA can be disabled only after password and second-factor verification");
+  assert.equal(disabledMfa.data.sessions_revoked, true);
+  assert.equal((await request("/api/me", { token: completedMfa.data.token })).status, 401,
+    "disabling MFA must revoke the current and other sessions");
+  const mfaDisabledLogin = await request("/api/auth/login", {
+    method: "POST", body: { username: "mfauser", password: mfaPassword }
+  });
+  assert.equal(mfaDisabledLogin.status, 200);
+  assert.ok(mfaDisabledLogin.data.token, "users who disable MFA should return to normal password login");
+  assert.equal(mfaDisabledLogin.data.mfa_required, undefined);
+
 
   await createUser("forecaster1", "forecaster");
   await createUser("reviewer1", "reviewer");

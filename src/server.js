@@ -601,7 +601,7 @@ app.get("/api/alerts",auth,(req,res)=>{
 });
 app.get("/api/review/queue",auth,roles("admin","reviewer","approver"),(req,res)=>{
  const limitRaw=req.query.limit===undefined?"100":String(req.query.limit);
- if(!/^(0|[1-9]\\d*)$/.test(limitRaw)||Number(limitRaw)<1||Number(limitRaw)>200)
+ if(!/^(0|[1-9]\d*)$/.test(limitRaw)||Number(limitRaw)<1||Number(limitRaw)>200)
   return res.status(400).json({error:"Invalid review queue limit"});
  const severity=req.query.severity;
  if(severity!==undefined&&!["Extreme","Severe","Moderate","Minor","Unknown"].includes(severity))

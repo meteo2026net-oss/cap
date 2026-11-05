@@ -1090,6 +1090,17 @@ test("API enforces role separation, public-feed filtering and account deactivati
     "creating an account should record the target username and assigned role");
   assert.ok(auditHistory.data.entries.some(entry => entry.action === "user_role_changed" && entry.details.includes("rolechange1") && entry.details.includes("viewer") && entry.details.includes("publisher")),
     "role changes should record the target account and old/new roles");
+  const filteredAuditAction = await request("/api/audit?action=user_created", { token: reviewer });
+  assert.equal(filteredAuditAction.status, 200);
+  assert.ok(filteredAuditAction.data.entries.length > 0 && filteredAuditAction.data.entries.every(entry => entry.action === "user_created"),
+    "audit action filter should return only the requested event type");
+  const filteredAuditSearch = await request("/api/audit?q=approver1", { token: reviewer });
+  assert.equal(filteredAuditSearch.status, 200);
+  assert.ok(filteredAuditSearch.data.entries.some(entry => entry.details.includes("approver1")),
+    "audit text search should match event details");
+  const filteredAuditEmpty = await request("/api/audit?action=event_that_does_not_exist", { token: reviewer });
+  assert.equal(filteredAuditEmpty.status, 200);
+  assert.equal(filteredAuditEmpty.data.entries.length, 0, "unknown event filter should return an empty page");
   const firstAuditPage = await request("/api/audit?limit=1", { token: reviewer });
   assert.equal(firstAuditPage.status, 200);
   assert.equal(firstAuditPage.data.entries.length, 1);

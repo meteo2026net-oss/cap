@@ -39,7 +39,7 @@ The restore command refuses to overwrite an existing database unless `--force` i
 
 ## Audit integrity
 
-New audit entries are linked with SHA-256 hashes. Administrators, reviewers, and approvers can check the chain through the authenticated `GET /api/audit/verify` endpoint. Existing audit entries from before this migration are preserved and reported separately as legacy unhashed entries. A local hash chain detects accidental or partial tampering; it is not a substitute for externally anchored signatures or immutable off-host storage.
+New audit entries are linked with SHA-256 hashes. Administrators, reviewers, and approvers can check the chain through the authenticated `GET /api/audit/verify` endpoint, which also detects missing IDs between retained hashed entries. Existing audit entries from before this migration are preserved and reported separately as legacy unhashed entries. A successful local verification cannot detect removal of the final tail or replacement of the whole database; retain signed checkpoints outside this database. A local hash chain is not a substitute for externally anchored signatures or immutable off-host storage.
 
 ## Current starter features
 

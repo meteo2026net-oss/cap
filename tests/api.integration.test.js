@@ -188,8 +188,15 @@ test("API enforces role separation, public-feed filtering and account deactivati
   admin = adminMfaConfirmed.data.token;
   const initialUsers = await request("/api/users", { token: admin });
   assert.equal(initialUsers.status, 200);
+  const adminUserId = initialUsers.data.users.find(user => user.username === "admin").id;
   assert.ok(initialUsers.data.users.find(user => user.username === "admin")?.last_login_at,
     "successful login should persist the administrator last-login timestamp");
+  assert.equal((await request(`/api/users/${adminUserId}/password-reset`, {
+    token: admin, method: "POST", body: "{}"
+  })).status, 409, "an administrator must not reset their own password through the assisted workflow");
+  assert.equal((await request("/api/users/999999/password-reset", {
+    token: admin, method: "POST", body: "{}"
+  })).status, 404, "password reset must report an unknown account without changing any credentials");
   const createUser = async (username, role) => {
     const result = await request("/api/users", {
       token: admin, method: "POST",
@@ -218,6 +225,14 @@ test("API enforces role separation, public-feed filtering and account deactivati
     assert.equal(initialPasswordChange.status, 200, "new users must be able to replace their initial password");
     return result.data.id;
   };
+
+  const inactiveResetUserId = await createUser("inactive-reset-user", "viewer");
+  assert.equal((await request(`/api/users/${inactiveResetUserId}/status`, {
+    token: admin, method: "PATCH", body: JSON.stringify({active:false})
+  })).status, 200);
+  assert.equal((await request(`/api/users/${inactiveResetUserId}/password-reset`, {
+    token: admin, method: "POST", body: "{}"
+  })).status, 409, "inactive accounts must be reactivated through the approved process before password reset");
 
   const resetUserId = await createUser("resetuser", "viewer");
   const resetOldSession = await login("resetuser", "Temporary-Password-2026!");

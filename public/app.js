@@ -484,7 +484,7 @@ async function loadReviewQueue(){
  const panel=document.getElementById("reviewQueuePanel");if(!panel)return;
  const allowed=["admin","reviewer","approver"].includes(currentRole);panel.hidden=!allowed;if(!allowed)return;
  const list=document.getElementById("reviewQueueList"),status=document.getElementById("reviewQueueStatus");
- try{const data=await api("/api/review/queue?limit=200");status.textContent="التحذيرات المنتظرة: "+data.count;list.replaceChildren();
+ try{const params=new URLSearchParams({limit:"200"});const severity=document.getElementById("reviewQueueSeverity")?.value;if(severity)params.set("severity",severity);const data=await api("/api/review/queue?"+params.toString());status.textContent="التحذيرات المنتظرة: "+data.count;list.replaceChildren();
  for(const item of data.queue){const card=document.createElement("article");card.className="alertItem";const title=document.createElement("b");title.textContent=item.headline;card.append(title);
  const meta=document.createElement("p");meta.className="alertMeta";meta.textContent=[item.event,item.severity,"المنشئ: "+(item.creator||"غير معروف"),"مدة الانتظار: "+Math.floor(item.waiting_seconds/3600)+" ساعة"].join(" • ");card.append(meta);
  for(const [action,label] of [["approve","اعتماد"],["return","إعادة للمُنشئ"]]){const button=document.createElement("button");button.type="button";button.textContent=label;button.dataset.alertAction=action;button.dataset.alertId=item.id;button.addEventListener("click",()=>act(item.id,action));card.append(button);}list.append(card);}

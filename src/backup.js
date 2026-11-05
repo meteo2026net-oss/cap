@@ -1,3 +1,4 @@
+import "dotenv/config";
 import path from "node:path";
 import { db } from "./db.js";
 import { createDatabaseBackup, pruneDatabaseBackups } from "./backup-utils.js";

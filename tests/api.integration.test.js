@@ -24,7 +24,7 @@ async function reservePort() {
   return port;
 }
 
-test("API enforces role separation, public-feed filtering and account deactivation", { timeout: 30000 }, async t => {
+test("API enforces role separation, public-feed filtering and account deactivation", { timeout: 60000 }, async t => {
   const cwd = await mkdtemp(path.join(tmpdir(), "meteo-cap-api-"));
   const port = await reservePort();
   const base = "http://127.0.0.1:" + port;
@@ -213,6 +213,24 @@ test("API enforces role separation, public-feed filtering and account deactivati
     method: "POST", body: { challenge_token: passwordStage.data.challenge_token, code: confirmed.data.recovery_codes[0] }
   });
   assert.equal(replayedChallenge.status, 401, "a login challenge and recovery code must not be reusable");
+  const totpLoginStart = await request("/api/auth/login", {
+    method: "POST", body: { username: "mfauser", password: mfaPassword }
+  });
+  assert.equal(totpLoginStart.data.mfa_required, true);
+  const untilNextStep = 30_000 - (Date.now() % 30_000) + 150;
+  await new Promise(resolve => setTimeout(resolve, untilNextStep));
+  const freshTotp = totpAt(enrollment.data.secret);
+  const totpLoginComplete = await request("/api/auth/mfa/challenge", {
+    method: "POST", body: { challenge_token: totpLoginStart.data.challenge_token, code: freshTotp }
+  });
+  assert.equal(totpLoginComplete.status, 200, "a fresh TOTP step should complete login");
+  const secondTotpChallenge = await request("/api/auth/login", {
+    method: "POST", body: { username: "mfauser", password: mfaPassword }
+  });
+  const replayedTotp = await request("/api/auth/mfa/challenge", {
+    method: "POST", body: { challenge_token: secondTotpChallenge.data.challenge_token, code: freshTotp }
+  });
+  assert.equal(replayedTotp.status, 401, "a TOTP time step must not be reusable across separate login challenges");
   const disabledMfa = await request("/api/auth/mfa/disable", {
     token: completedMfa.data.token, method: "POST",
     body: { password: mfaPassword, code: confirmed.data.recovery_codes[1] }

@@ -669,12 +669,14 @@ app.get("/api/alerts/:id/timeline",auth,roles("admin","reviewer","approver"),(re
  if(!Number.isSafeInteger(alertId)||alertId<1)return res.status(400).json({error:"Invalid alert id"});
  const exists=db.prepare("SELECT id FROM alerts WHERE id=?").get(alertId);
  if(!exists)return res.status(404).json({error:"Alert not found"});
+ const versionCount=db.prepare("SELECT COUNT(*) AS count FROM alert_versions WHERE alert_id=?").get(alertId).count;
+ const auditCount=db.prepare("SELECT COUNT(*) AS count FROM audit_log WHERE alert_id=?").get(alertId).count;
  const versions=db.prepare(`SELECT v.id,v.version_no,v.change_type,v.created_at,u.username AS actor
   FROM alert_versions v LEFT JOIN users u ON u.id=v.changed_by
-  WHERE v.alert_id=? ORDER BY v.created_at ASC,v.id ASC LIMIT 200`).all(alertId);
+  WHERE v.alert_id=? ORDER BY v.created_at DESC,v.id DESC LIMIT 200`).all(alertId);
  const auditRows=db.prepare(`SELECT l.id,l.action,l.details,l.created_at,u.username AS actor
   FROM audit_log l LEFT JOIN users u ON u.id=l.user_id
-  WHERE l.alert_id=? ORDER BY l.created_at ASC,l.id ASC LIMIT 500`).all(alertId);
+  WHERE l.alert_id=? ORDER BY l.created_at DESC,l.id DESC LIMIT 500`).all(alertId);
  const versionEvents=versions.map(row=>({id:"version-"+row.id,source:"version",
   event_type:row.change_type,summary:row.change_type==="created"?"إنشاء النسخة الأولى":"تحديث مسودة التحذير",
   version_no:row.version_no,actor:row.actor,created_at:row.created_at}));
@@ -696,7 +698,7 @@ app.get("/api/alerts/:id/timeline",auth,roles("admin","reviewer","approver"),(re
  const timeline=[...versionEvents,...auditEvents].sort((a,b)=>a.created_at.localeCompare(b.created_at)||
   (a.source===b.source?Number(String(a.id).split("-").at(-1))-Number(String(b.id).split("-").at(-1)):a.source==="version"?-1:1));
  res.set("Cache-Control","no-store").json({alert_id:alertId,count:timeline.length,
-  truncated:versions.length===200||auditRows.length===500,timeline});
+  truncated:versionCount>versions.length||auditCount>auditRows.length,timeline});
 });
 app.get("/api/alerts/:id",auth,(req,res)=>{
  const row = db.prepare("SELECT * FROM alerts WHERE id=?").get(req.params.id);

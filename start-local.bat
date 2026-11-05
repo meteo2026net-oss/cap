@@ -6,6 +6,11 @@ if errorlevel 1 (
   echo Node.js 22+ is required. Install Node.js 22 LTS or newer and try again.
   exit /b 1
 )
+where npm >nul 2>nul
+if errorlevel 1 (
+  echo npm is required. Repair or reinstall Node.js 22 LTS or newer.
+  exit /b 1
+)
 for /f "tokens=1 delims=." %%V in ('node -p "process.versions.node"') do set NODE_MAJOR=%%V
 if not defined NODE_MAJOR (
   echo Unable to detect the installed Node.js version.
@@ -20,8 +25,10 @@ if not exist ".env" (
   call npm run setup:local
   if errorlevel 1 exit /b 1
 )
-if not exist "node_modules" (
-  call npm ci
-  if errorlevel 1 exit /b 1
+echo Verifying and installing the exact locked dependencies...
+call npm ci
+if errorlevel 1 (
+  echo Dependency installation failed. Check your internet connection and Node.js build tools.
+  exit /b 1
 )
 call npm start

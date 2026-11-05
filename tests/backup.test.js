@@ -5,7 +5,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { appendAuditLog, installAuditLogGuards } from "../src/audit.js";
-import { createDatabaseBackup, pruneDatabaseBackups, restoreDatabaseBackup } from "../src/backup-utils.js";
+import { createDatabaseBackup, pruneDatabaseBackups, restoreDatabaseBackup, verifyDatabaseBackup } from "../src/backup-utils.js";
 
 function createFixtureDatabase(filePath) {
   const database = new Database(filePath);
@@ -377,6 +377,24 @@ test("new backups include SHA-256 manifests and restore verifies them", async ()
     assert.equal((await fs.stat(manifestPath)).mode & 0o777, 0o600);
     await restoreDatabaseBackup(backup, path.join(directory, "restored.sqlite"));
   } finally { database.close(); await fs.rm(directory, { recursive: true, force: true }); }
+});
+
+test("backup verification reports checksum, SQLite integrity, and audit-chain status", async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "cap-backup-verify-"));
+  const source = path.join(directory, "source.sqlite");
+  const database = createFixtureDatabase(source);
+  try {
+    const backup = await createDatabaseBackup(database, path.join(directory, "backups"));
+    const result = await verifyDatabaseBackup(backup);
+    assert.equal(result.checksum, "verified");
+    assert.equal(result.integrity, "ok");
+    assert.equal(result.audit.valid, true);
+    await fs.appendFile(backup, Buffer.from("tampered"));
+    await assert.rejects(() => verifyDatabaseBackup(backup), /SHA-256 checksum verification failed/);
+  } finally {
+    database.close();
+    await fs.rm(directory, { recursive: true, force: true });
+  }
 });
 
 test("restore rejects modified backup bytes before replacing the target", async () => {

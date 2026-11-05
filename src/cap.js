@@ -13,7 +13,7 @@ const categories = ["Geo","Met","Safety","Security","Rescue","Fire","Health","En
 const responseTypes = ["Shelter","Evacuate","Prepare","Execute","Avoid","Monitor","Assess","AllClear","None"];
 
 function validateReferences(value) {
-  const references = String(value || "").trim().split(/\\s+/).filter(Boolean);
+  const references = String(value || "").trim().split(/\s+/).filter(Boolean);
   if (!references.length) throw new Error("CAP Update, Cancel, Ack and Error messages must reference the related message.");
 
   for (const reference of references) {
@@ -22,10 +22,10 @@ function validateReferences(value) {
       throw new Error("CAP references must be whitespace-separated sender,identifier,sent triplets.");
     }
     const [sender, identifier, sent] = parts;
-    if (/[\\s<>]/.test(sender) || /[\\s<>]/.test(identifier)) {
+    if (/[\s<>]/.test(sender) || /[\s<>]/.test(identifier)) {
       throw new Error("CAP reference sender and identifier cannot contain whitespace or angle brackets.");
     }
-    if (!/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{2}:\\d{2})$/.test(sent) ||
+    if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(sent) ||
         !Number.isFinite(Date.parse(sent))) {
       throw new Error("CAP reference sent timestamp must be a valid ISO 8601 date-time with a timezone.");
     }

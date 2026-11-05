@@ -364,14 +364,17 @@ app.post("/api/alerts/:id/publish",auth,roles("admin","publisher"),(req,res)=>{
   }
   const changed=db.prepare("UPDATE alerts SET workflow='published',status=?,published_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE id=? AND workflow='approved'").run(a.status,a.id);
   if(changed.changes!==1) return {kind:"conflict"};
-  if(a.msg_type==="Cancel") {
+  const sourceCancelled=a.msg_type==="Cancel" && a.status===cancellationSource?.status && a.status!=="Test";
+  if(sourceCancelled) {
    const cancelled=db.prepare("UPDATE alerts SET workflow='cancelled',updated_at=CURRENT_TIMESTAMP WHERE id=? AND workflow='published'").run(cancellationSource.id);
    if(cancelled.changes!==1) return {kind:"source_not_active"};
   }
   const published=db.prepare("SELECT * FROM alerts WHERE id=?").get(a.id);
   const delivery=enqueueDelivery(db,{alertId:a.id,channel:"cap_feed",payload:buildCapXml(rowToCap(published))});
   audit(req.user.id,a.id,"published",a.msg_type==="Cancel"
-   ? "Published CAP cancellation; referenced warning moved to cancelled; internal CAP feed entry "+delivery.id+" queued"
+   ? (sourceCancelled
+      ? "Published CAP cancellation; matching-status source warning moved to cancelled; internal CAP feed entry "+delivery.id+" queued"
+      : "Published non-operational CAP cancellation message; source warning state unchanged; internal CAP feed entry "+delivery.id+" queued")
    : "Published to internal CAP feed; distribution outbox entry "+delivery.id+" queued");
   return {kind:"updated",delivery};
  });

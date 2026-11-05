@@ -682,6 +682,21 @@ test("API enforces role separation, public-feed filtering and account deactivati
     assert.ok(queuedAlert, "submitted alert should appear in the review queue");
     assert.equal(queuedAlert.creator, "forecaster1");
     assert.ok(Number.isInteger(queuedAlert.waiting_seconds));
+    const savedReviewNote = await request(`/api/alerts/${id}/review-notes`, {
+      token: reviewer, method: "POST", body: { note: "Verify the affected area boundaries before approval." }
+    });
+    assert.equal(savedReviewNote.status, 201, "reviewers should be able to record an auditable note");
+    assert.equal((await request(`/api/alerts/${id}/review-notes`, {
+      token: reviewer, method: "POST", body: { note: "no" }
+    })).status, 400, "review notes shorter than five characters must be rejected");
+    assert.equal((await request(`/api/alerts/${id}/review-notes`, {
+      token: forecaster, method: "POST", body: { note: "Please review this warning" }
+    })).status, 403, "forecasters cannot record reviewer notes");
+    const reviewHistory = await request(`/api/alerts/${id}/review-history`, { token: reviewer });
+    assert.equal(reviewHistory.status, 200);
+    assert.ok(reviewHistory.data.entries.some(entry =>
+      entry.action === "review_note_added" && entry.details === "Verify the affected area boundaries before approval."
+    ), "review history should include the saved note");
     assert.equal((await request("/api/review/queue", { token: forecaster })).status, 403,
       "forecasters must not access the reviewer queue");
     assert.equal((await request("/api/review/queue?limit=201", { token: reviewer })).status, 400,

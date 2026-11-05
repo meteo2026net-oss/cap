@@ -689,7 +689,7 @@ app.get("/api/alerts/:id/timeline",auth,roles("admin","reviewer","approver"),(re
    actor:row.actor,created_at:row.created_at};
  });
  const timeline=[...versionEvents,...auditEvents].sort((a,b)=>a.created_at.localeCompare(b.created_at)||
-  (a.source===b.source?String(a.id).localeCompare(String(b.id)):a.source==="version"?-1:1));
+  (a.source===b.source?Number(String(a.id).split("-").at(-1))-Number(String(b.id).split("-").at(-1)):a.source==="version"?-1:1));
  res.set("Cache-Control","no-store").json({alert_id:alertId,count:timeline.length,
   truncated:versions.length===200||auditRows.length===500,timeline});
 });

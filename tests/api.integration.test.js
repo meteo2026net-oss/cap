@@ -302,16 +302,16 @@ test("API enforces role separation, public-feed filtering and account deactivati
   const usersAfterLogin = await request("/api/users", { token: admin });
   assert.ok(usersAfterLogin.data.users.find(user => user.id === roleChangeId)?.last_login_at,
     "last-login timestamp should be refreshed after a new successful login");
-  assert.equal((await request("/api/delivery/outbox", { token: roleChangeNewSession })).status, 200,
-    "the new role should take effect after signing in again");
+  assert.equal((await request("/api/delivery/outbox", { token: publisherMfaToken })).status, 200,
+    "the new role should take effect after required MFA enrollment");
   const unchangedRole = await request(`/api/users/${roleChangeId}/role`, {
     token: admin, method: "PATCH", body: { role: "publisher" }
   });
   assert.equal(unchangedRole.status, 200);
   assert.equal(unchangedRole.data.changed, false, "repeating the current role should be a no-op");
   assert.equal(unchangedRole.data.sessions_revoked, false, "a no-op role update must preserve sessions");
-  assert.equal((await request("/api/delivery/outbox", { token: roleChangeNewSession })).status, 200,
-    "a no-op role update must leave the current session valid");
+  assert.equal((await request("/api/delivery/outbox", { token: publisherMfaToken })).status, 200,
+    "a no-op role update must leave the current MFA-protected session valid");
   assert.equal((await request("/api/users/999999/role", {
     token: admin, method: "PATCH", body: { role: "viewer" }
   })).status, 404, "unknown account ids must return not found");

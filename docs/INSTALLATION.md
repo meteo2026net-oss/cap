@@ -28,7 +28,7 @@ npm test
 npm start
 ```
 
-The setup command creates a local `.env` file only if one does not already exist, generates a strong JWT secret and initial administrator password, and creates the `storage` and `backups` folders. Save the generated administrator password when it is displayed. The setup command never overwrites an existing `.env`.
+The setup command creates a local `.env` file only if one does not already exist, generates a strong JWT secret, initial administrator password, and persistent 32-byte MFA encryption key, and creates the `storage` and `backups` folders. Keep the MFA key backed up separately and do not rotate it while accounts have enrolled MFA secrets. Save the generated administrator password when it is displayed. The setup command never overwrites an existing `.env`.
 
 Open http://localhost:8095. Stop the server with Ctrl+C.
 
@@ -108,6 +108,7 @@ Copy-Item .env.example .env
 Edit `.env` and replace:
 - `JWT_SECRET` with a unique random secret of at least 32 characters.
 - `ADMIN_PASSWORD` with a unique password of at least 14 characters.
+- `MFA_ENCRYPTION_KEY` with 32 random bytes encoded as 64 hexadecimal characters if you intend to enable MFA. Generate it with `node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"`. Keep it stable and protected separately from the database.
 
 Then run:
 
@@ -161,6 +162,7 @@ Both modes currently use the same application and database format. The delivery 
 - **Port 8095 is busy:** change `PORT` in `.env` for direct mode. For Docker mode change `CAP_PORT` (the internal container port remains 8095).
 - **better-sqlite3 installation fails:** use a supported Node.js LTS release (Node 22+) and install the platform's native build tools if npm requests them.
 - **Map tiles do not load:** the dashboard map requires internet access to the OpenStreetMap tile service.
+- **MFA enrollment reports encryption is not configured:** set a unique 32-byte `MFA_ENCRYPTION_KEY` in `.env`, restart the server, and retain a secure backup of the key. Do not replace an existing key if users have already enrolled.
 - **Forgot the generated initial password:** if no users/data have been created yet, stop the service, back up the database, and follow a reviewed administrator recovery procedure; do not delete the database as a routine password reset.
 
 ## Operational warning

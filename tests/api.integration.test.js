@@ -343,6 +343,36 @@ test("API enforces role separation, public-feed filtering and account deactivati
     return created.data.identifier;
   };
 
+  const separationDraft = await request("/api/alerts", {
+    token: forecaster, method: "POST",
+    body: {
+      event: "Independent publisher test",
+      headline: "Synthetic separation-of-duties warning",
+      description: "Synthetic test data only",
+      area_desc: "Synthetic test area",
+      circle: "33.5,36.2 8",
+      category: "Met",
+      urgency: "Expected",
+      severity: "Moderate",
+      certainty: "Likely",
+      status: "Test",
+      scope: "Public"
+    }
+  });
+  assert.equal(separationDraft.status, 201);
+  assert.equal((await request(`/api/alerts/${separationDraft.data.id}/submit`, {
+    token: forecaster, method: "POST", body: {}
+  })).status, 200);
+  assert.equal((await request(`/api/alerts/${separationDraft.data.id}/approve`, {
+    token: admin, method: "POST", body: {}
+  })).status, 200, "an administrator may independently approve a submitted warning");
+  assert.equal((await request(`/api/alerts/${separationDraft.data.id}/publish`, {
+    token: admin, method: "POST", body: {}
+  })).status, 403, "the same administrator who approved a warning must not publish it");
+  assert.equal((await request(`/api/alerts/${separationDraft.data.id}/publish`, {
+    token: publisher, method: "POST", body: {}
+  })).status, 200, "a different publisher should be able to publish after the approving administrator is blocked");
+
   const actualIdentifier = await createAndPublish("Actual");
   const original = await request("/api/alerts", { token: forecaster });
   assert.equal(original.status, 200, "authenticated alert history should be available");

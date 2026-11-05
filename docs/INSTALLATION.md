@@ -109,6 +109,7 @@ Edit `.env` and replace:
 - `JWT_SECRET` with a unique random secret of at least 32 characters.
 - `ADMIN_PASSWORD` with a unique password of at least 14 characters.
 - `MFA_ENCRYPTION_KEY` with 32 random bytes encoded as 64 hexadecimal characters if you intend to enable MFA. Generate it with `node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"`. Keep it stable and protected separately from the database.
+- `MFA_REQUIRED_ROLES` with a comma-separated list of roles that must complete MFA before using role-protected operations, for example `admin,approver,publisher`. Leave it empty to keep MFA optional for all roles. Required-role accounts can still sign in and open MFA setup, but their protected operations remain blocked until enrollment is confirmed.
 
 Then run:
 
@@ -162,6 +163,7 @@ Both modes currently use the same application and database format. The delivery 
 - **Port 8095 is busy:** change `PORT` in `.env` for direct mode. For Docker mode change `CAP_PORT` (the internal container port remains 8095).
 - **better-sqlite3 installation fails:** use a supported Node.js LTS release (Node 22+) and install the platform's native build tools if npm requests them.
 - **Map tiles do not load:** the dashboard map requires internet access to the OpenStreetMap tile service.
+- **A privileged operation returns `403` with `MFA_REQUIRED`:** the account's role is listed in `MFA_REQUIRED_ROLES`; sign in, open the account-security/MFA panel, complete enrollment, and save the one-time recovery codes. Do not remove the role from the policy just to bypass enrollment.
 - **MFA enrollment reports encryption is not configured:** set a unique 32-byte `MFA_ENCRYPTION_KEY` in `.env`, restart the server, and retain a secure backup of the key. Do not replace an existing key if users have already enrolled.
 - **Forgot the generated initial password:** if no users/data have been created yet, stop the service, back up the database, and follow a reviewed administrator recovery procedure; do not delete the database as a routine password reset.
 

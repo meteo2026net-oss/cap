@@ -339,7 +339,7 @@ app.post("/api/auth/mfa/disable",auth,mfaDisableLimiter,(req,res)=>{
   res.status(503).json({error:"Unable to safely disable MFA"});
  }
 });
-const passwordChangeLimiter=rateLimit({windowMs:15*60*1000,limit:5,skipSuccessfulRequests:true,standardHeaders:true,legacyHeaders:false});
+const passwordChangeLimiter=rateLimit({windowMs:15*60*1000,limit:5,skipSuccessfulRequests:true,keyGenerator:req=>String(req.user.id),standardHeaders:true,legacyHeaders:false});
 app.post("/api/auth/change-password",auth,passwordChangeLimiter,(req,res)=>{
  const {currentPassword,newPassword}=req.body || {};
  if(typeof newPassword!=="string" || newPassword.length<14 || newPassword.length>200) return res.status(400).json({error:"New password must contain 14 to 200 characters"});

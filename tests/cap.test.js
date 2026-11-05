@@ -225,7 +225,9 @@ test("rejects incomplete CAP reference triplets and invalid referenced timestamp
     "alerts@example.test,urn:uuid:missing-timezone,2026-11-03T12:00:00",
     "alerts@example.test,urn:uuid:invalid-date,2026-99-99T12:00:00Z",
     "alerts@example.test,urn:uuid:normalized-invalid-date,2026-02-30T12:00:00Z",
-    "alerts@example.test,urn:uuid:bad-time,2026-11-03T25:61:00Z"
+    "alerts@example.test,urn:uuid:bad-time,2026-11-03T25:61:00Z",
+    "alerts@example.test,urn:uuid:bad-offset-hour,2026-11-03T12:00:00+24:00",
+    "alerts@example.test,urn:uuid:bad-offset-minute,2026-11-03T12:00:00+02:60"
   ];
   for (const references_text of invalidReferences) {
     assert.throws(() => validateAlert({ ...valid, msg_type: "Update", references_text }),

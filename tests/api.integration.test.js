@@ -169,6 +169,7 @@ test("API enforces role separation, public-feed filtering and account deactivati
   await createUser("forecaster1", "forecaster");
   await createUser("reviewer1", "reviewer");
   await createUser("publisher1", "publisher");
+  await createUser("approver1", "approver");
   const disabledId = await createUser("disabled1", "viewer");
   const disabledOldSession = await login("disabled1", "Temporary-Password-2026!");
   const roleChangeId = await createUser("rolechange1", "viewer");
@@ -187,6 +188,20 @@ test("API enforces role separation, public-feed filtering and account deactivati
     "last-login timestamp should be refreshed after a new successful login");
   assert.equal((await request("/api/delivery/outbox", { token: roleChangeNewSession })).status, 200,
     "the new role should take effect after signing in again");
+  const unchangedRole = await request(`/api/users/${roleChangeId}/role`, {
+    token: admin, method: "PATCH", body: { role: "publisher" }
+  });
+  assert.equal(unchangedRole.status, 200);
+  assert.equal(unchangedRole.data.changed, false, "repeating the current role should be a no-op");
+  assert.equal(unchangedRole.data.sessions_revoked, false, "a no-op role update must preserve sessions");
+  assert.equal((await request("/api/delivery/outbox", { token: roleChangeNewSession })).status, 200,
+    "a no-op role update must leave the current session valid");
+  assert.equal((await request("/api/users/999999/role", {
+    token: admin, method: "PATCH", body: { role: "viewer" }
+  })).status, 404, "unknown account ids must return not found");
+  assert.equal((await request(`/api/users/${roleChangeId}/role`, {
+    token: admin, method: "PATCH", body: {}
+  })).status, 400, "missing role values must be rejected");
   assert.equal((await request("/api/users/not-a-number/role", {
     token: admin, method: "PATCH", body: { role: "viewer" }
   })).status, 400, "non-numeric user ids must be rejected");
@@ -201,7 +216,9 @@ test("API enforces role separation, public-feed filtering and account deactivati
   const forecaster = await login("forecaster1", "Temporary-Password-2026!");
   const reviewer = await login("reviewer1", "Temporary-Password-2026!");
   const publisher = await login("publisher1", "Temporary-Password-2026!");
-  for (const [roleName, token] of [["forecaster", forecaster], ["reviewer", reviewer], ["publisher", publisher]]) {
+  const approver = await login("approver1", "Temporary-Password-2026!");
+  const viewer = disabledOldSession;
+  for (const [roleName, token] of [["forecaster", forecaster], ["reviewer", reviewer], ["publisher", publisher], ["approver", approver], ["viewer", viewer]]) {
     assert.equal((await request("/api/users", { token })).status, 403,
       roleName + " must not list user accounts");
     assert.equal((await request("/api/users", {

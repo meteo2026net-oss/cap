@@ -7,7 +7,7 @@ $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
 $logFile = Join-Path $logDirectory "backup-$stamp.log"
 "Backup started at $(Get-Date -Format o)" | Set-Content -Path $logFile -Encoding UTF8
 try {
-  & npm.cmd run backup *>> $logFile
+  & npm.cmd run backup 2>&1 | Out-File -FilePath $logFile -Append -Encoding utf8
   $exitCode = $LASTEXITCODE
   "Backup process exit code: $exitCode" | Add-Content -Path $logFile -Encoding UTF8
   if ($exitCode -ne 0) { throw "Backup command failed with exit code $exitCode. See $logFile" }

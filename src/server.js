@@ -13,7 +13,7 @@ import { buildCapXml, makeIdentifier, validateAlert } from "./cap.js";
 import { alertsToGeoJSON } from "./geojson.js";
 import { appendAuditLog, verifyAuditChain } from "./audit.js";
 import { enqueueDelivery, claimDelivery, recordDeliveryReceipt, retryDelivery, recoverStaleDeliveries, processDueRetries } from "./delivery.js";
-import { createHash, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { consumeRecoveryCode, decryptTotpSecret, encryptTotpSecret, generateRecoveryCodes, generateTotpSecret, hashRecoveryCode, verifyTotp } from "./mfa.js";
 import { verifyAndConsumeWebhook } from "./webhook-replay.js";
 
@@ -144,9 +144,14 @@ function auth(req,res,next) {
  const token = (req.headers.authorization || "").replace(/^Bearer\s+/i,"");
  try {
    req.user = jwt.verify(token, secret);
-   const user = db.prepare("SELECT id,username,role,active,token_version,mfa_enabled FROM users WHERE id=?").get(req.user.id);
+   const user = db.prepare("SELECT id,username,role,active,token_version,mfa_enabled,must_change_password FROM users WHERE id=?").get(req.user.id);
    if (!user || !user.active) return res.status(401).json({error:"Account unavailable"});
    if (req.user.token_version !== user.token_version) return res.status(401).json({error:"Session expired; please sign in again"});
+   if(user.must_change_password===1) {
+    const allowedPaths=new Set(["GET /api/me","POST /api/auth/change-password","GET /api/auth/mfa/status","POST /api/auth/mfa/enroll","POST /api/auth/mfa/confirm"]);
+    if(!allowedPaths.has(req.method+" "+req.path))
+     return res.status(403).json({error:"A temporary password must be changed before using this operation",code:"PASSWORD_CHANGE_REQUIRED"});
+   }
    req.user = user; next();
  } catch { return res.status(401).json({error:"Authentication required"}); }
 }
@@ -185,12 +190,12 @@ app.post("/api/auth/login",loginLimiter,(req,res)=>{
    secret,{expiresIn:"5m"}
   );
   audit(user.id,null,"mfa_login_challenge_created","Password accepted; second factor required");
-  return res.json({mfa_required:true,challenge_token:challengeToken,expires_in:300});
+  return res.json({mfa_required:true,password_change_required:user.must_change_password===1,challenge_token:challengeToken,expires_in:300});
  }
  db.prepare("UPDATE users SET last_login_at=CURRENT_TIMESTAMP WHERE id=?").run(user.id);
  audit(user.id,null,"login_succeeded","Successful password authentication; MFA not enabled");
  const token = jwt.sign({id:user.id,token_version:user.token_version}, secret, {expiresIn:"8h"});
- res.json({token,user:{id:user.id,username:user.username,role:user.role}});
+ res.json({token,password_change_required:user.must_change_password===1,user:{id:user.id,username:user.username,role:user.role}});
 });
 const mfaLoginLimiter = rateLimit({windowMs:15*60*1000,limit:10,standardHeaders:true,legacyHeaders:false});
 const mfaEnrollLimiter = rateLimit({windowMs:15*60*1000,limit:10,standardHeaders:true,legacyHeaders:false});
@@ -205,7 +210,7 @@ app.post("/api/auth/mfa/challenge",mfaLoginLimiter,(req,res)=>{
   claims=jwt.verify(challengeToken,secret);
   if(claims.purpose!=="mfa-login" || typeof claims.jti!=="string") throw new Error("Invalid challenge purpose");
  } catch { return res.status(401).json({error:"Invalid or expired MFA challenge"}); }
- const user=db.prepare("SELECT id,username,role,active,token_version,mfa_secret_enc,mfa_last_used_step,mfa_recovery_hashes FROM users WHERE id=?").get(claims.id);
+ const user=db.prepare("SELECT id,username,role,active,token_version,mfa_secret_enc,mfa_last_used_step,mfa_recovery_hashes,must_change_password FROM users WHERE id=?").get(claims.id);
  if(!user || !user.active || user.token_version!==claims.token_version || !user.mfa_secret_enc)
   return res.status(401).json({error:"Invalid or expired MFA challenge"});
  try {
@@ -236,7 +241,7 @@ app.post("/api/auth/mfa/challenge",mfaLoginLimiter,(req,res)=>{
   }).immediate();
   if(!complete) return res.status(401).json({error:"Invalid, expired, or already-used MFA challenge or code"});
   const token=jwt.sign({id:user.id,token_version:user.token_version},secret,{expiresIn:"8h"});
-  return res.json({token,user:{id:user.id,username:user.username,role:user.role}});
+  return res.json({token,password_change_required:user.must_change_password===1,user:{id:user.id,username:user.username,role:user.role}});
  } catch(error) {
   console.error("MFA challenge failed:",error);
   return res.status(500).json({error:"Unable to complete MFA challenge"});
@@ -341,11 +346,11 @@ app.post("/api/auth/change-password",auth,rateLimit({windowMs:15*60*1000,limit:5
  const row=db.prepare("SELECT password_hash FROM users WHERE id=?").get(req.user.id);
  if(!row || !bcrypt.compareSync(currentPassword,row.password_hash)) return res.status(401).json({error:"Current password is incorrect"});
  const hash=bcrypt.hashSync(newPassword,12);
- db.prepare("UPDATE users SET password_hash=?,token_version=token_version+1 WHERE id=?").run(hash,req.user.id);
+ db.prepare("UPDATE users SET password_hash=?,must_change_password=0,token_version=token_version+1 WHERE id=?").run(hash,req.user.id);
  const tokenVersion=db.prepare("SELECT token_version FROM users WHERE id=?").get(req.user.id).token_version;
  const token=jwt.sign({id:req.user.id,token_version:tokenVersion},secret,{expiresIn:"8h"});
  audit(req.user.id,null,"password_changed","Password changed; all previous sessions revoked");
- res.json({ok:true,token,session_revoked_for_other_devices:true});
+ res.json({ok:true,token,password_change_required:false,user:{id:req.user.id,username:req.user.username,role:req.user.role},session_revoked_for_other_devices:true});
 });
 app.get("/api/me",auth,(req,res)=>res.json({user:req.user}));
 
@@ -371,6 +376,30 @@ app.post("/api/users",auth,roles("admin"),(req,res)=>{
  }
 });
 
+app.post("/api/users/:id/password-reset",auth,roles("admin"),(req,res)=>{
+ const id=Number(req.params.id);
+ if(!Number.isSafeInteger(id) || id<1) return res.status(400).json({error:"Invalid user id"});
+ if(id===req.user.id) return res.status(409).json({error:"Administrators cannot reset their own password through this workflow"});
+ const temporaryPassword=randomBytes(24).toString("base64url");
+ const passwordHash=bcrypt.hashSync(temporaryPassword,12);
+ try {
+  const reset=db.transaction(()=>{
+   const target=db.prepare("SELECT id,username,active FROM users WHERE id=?").get(id);
+   if(!target) return {kind:"missing"};
+   if(!target.active) return {kind:"inactive"};
+   db.prepare("UPDATE users SET password_hash=?,must_change_password=1,token_version=token_version+1,mfa_pending_secret_enc=NULL,mfa_pending_expires_at=NULL WHERE id=?").run(passwordHash,id);
+   db.prepare("UPDATE mfa_login_challenges SET consumed_at=CURRENT_TIMESTAMP WHERE user_id=? AND consumed_at IS NULL").run(id);
+   audit(req.user.id,null,"user_password_reset",`Issued one-time temporary password for ${target.username}; forced change on next authenticated session`);
+   return {kind:"reset",username:target.username};
+  }).immediate();
+  if(reset.kind==="missing") return res.status(404).json({error:"User not found"});
+  if(reset.kind==="inactive") return res.status(409).json({error:"Reactivate the account before resetting its password"});
+  return res.json({ok:true,id,username:reset.username,temporary_password:temporaryPassword,must_change_password:true,sessions_revoked:true});
+ } catch(error) {
+  console.error("Administrator password reset failed:",error);
+  return res.status(500).json({error:"Unable to reset account password"});
+ }
+});
 app.patch("/api/users/:id/role",auth,roles("admin"),(req,res)=>{
  const id=Number(req.params.id);
  if(!Number.isSafeInteger(id) || id<1) return res.status(400).json({error:"Invalid user id"});

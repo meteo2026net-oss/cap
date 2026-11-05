@@ -503,15 +503,35 @@ async function loadReviewQueue(){
    });
    const historyButton=document.createElement("button");historyButton.type="button";historyButton.className="secondary";historyButton.textContent="سجل قرارات المراجعة";historyButton.addEventListener("click",async()=>{history.hidden=false;await loadReviewHistory(item.id,history)});
    const versionsButton=document.createElement("button");versionsButton.type="button";versionsButton.className="secondary";versionsButton.textContent="مقارنة نسخ التحذير";versionsButton.addEventListener("click",async()=>{versionDiff.hidden=false;await loadAlertVersionDiff(item.id,versionDiff)});
-   actions.append(save,historyButton,versionsButton);
+   const timelineButton=document.createElement("button");timelineButton.type="button";timelineButton.className="secondary";timelineButton.textContent="السجل الزمني الكامل";timelineButton.addEventListener("click",async()=>{timeline.hidden=false;await loadAlertTimeline(item.id,timeline)});
+   actions.append(save,historyButton,versionsButton,timelineButton);
    for(const [action,label] of [["approve","اعتماد"],["return","إعادة للمُنشئ"]]){const button=document.createElement("button");button.type="button";button.textContent=label;button.dataset.alertAction=action;button.dataset.alertId=item.id;button.addEventListener("click",()=>act(item.id,action));actions.append(button);}
    card.append(actions);
    const history=document.createElement("div");history.className="reviewHistory small";history.hidden=true;history.textContent="اضغط لعرض سجل المراجعة.";card.append(history);
    const versionDiff=document.createElement("div");versionDiff.className="reviewVersionDiff small";versionDiff.hidden=true;card.append(versionDiff);
+   const timeline=document.createElement("div");timeline.className="reviewHistory small";timeline.hidden=true;card.append(timeline);
    list.append(card);
   }
   if(!data.count)list.textContent="لا توجد تحذيرات بانتظار المراجعة";
  }catch(error){status.textContent=error.message;list.textContent=error.message;}
+}
+async function loadAlertTimeline(id,container){
+ container.textContent="جارٍ تحميل السجل الزمني الكامل...";
+ try{
+  const data=await api("/api/alerts/"+encodeURIComponent(id)+"/timeline");
+  container.replaceChildren();
+  const heading=document.createElement("p");heading.textContent="التسلسل الزمني • "+data.count+" حدث";container.append(heading);
+  for(const item of data.timeline){
+   const row=document.createElement("section");row.className="versionChange";
+   const title=document.createElement("b");title.textContent=item.summary+(item.version_no?" • النسخة #"+item.version_no:"");row.append(title);
+   const meta=document.createElement("p");meta.className="muted small";
+   meta.textContent=[item.created_at,item.actor||"مستخدم غير معروف",item.source==="version"?"نسخة محفوظة":"سجل تدقيق"].join(" • ");row.append(meta);
+   if(item.details){const details=document.createElement("p");details.textContent=item.details;row.append(details);}
+   container.append(row);
+  }
+  if(data.truncated){const note=document.createElement("p");note.textContent="تم بلوغ حد العرض؛ قد لا تظهر جميع الأحداث.";container.append(note);}
+  if(!data.count)container.append(document.createTextNode("لا توجد أحداث مسجلة لهذا التحذير."));
+ }catch(error){container.textContent=error.message;}
 }
 async function loadAlertVersionDiff(id,container){
  container.textContent="جارٍ تحميل نسخ التحذير ومقارنة الحقول...";

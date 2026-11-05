@@ -69,6 +69,25 @@ async function validateDatabaseFile(filePath) {
   }
 }
 
+export async function verifyDatabaseBackup(source) {
+  const sourcePath = path.resolve(source);
+  const sourceStat = await fs.lstat(sourcePath);
+  if (!sourceStat.isFile() || sourceStat.isSymbolicLink()) {
+    throw new Error("Backup source must be a regular file, not a symbolic link.");
+  }
+  const isNewFormat = /-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.sqlite$/i.test(sourcePath);
+  let checksum = "legacy";
+  try {
+    await fs.lstat(`${sourcePath}.sha256`);
+    await verifyChecksum(sourcePath);
+    checksum = "verified";
+  } catch (error) {
+    if (error.code !== "ENOENT" || isNewFormat) throw error;
+  }
+  const validation = await validateDatabaseFile(sourcePath);
+  return { file: sourcePath, checksum, ...validation };
+}
+
 export async function createDatabaseBackup(database, directory, { now = new Date() } = {}) {
   await fs.mkdir(directory, { recursive: true });
   const destination = path.join(directory, `cap-${timestampSlug(now)}-${randomUUID()}.sqlite`);

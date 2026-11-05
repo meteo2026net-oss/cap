@@ -239,7 +239,7 @@ test("API enforces role separation, public-feed filtering and account deactivati
     "changing the temporary password must revoke its prior session");
 
   const mfaResetUserId = await createUser("mfaresetuser", "viewer");
-  const mfaResetPassword = "Temporary-MFA-Reset-2026!";
+  const mfaResetPassword = "Temporary-Password-2026!";
   const mfaResetInitialSession = await login("mfaresetuser", mfaResetPassword);
   const mfaResetEnrollment = await request("/api/auth/mfa/enroll", {
     token: mfaResetInitialSession, method: "POST", body: { password: mfaResetPassword }

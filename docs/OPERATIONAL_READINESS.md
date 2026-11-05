@@ -28,6 +28,7 @@ These are deployment-time decisions; they are not needed to continue repository 
 - [ ] Enforce institutional identity lifecycle: onboarding, approval, suspension, offboarding, and periodic access review.
 - [ ] Review role separation and last-administrator safeguards against the institution's approved policy.
 - [ ] Define session lifetime, revocation, secret rotation, and emergency account recovery.
+- [x] Verify retained audit-chain hash links and detect missing IDs between retained hashed entries; automated tests cover modified records, broken links, unhashed tails, and interior sequence gaps.
 - [ ] Define audit retention, external immutable/off-host anchoring, access review, and evidence export.
 - [x] Commit alert/user creation, MFA enrollment initiation, privileged delivery transitions, and webhook-inbox review atomically with their audit events; integration tests verify rollback when an audit append fails.
 - [ ] Confirm that no shared accounts or default credentials are used.

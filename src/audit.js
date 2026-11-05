@@ -158,8 +158,6 @@ export function appendAuditLog(database, { userId = null, alertId = null, action
   });
 
   const result = append.immediate();
-  const checkpointPath = options.checkpointPath ?? process.env.AUDIT_CHECKPOINT_PATH;
-  const checkpointSecret = options.checkpointSecret ?? process.env.AUDIT_CHECKPOINT_SECRET;
   if (checkpointPath || checkpointSecret) writeExternalCheckpoint(checkpointPath, checkpointSecret, result.id, result.entry_hash);
   return result;
 }

@@ -79,6 +79,7 @@ The polling interval defaults to 30 seconds and can be adjusted with `CAP_DELIVE
 - Optional database override: set `DB_PATH` to an absolute path or a path relative to the process working directory. The application, backup helper, and restore helper use the same setting.
 - Backups: `backups/`
 - Create a verified backup: `npm run backup`
+- Verify a saved backup without restoring it: `npm run backup:verify -- backups/<exact-backup-filename>.sqlite`
 - Restore while every application process is stopped: `npm run restore -- backups/<backup-file>.sqlite`
 
 Each new backup includes a private `.sha256` sidecar manifest. Restore verifies the manifest before validating or replacing the target database; missing or mismatched manifests block restoration. Older timestamp-only backups remain supported for backward compatibility. Pruning an expired backup also removes its matching manifest. The restore command refuses to overwrite an existing database unless `--force` is supplied. With `--force`, the previous database is retained beside the restored file as a pre-restore copy. Confirm the restored service and its data before removing that copy. Restore refuses to proceed while SQLite WAL/SHM sidecars exist; stop all application and worker processes and follow the troubleshooting guidance before retrying.

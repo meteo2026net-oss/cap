@@ -511,6 +511,33 @@ test("API enforces role separation, public-feed filtering and account deactivati
     assert.equal(derived.data.workflow, "draft");
     assert.ok(derived.data.references.includes(actualIdentifier),
       msg_type + " must reference the original CAP identifier");
+    assert.ok(Number.isSafeInteger(derived.data.id), msg_type + " draft should expose its database id");
+
+    assert.equal((await request(`/api/alerts/${derived.data.id}/submit`, {
+      token: forecaster, method: "POST", body: {}
+    })).status, 200, msg_type + " should enter the review workflow");
+    assert.equal((await request(`/api/alerts/${derived.data.id}/approve`, {
+      token: reviewer, method: "POST", body: {}
+    })).status, 200, msg_type + " should be independently approved");
+    const publishedDerived = await request(`/api/alerts/${derived.data.id}/publish`, {
+      token: publisher, method: "POST", body: {}
+    });
+    assert.equal(publishedDerived.status, 200, msg_type + " should be internally published after approval");
+    assert.equal(publishedDerived.data.workflow, "published");
+
+    const derivedXmlResponse = await fetch(base + `/api/alerts/${derived.data.id}/cap.xml`, {
+      headers: { Authorization: "Bearer " + forecaster }
+    });
+    assert.equal(derivedXmlResponse.status, 200, msg_type + " CAP XML export should succeed");
+    const derivedXml = await derivedXmlResponse.text();
+    assert.match(derivedXml, new RegExp(`<msgType>${msg_type}</msgType>`),
+      msg_type + " export must preserve its CAP message type");
+    assert.ok(derivedXml.includes(actualIdentifier),
+      msg_type + " CAP XML must preserve the original message reference");
+    const derivedOutbox = await request("/api/delivery/outbox", { token: publisher });
+    assert.equal(derivedOutbox.data.deliveries.filter(item =>
+      item.alert_id === derived.data.id && item.channel === "cap_feed"
+    ).length, 1, msg_type + " publication should queue exactly one internal CAP feed entry");
   }
 
   assert.equal((await request("/api/audit", { token: forecaster })).status, 403,

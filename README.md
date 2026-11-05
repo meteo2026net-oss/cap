@@ -53,6 +53,7 @@ New audit entries are linked with SHA-256 hashes. Administrators, reviewers, and
 - Dashboard advanced JSON editor for multilingual information blocks and supplemental resources.
 - Dedicated CAP review queue at `GET /api/review/queue` for administrators, reviewers, and approvers, prioritizing higher severity and older submissions while exposing creator identity and waiting time; the dashboard provides a severity filter and direct approve/return actions. Reviewers can add 5–1000 character notes through `POST /api/alerts/:id/review-notes` while an alert is pending and inspect note/decision history through `GET /api/alerts/:id/review-history`; these events are written to the append-only, hash-chained audit log and shown in each queue card.
 - Immutable CAP content snapshots: every new alert (including derived Update/Cancel drafts) and every successful draft edit stores a numbered JSON snapshot in SQLite; reviewers can use `GET /api/alerts/:id/versions` to compare the latest two versions and identify changed CAP fields. The review queue displays before/after values for changed fields.
+- Unified alert timeline at `GET /api/alerts/:id/timeline` combines immutable content-version events with workflow/audit events in chronological order; the review queue displays the timeline with actor, timestamp, event type, and review-note/return details. Access is restricted to administrators, reviewers, and approvers.
 - Full in-page draft correction workflow: returned drafts can be reopened in the CAP form and edited across core fields, severity/urgency/certainty, scope/status, effective/onset/expiry times, CAP response types, language, geographic geometry, and multilingual `info_blocks`/resources JSON; changes remain restricted to drafts and are audited.
 - Dashboard actions and API support for linked Update and Cancel drafts; derived messages remain in Test status pending independent review.
 - Administrator account activation/deactivation, role changes, and audited password resets. Newly provisioned accounts and reset accounts must replace their temporary password before application access; resets issue a generated password once, revoke all sessions, and role changes revoke existing sessions.
@@ -91,6 +92,7 @@ New audit entries are linked with SHA-256 hashes. Administrators, reviewers, and
 - `POST /api/alerts/:id/submit`
 - `POST /api/alerts/:id/approve`
 - `POST /api/alerts/:id/publish`
+- `GET /api/alerts/:id/timeline` (admin/reviewer/approver; chronological version and audit events)
 - `GET /api/alerts/:id/cap.xml`
 - `GET /api/public/alerts`
 - `GET /api/public/alerts.geojson`

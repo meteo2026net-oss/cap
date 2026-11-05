@@ -64,6 +64,7 @@ These are deployment-time decisions; they are not needed to continue repository 
 - [x] Provide a backup inventory command that reports file size/date and verifies each generated backup's checksum, SQLite integrity, and audit chain; flag corrupt backups and ignore unrelated files/symlinks.
 - [x] Provide a local backup-health CLI check for missing, corrupt, or stale newest backups, with configurable freshness threshold, JSON output, and non-zero exit status for scheduler/CI consumption; external alert routing remains pending.
 - [ ] Configure monitoring/alerting for missed or failed backup jobs and deploy equivalent scheduled automation on non-Windows hosts.
+- [x] Expose a database-backed readiness endpoint that checks SQLite quick integrity and foreign-key consistency and returns HTTP 503 when either check fails; API integration tests verify the healthy response.
 - [ ] Perform a restore drill in an isolated environment using a production-like backup.
 - [x] Provide a read-only post-restore verification CLI that checks SQLite integrity, foreign keys, audit-chain validity, and core users/alerts/audit record counts.
 - [x] Provide an isolated restore-drill command that executes the restore path against a temporary target, compares deterministic SHA-256 content fingerprints and row counts across every application table, and removes its temporary workspace; production-like drill evidence remains pending.

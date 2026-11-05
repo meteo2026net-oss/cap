@@ -1,6 +1,9 @@
 let token = "";
 let currentRole = "";
 let currentUserId = null;
+let alertOffset = 0;
+let alertHasMore = false;
+const alertPageSize = 25;
 const $ = s => document.querySelector(s);
 const loginPanel=$("#loginPanel"), appPanel=$("#appPanel");
 function headers(){return {"Content-Type":"application/json","Authorization":`Bearer ${token}`}}
@@ -205,7 +208,11 @@ $("#exportGeoBtn")?.addEventListener("click",async()=>{
  }catch(error){alert(error.message)}
 });
 
-$("#refreshBtn").onclick=loadAlerts;
+$("#refreshBtn").onclick=()=>{alertOffset=0;loadAlerts()};
+$("#alertSearch").addEventListener("input",()=>{alertOffset=0;loadAlerts()});
+["#alertWorkflowFilter","#alertSeverityFilter","#alertStatusFilter"].forEach(selector=>$(selector).addEventListener("change",()=>{alertOffset=0;loadAlerts()}));
+$("#alertPrevPage").addEventListener("click",()=>{alertOffset=Math.max(0,alertOffset-alertPageSize);loadAlerts()});
+$("#alertNextPage").addEventListener("click",()=>{if(alertHasMore){alertOffset+=alertPageSize;loadAlerts()}});
 $("#userForm").addEventListener("submit",async e=>{e.preventDefault();const data=Object.fromEntries(new FormData(e.target));try{await api("/api/users",{method:"POST",body:JSON.stringify(data)});e.target.reset();await loadUsers();alert("تم إنشاء الحساب بنجاح.")}catch(err){alert(err.message)}});
 async function toggleUser(id,active){const action=active?'تفعيل':'إيقاف';if(!confirm('هل تريد '+action+' هذا الحساب؟'))return;try{await api('/api/users/'+id+'/status',{method:'PATCH',body:JSON.stringify({active:!!active})});await loadUsers()}catch(e){alert(e.message)}}
 async function loadAuditIntegrity(){
@@ -345,11 +352,26 @@ async function act(id,action){try{await api(`/api/alerts/${id}/${action}`,{metho
 async function derive(id,msgType){const label=msgType==='Cancel'?'إلغاء التحذير':'إنشاء تحديث';if(!confirm(label+'؟ ستنشأ مسودة CAP بحالة Test وتحتاج إلى مراجعة واعتماد مستقلين.'))return;try{const result=await api('/api/alerts/'+id+'/derive',{method:'POST',body:JSON.stringify({msg_type:msgType})});alert('تم إنشاء المسودة: '+result.identifier+' (Test)');await loadAlerts()}catch(e){alert(e.message)}}
 async function loadAlerts(){
  try{
-  const {alerts}=await api("/api/alerts");
-  $("#total").textContent=alerts.length;
-  $("#drafts").textContent=alerts.filter(a=>a.workflow==="draft").length;
-  $("#pending").textContent=alerts.filter(a=>a.workflow==="pending").length;
-  $("#published").textContent=alerts.filter(a=>a.workflow==="published").length;
+  const params=new URLSearchParams({limit:String(alertPageSize),offset:String(alertOffset)});
+  const q=$("#alertSearch").value.trim();
+  const workflow=$("#alertWorkflowFilter").value;
+  const severity=$("#alertSeverityFilter").value;
+  const status=$("#alertStatusFilter").value;
+  if(q)params.set("q",q);
+  if(workflow)params.set("workflow",workflow);
+  if(severity)params.set("severity",severity);
+  if(status)params.set("status",status);
+  const result=await api("/api/alerts?"+params.toString());
+  const alerts=result.alerts;
+  const pagination=result.pagination;
+  alertHasMore=!!pagination.has_more;
+  $("#alertPageStatus").textContent="النتائج "+(pagination.total?alertOffset+1:0)+"–"+(alertOffset+alerts.length)+" من "+pagination.total;
+  $("#alertPrevPage").disabled=alertOffset===0;
+  $("#alertNextPage").disabled=!alertHasMore;
+  $("#total").textContent=pagination.total;
+  $("#drafts").textContent="—";
+  $("#pending").textContent="—";
+  $("#published").textContent="—";
   $("#alertsList").innerHTML=alerts.map(a=>{
    const actions=[];
    const id=esc(a.id);

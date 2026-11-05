@@ -360,7 +360,7 @@ const userSchema = z.object({
  role: z.enum(["admin","forecaster","reviewer","approver","publisher","viewer"])
 });
 app.get("/api/users",auth,roles("admin"),(_req,res)=>{
- const users=db.prepare("SELECT id,username,role,active,mfa_enabled,created_at,last_login_at FROM users ORDER BY id").all();
+ const users=db.prepare("SELECT id,username,role,active,mfa_enabled,must_change_password,created_at,last_login_at FROM users ORDER BY id").all();
  res.json({users:users.map(user=>({...user,mfa_required:mfaRequiredRoles.has(user.role)}))});
 });
 app.post("/api/users",auth,roles("admin"),(req,res)=>{

@@ -39,7 +39,7 @@ These are deployment-time decisions; they are not needed to continue repository 
 - [ ] Test Alert, Update, Cancel, Ack, and Error message handling against applicable OASIS CAP 1.2 rules and receiving-system profiles.
 - [ ] Test required/optional fields, enumerations, timestamps/time zones, multilingual blocks, references, resources, geocodes, polygons, circles, altitude/ceiling, and boundary cases.
 - [ ] Validate generated XML with the official OASIS CAP 1.2 XSD and independent receiving-system validators.
-- [x] Validate the CAP reference syntax as complete `sender,identifier,sent` triplets and reject malformed, invalid-calendar, and invalid-timezone referenced-message timestamps; automated tests cover multiple references and malformed timestamps.
+- [x] Validate CAP references as complete `sender,identifier,sent` triplets, including invalid-calendar rejection and XML Schema timezone bounds (maximum ±14:00); automated tests cover multiple references and boundary offsets.
 - [ ] Test Update/Cancel reference chains and ensure historical messages are preserved.
 - [ ] Verify that Test/Exercise messages cannot enter public operational feeds.
 - [ ] Conduct end-to-end interoperability tests with every intended receiving organization/provider using non-operational test endpoints.

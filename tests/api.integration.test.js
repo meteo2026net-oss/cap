@@ -238,6 +238,52 @@ test("API enforces role separation, public-feed filtering and account deactivati
   assert.equal((await request("/api/me", { token: temporaryLogin.data.token })).status, 401,
     "changing the temporary password must revoke its prior session");
 
+  const mfaResetUserId = await createUser("mfaresetuser", "viewer");
+  const mfaResetPassword = "Temporary-MFA-Reset-2026!";
+  const mfaResetInitialSession = await login("mfaresetuser", mfaResetPassword);
+  const mfaResetEnrollment = await request("/api/auth/mfa/enroll", {
+    token: mfaResetInitialSession, method: "POST", body: { password: mfaResetPassword }
+  });
+  assert.equal(mfaResetEnrollment.status, 200);
+  const mfaResetConfirmation = await request("/api/auth/mfa/confirm", {
+    token: mfaResetInitialSession, method: "POST",
+    body: { password: mfaResetPassword, code: totpAt(mfaResetEnrollment.data.secret) }
+  });
+  assert.equal(mfaResetConfirmation.status, 200);
+  const mfaResetResult = await request(`/api/users/${mfaResetUserId}/password-reset`, {
+    token: admin, method: "POST", body: {}
+  });
+  assert.equal(mfaResetResult.status, 200);
+  assert.equal((await request("/api/me", { token: mfaResetConfirmation.data.token })).status, 401,
+    "password reset must revoke sessions even when MFA is enabled");
+  const mfaTemporaryLogin = await request("/api/auth/login", {
+    method: "POST", body: { username: "mfaresetuser", password: mfaResetResult.data.temporary_password }
+  });
+  assert.equal(mfaTemporaryLogin.data.mfa_required, true,
+    "administrator password reset must preserve the account's existing MFA requirement");
+  assert.equal(mfaTemporaryLogin.data.password_change_required, true);
+  const mfaTemporaryChallenge = await request("/api/auth/mfa/challenge", {
+    method: "POST",
+    body: {
+      challenge_token: mfaTemporaryLogin.data.challenge_token,
+      code: mfaResetConfirmation.data.recovery_codes[0]
+    }
+  });
+  assert.equal(mfaTemporaryChallenge.status, 200);
+  assert.equal(mfaTemporaryChallenge.data.password_change_required, true);
+  assert.equal((await request("/api/alerts", { token: mfaTemporaryChallenge.data.token })).data.code,
+    "PASSWORD_CHANGE_REQUIRED");
+  const mfaPasswordReplacement = await request("/api/auth/change-password", {
+    token: mfaTemporaryChallenge.data.token, method: "POST",
+    body: {
+      currentPassword: mfaResetResult.data.temporary_password,
+      newPassword: "MFA-Reset-New-Password-2026!"
+    }
+  });
+  assert.equal(mfaPasswordReplacement.status, 200);
+  assert.equal((await request("/api/auth/mfa/status", { token: mfaPasswordReplacement.data.token })).data.enabled,
+    true, "MFA must remain enabled after forced password replacement");
+
   const mfaUserId = await createUser("mfauser", "forecaster");
   const mfaPassword = "Temporary-Password-2026!";
   const mfaInitialToken = await login("mfauser", mfaPassword);

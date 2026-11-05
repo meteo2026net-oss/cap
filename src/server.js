@@ -662,17 +662,17 @@ app.get("/api/webhooks/inbox",auth,roles("admin","reviewer"),(req,res)=>{
 app.patch("/api/webhooks/inbox/:id/review",auth,roles("admin","reviewer"),(req,res)=>{
  const id=Number(req.params.id);
  if(!Number.isSafeInteger(id) || id<1) return res.status(400).json({error:"Invalid inbox id"});
- try {
-  const data=z.object({status:z.enum(["reviewed","rejected"]),note:z.string().max(2000).optional().default("")}).parse(req.body);
-  const result=db.transaction(()=>{
-   const updated=db.prepare("UPDATE webhook_inbox SET status=?,reviewed_at=CURRENT_TIMESTAMP,reviewed_by=?,review_note=? WHERE id=? AND status='pending'").run(data.status,req.user.id,data.note,id);
-   if(!updated.changes) return null;
-   audit(req.user.id,null,"webhook_inbox_"+data.status,`Reviewed inbound webhook message ${id}`);
-   return updated;
-  }).immediate();
-  if(!result) return res.status(409).json({error:"Webhook message is missing or no longer pending"});
-  res.json({ok:true,id,status:data.status,reviewed_by:req.user.id,reviewer_username:req.user.username});
- } catch(error) { res.status(400).json({error:error.message}); }
+ const parsed=z.object({status:z.enum(["reviewed","rejected"]),note:z.string().max(2000).optional().default("")}).safeParse(req.body);
+ if(!parsed.success) return res.status(400).json({error:"Invalid webhook review decision"});
+ const data=parsed.data;
+ const result=db.transaction(()=>{
+  const updated=db.prepare("UPDATE webhook_inbox SET status=?,reviewed_at=CURRENT_TIMESTAMP,reviewed_by=?,review_note=? WHERE id=? AND status='pending'").run(data.status,req.user.id,data.note,id);
+  if(!updated.changes) return null;
+  audit(req.user.id,null,"webhook_inbox_"+data.status,`Reviewed inbound webhook message ${id}`);
+  return updated;
+ }).immediate();
+ if(!result) return res.status(409).json({error:"Webhook message is missing or no longer pending"});
+ res.json({ok:true,id,status:data.status,reviewed_by:req.user.id,reviewer_username:req.user.username});
 });
 
 app.get("/api/delivery/outbox",auth,roles("admin","publisher"),(req,res)=>{
@@ -800,5 +800,10 @@ app.get("/api/audit",auth,roles("admin","reviewer","approver"),(req,res)=>{
  res.json({entries,has_more:hasMore,next_before_id:hasMore?entries.at(-1).id:null});
 });
 
+app.use((error,_req,res,next)=>{
+ if(res.headersSent) return next(error);
+ console.error("Unhandled request error:",error);
+ return res.status(500).json({error:"Internal server error"});
+});
 app.get("*",(req,res)=>res.sendFile(path.join(appRoot, "public", "index.html")));
 app.listen(port,process.env.HOST || "127.0.0.1",()=>console.log(`Meteo CAP Warning System running at http://${process.env.HOST || "127.0.0.1"}:${port}`));

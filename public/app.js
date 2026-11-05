@@ -383,16 +383,53 @@ async function changeUserRole(id,currentRole,selectedRole){
  try{await api("/api/users/"+id+"/role",{method:"PATCH",body:JSON.stringify({role})});await loadUsers()}
  catch(error){alert(error.message);await loadUsers()}
 }
-$("#alertForm").addEventListener("submit",async e=>{e.preventDefault();const obj=Object.fromEntries(new FormData(e.target));const jsonBlocks=obj.info_blocks_json?.trim();delete obj.info_blocks_json;if(jsonBlocks){try{obj.info_blocks=JSON.parse(jsonBlocks)}catch{alert("صيغة JSON غير صحيحة في كتل اللغات المتعددة.");return}}const hasInfoArea=obj.info_blocks?.some(b=>b.area||b.areas?.length);if(!obj.polygon?.trim()&&!obj.circle?.trim()&&!hasInfoArea){alert("أدخل مضلعاً أو دائرة أو منطقة جغرافية ضمن كتل المعلومات.");return}for(const k of ["onset","expires"])if(obj[k])obj[k]=new Date(obj[k]).toISOString();else obj[k]="";try{const d=await api("/api/alerts",{method:"POST",body:JSON.stringify(obj)});e.target.reset();alert(`تم حفظ المسودة: ${d.identifier}`);await loadAlerts()}catch(err){alert(err.message)}});
+let editingAlertId=null;
+function setAlertEditorMode(editing){
+ const title=document.querySelector("#alertForm")?.closest(".card")?.querySelector(".sectionHead h2");
+ if(title)title.textContent=editing?"تعديل مسودة التحذير":"إنشاء تحذير جديد";
+ const submit=$("#alertForm")?.querySelector('button[type="submit"],button:not([type])');
+ if(submit)submit.textContent=editing?"حفظ تعديلات المسودة":"حفظ كمسودة";
+ const cancel=$("#cancelAlertEditBtn");if(cancel)cancel.hidden=!editing;
+}
+function dateForLocalInput(value){
+ if(!value)return "";
+ const date=new Date(value);if(Number.isNaN(date.getTime()))return "";
+ const local=new Date(date.getTime()-date.getTimezoneOffset()*60000);
+ return local.toISOString().slice(0,16);
+}
+function resetAlertEditor(){
+ editingAlertId=null;$("#alertForm").reset();setAlertEditorMode(false);
+}
+$("#alertForm").addEventListener("submit",async e=>{
+ e.preventDefault();
+ const obj=Object.fromEntries(new FormData(e.target));
+ const jsonBlocks=obj.info_blocks_json?.trim();delete obj.info_blocks_json;
+ if(jsonBlocks){try{obj.info_blocks=JSON.parse(jsonBlocks);if(!Array.isArray(obj.info_blocks)||obj.info_blocks.length<1)throw new Error("يجب إدخال مصفوفة غير فارغة")}catch(error){alert("صيغة JSON غير صحيحة في كتل اللغات المتعددة: "+error.message);return}}
+ const hasInfoArea=obj.info_blocks?.some(b=>b.area||b.areas?.length);
+ if(!obj.polygon?.trim()&&!obj.circle?.trim()&&!hasInfoArea){alert("أدخل مضلعاً أو دائرة أو منطقة جغرافية ضمن كتل المعلومات.");return}
+ for(const k of ["onset","expires"])if(obj[k])obj[k]=new Date(obj[k]).toISOString();else obj[k]="";
+ try{
+  if(editingAlertId){
+   const id=editingAlertId;
+   const result=await api("/api/alerts/"+id,{method:"PATCH",body:JSON.stringify(obj)});
+   resetAlertEditor();alert("تم حفظ المسودة. الحقول المحدّثة: "+(result.updated_fields||[]).join("، "));await loadAlerts();
+  }else{
+   const result=await api("/api/alerts",{method:"POST",body:JSON.stringify(obj)});
+   e.target.reset();alert("تم حفظ المسودة: "+result.identifier);await loadAlerts();
+  }
+ }catch(error){alert(error.message)}
+});
+$("#cancelAlertEditBtn")?.addEventListener("click",resetAlertEditor);
 async function editDraft(id){
  try{
   const current=await api("/api/alerts/"+id);
-  const headline=prompt("عنوان التحذير:",current.alert.headline||"");if(headline===null)return;
-  const description=prompt("وصف التحذير:",current.alert.description||"");if(description===null)return;
-  const instruction=prompt("تعليمات الاستجابة (اتركها فارغة إن لم توجد):",current.alert.instruction||"");if(instruction===null)return;
-  await api("/api/alerts/"+id,{method:"PATCH",body:JSON.stringify({headline,description,instruction})});
-  await loadAlerts();alert("تم حفظ تعديلات المسودة.");
- }catch(error){alert(error.message);}
+  const alertData=current.alert;
+  if(alertData.workflow!=="draft")throw new Error("لا يمكن تعديل تحذير لم يعد مسودة.");
+  const form=$("#alertForm");
+  const values={event:alertData.event,headline:alertData.headline,category:alertData.category,urgency:alertData.urgency,severity:alertData.severity,certainty:alertData.certainty,status:alertData.status,scope:alertData.scope,onset:dateForLocalInput(alertData.onset),expires:dateForLocalInput(alertData.expires),area_desc:alertData.area_desc,description:alertData.description,instruction:alertData.instruction,polygon:alertData.polygon,circle:alertData.circle,info_blocks_json:alertData.info_blocks?.length?JSON.stringify(alertData.info_blocks,null,2):""};
+  for(const [name,value] of Object.entries(values)){const field=form.elements.namedItem(name);if(field)field.value=value??""}
+  editingAlertId=id;setAlertEditorMode(true);form.scrollIntoView({behavior:"smooth",block:"start"});
+ }catch(error){alert(error.message)}
 }
 async function act(id,action){try{let body={};if(action==="return"){const reason=prompt("اكتب ملاحظات المراجعة وسبب إعادة التحذير إلى منشئه (5 أحرف على الأقل):");if(reason===null)return;if(reason.trim().length<5){alert("يرجى إدخال سبب واضح لا يقل عن 5 أحرف.");return;}body={reason};}await api(`/api/alerts/${id}/${action}`,{method:"POST",body:JSON.stringify(body)});await loadAlerts()}catch(e){alert(e.message)}}
 async function derive(id,msgType){const label=msgType==='Cancel'?'إلغاء التحذير':'إنشاء تحديث';if(!confirm(label+'؟ ستنشأ مسودة CAP بحالة Test وتحتاج إلى مراجعة واعتماد مستقلين.'))return;try{const result=await api('/api/alerts/'+id+'/derive',{method:'POST',body:JSON.stringify({msg_type:msgType})});alert('تم إنشاء المسودة: '+result.identifier+' (Test)');await loadAlerts()}catch(e){alert(e.message)}}

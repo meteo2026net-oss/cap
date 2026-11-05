@@ -8,14 +8,16 @@ Requirements: Node.js 22+ and npm. Docker is **not required** for this mode. Fro
 
 ```bash
 npm run setup:local
-npm install
+npm ci
 npm test
 npm start
 ```
 
-The setup command creates `.env` (without overwriting an existing file), generates a unique JWT secret and initial administrator password, and creates local data folders. Save the displayed initial password. Open http://localhost:8095. Stop with Ctrl+C. The interactive map uses Leaflet and OpenStreetMap tiles and therefore needs internet access.
+The committed `package-lock.json` pins the full dependency tree; `npm ci` installs those exact locked versions and fails if the manifest and lockfile disagree. The setup command creates `.env` (without overwriting an existing file), generates a unique JWT secret and initial administrator password, and creates local data folders. Save the displayed initial password. Open http://localhost:8095. Stop with Ctrl+C. The interactive map uses Leaflet and OpenStreetMap tiles and therefore needs internet access.
 
 For full Windows PowerShell, Linux/macOS, Docker Compose, backup, restore, and troubleshooting instructions, see [Installation guide](docs/INSTALLATION.md).
+
+Dependency maintenance: use `npm ci` for normal installs and CI. When intentionally adding, removing, or upgrading a dependency, use `npm install <package>@<version>`, review both `package.json` and `package-lock.json`, then run `npm ci`, `npm test`, and `npm audit` before committing both files.
 
 ## Database backup and restore
 

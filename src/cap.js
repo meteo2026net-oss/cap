@@ -46,8 +46,24 @@ function validateReferences(value) {
 
 function capDateTime(value, field) {
   if (!value) return undefined;
+  // JavaScript Date normalizes impossible calendar dates (for example, 30 February).
+  // Reject malformed ISO calendar/time components before parsing to prevent silent changes.
+  const iso = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?(Z|([+-])(\d{2}):(\d{2}))?$/.exec(String(value));
+  if (iso) {
+    const [year, month, day, hour, minute, second] = iso.slice(1, 7).map(Number);
+    const calendar = new Date(0);
+    calendar.setUTCFullYear(year, month - 1, day);
+    calendar.setUTCHours(hour, minute, second, 0);
+    const offsetHour = iso[9] === undefined ? 0 : Number(iso[9]);
+    const offsetMinute = iso[10] === undefined ? 0 : Number(iso[10]);
+    if (calendar.getUTCFullYear() !== year || calendar.getUTCMonth() !== month - 1 ||
+        calendar.getUTCDate() !== day || hour > 23 || minute > 59 || second > 59 ||
+        offsetHour > 14 || offsetMinute > 59 || (offsetHour === 14 && offsetMinute !== 0)) {
+      throw new Error(\`Invalid date for \${field}.\`);
+    }
+  }
   const date = new Date(value);
-  if (!Number.isFinite(date.getTime())) throw new Error(`Invalid date for ${field}.`);
+  if (!Number.isFinite(date.getTime())) throw new Error(\`Invalid date for \${field}.\`);
   // CAP 1.2 requires a numeric timezone offset; the UTC designator Z is not permitted.
   return date.toISOString().replace(/\.\d{3}Z$/, "-00:00");
 }

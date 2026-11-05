@@ -152,7 +152,7 @@ function rowToCap(r) {
 }
 
 app.get("/api/health", (_req,res)=>res.json({ok:true,service:"Meteo CAP Warning System",cap:"1.2"}));
-const loginLimiter = rateLimit({windowMs:15*60*1000,limit:10,standardHeaders:true,legacyHeaders:false});
+const loginLimiter = rateLimit({windowMs:15*60*1000,limit:10,skipSuccessfulRequests:true,standardHeaders:true,legacyHeaders:false});
 app.post("/api/auth/login",loginLimiter,(req,res)=>{
  const {username,password} = req.body || {};
  if (typeof username !== "string" || username.length < 1 || username.length > 64 ||

@@ -384,6 +384,16 @@ async function changeUserRole(id,currentRole,selectedRole){
  catch(error){alert(error.message);await loadUsers()}
 }
 $("#alertForm").addEventListener("submit",async e=>{e.preventDefault();const obj=Object.fromEntries(new FormData(e.target));const jsonBlocks=obj.info_blocks_json?.trim();delete obj.info_blocks_json;if(jsonBlocks){try{obj.info_blocks=JSON.parse(jsonBlocks)}catch{alert("صيغة JSON غير صحيحة في كتل اللغات المتعددة.");return}}const hasInfoArea=obj.info_blocks?.some(b=>b.area||b.areas?.length);if(!obj.polygon?.trim()&&!obj.circle?.trim()&&!hasInfoArea){alert("أدخل مضلعاً أو دائرة أو منطقة جغرافية ضمن كتل المعلومات.");return}for(const k of ["onset","expires"])if(obj[k])obj[k]=new Date(obj[k]).toISOString();else obj[k]="";try{const d=await api("/api/alerts",{method:"POST",body:JSON.stringify(obj)});e.target.reset();alert(`تم حفظ المسودة: ${d.identifier}`);await loadAlerts()}catch(err){alert(err.message)}});
+async function editDraft(id){
+ try{
+  const current=await api("/api/alerts/"+id);
+  const headline=prompt("عنوان التحذير:",current.alert.headline||"");if(headline===null)return;
+  const description=prompt("وصف التحذير:",current.alert.description||"");if(description===null)return;
+  const instruction=prompt("تعليمات الاستجابة (اتركها فارغة إن لم توجد):",current.alert.instruction||"");if(instruction===null)return;
+  await api("/api/alerts/"+id,{method:"PATCH",body:JSON.stringify({headline,description,instruction})});
+  await loadAlerts();alert("تم حفظ تعديلات المسودة.");
+ }catch(error){alert(error.message);}
+}
 async function act(id,action){try{let body={};if(action==="return"){const reason=prompt("اكتب ملاحظات المراجعة وسبب إعادة التحذير إلى منشئه (5 أحرف على الأقل):");if(reason===null)return;if(reason.trim().length<5){alert("يرجى إدخال سبب واضح لا يقل عن 5 أحرف.");return;}body={reason};}await api(`/api/alerts/${id}/${action}`,{method:"POST",body:JSON.stringify(body)});await loadAlerts()}catch(e){alert(e.message)}}
 async function derive(id,msgType){const label=msgType==='Cancel'?'إلغاء التحذير':'إنشاء تحديث';if(!confirm(label+'؟ ستنشأ مسودة CAP بحالة Test وتحتاج إلى مراجعة واعتماد مستقلين.'))return;try{const result=await api('/api/alerts/'+id+'/derive',{method:'POST',body:JSON.stringify({msg_type:msgType})});alert('تم إنشاء المسودة: '+result.identifier+' (Test)');await loadAlerts()}catch(e){alert(e.message)}}
 async function loadAlerts(){
@@ -414,6 +424,7 @@ async function loadAlerts(){
   $("#alertsList").innerHTML=alerts.map(a=>{
    const actions=[];
    const id=esc(a.id);
+   if(a.workflow==="draft")actions.push("<button class='secondary' data-alert-edit='1' data-alert-id='"+id+"'>تعديل المسودة</button>");
    if(a.workflow==="draft")actions.push("<button data-alert-action='submit' data-alert-id='"+id+"'>إرسال للمراجعة</button>");
    if(a.workflow==="pending"){actions.push("<button data-alert-action='approve' data-alert-id='"+id+"'>اعتماد</button>");actions.push("<button class='secondary' data-alert-action='return' data-alert-id='"+id+"'>إعادة للمُنشئ</button>");}
    if(a.workflow==="approved")actions.push("<button data-alert-action='publish' data-alert-id='"+id+"'>نشر داخلي</button>");
@@ -452,6 +463,7 @@ $("#alertsList").addEventListener("click",event=>{
  if(!button)return;
  const id=Number(button.dataset.alertId);
  if(!Number.isSafeInteger(id)||id<1)return;
+ if(button.dataset.alertEdit)editDraft(id);
  if(button.dataset.alertAction)act(id,button.dataset.alertAction);
  else if(button.dataset.alertDerive)derive(id,button.dataset.alertDerive);
  else if(button.dataset.alertDownload)downloadXml(id);

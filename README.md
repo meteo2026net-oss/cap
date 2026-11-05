@@ -81,6 +81,7 @@ New audit entries are linked with SHA-256 hashes. Administrators, reviewers, and
 - Optional signed inbound webhook endpoint (disabled by default) verifies timestamped HMAC-SHA256 signatures, rejects replays, limits JSON bodies to 64 KB, and stores accepted messages in a persistent manual-review inbox without creating or publishing alerts.
 - Role-protected webhook inbox listing and one-way pending-to-reviewed/rejected review decisions for administrators and reviewers, with audit entries.
 - Automated Node.js tests for identifiers, CAP validation, geometry, dates, XML export, audit immutability, API role separation, linked Update/Cancel references, public feed filtering, GeoJSON output, legacy lease migration, webhook replay protection and inbound webhook review.
+- A [CAP 1.2 conformance matrix](docs/CAP_CONFORMANCE_MATRIX.md) maps automated message-type, XML Schema, reference, geometry, multilingual, resource, and public-feed tests to the remaining independent interoperability requirements.
 
 ## API
 

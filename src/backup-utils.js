@@ -1,9 +1,37 @@
 import Database from "better-sqlite3";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
+import { createReadStream } from "node:fs";
 import { verifyAuditChain } from "./audit.js";
 
+async function sha256File(filePath) {
+  const hash = createHash("sha256");
+  for await (const chunk of createReadStream(filePath)) hash.update(chunk);
+  return hash.digest("hex");
+}
+
+async function writeChecksum(filePath) {
+  const checksumPath = `${filePath}.sha256`;
+  const temporary = `${checksumPath}.${randomUUID()}.tmp`;
+  const digest = await sha256File(filePath);
+  try {
+    await fs.writeFile(temporary, `${digest}  ${path.basename(filePath)}\n`, { mode: 0o600, flag: "wx" });
+    await fs.rename(temporary, checksumPath);
+  } catch (error) {
+    await fs.rm(temporary, { force: true }).catch(() => {});
+    throw error;
+  }
+}
+
+async function verifyChecksum(filePath) {
+  const content = await fs.readFile(`${filePath}.sha256`, "utf8");
+  const match = /^([a-f0-9]{64})  ([^\r\n]+)\n?$/.exec(content);
+  if (!match || match[2] !== path.basename(filePath)) throw new Error("Backup SHA-256 manifest is malformed or names a different file");
+  const expected = Buffer.from(match[1], "hex");
+  const received = Buffer.from(await sha256File(filePath), "hex");
+  if (expected.length !== received.length || !timingSafeEqual(expected, received)) throw new Error("Backup SHA-256 checksum verification failed");
+}
 function timestampSlug(date) {
   return date.toISOString().replace(/[-:]/g, "").replace(/\.(\d{3})Z$/, "$1Z");
 }
@@ -46,10 +74,12 @@ export async function createDatabaseBackup(database, directory, { now = new Date
     await fs.chmod(temporary, 0o600);
     await validateDatabaseFile(temporary);
     await fs.rename(temporary, destination);
+    await writeChecksum(destination);
     return destination;
   } catch (error) {
     await fs.rm(temporary, { force: true }).catch(() => {});
     await fs.rm(destination, { force: true }).catch(() => {});
+    await fs.rm(`${destination}.sha256`, { force: true }).catch(() => {});
     throw error;
   }
 }
@@ -81,6 +111,7 @@ export async function pruneDatabaseBackups(directory, { retentionDays = 30, now 
     // Never follow or remove symlinks while pruning backup files.
     if (stat.isFile() && !stat.isSymbolicLink() && stat.mtimeMs < cutoff) {
       await fs.unlink(filePath);
+      await fs.rm(`${filePath}.sha256`, { force: true });
       removed.push(name);
     }
   }
@@ -95,6 +126,11 @@ export async function restoreDatabaseBackup(source, destination, { force = false
   const sourceStat = await fs.lstat(sourcePath);
   if (!sourceStat.isFile() || sourceStat.isSymbolicLink()) {
     throw new Error("Backup source must be a regular file, not a symbolic link.");
+  }
+  // UUID-named backups are the new format and must have a valid checksum manifest.
+  // Legacy timestamp-only backups remain restorable for backward compatibility.
+  if (/-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.sqlite$/i.test(sourcePath)) {
+    await verifyChecksum(sourcePath);
   }
   const validation = await validateDatabaseFile(sourcePath);
   await fs.mkdir(path.dirname(targetPath), { recursive: true });

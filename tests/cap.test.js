@@ -181,3 +181,27 @@ test("exports CAP Ack and Error messages with references and without info blocks
       /must reference the related message/);
   }
 });
+
+
+test("rejects blank and non-decimal CAP geometry coordinates", () => {
+  for (const circle of [",36.2 12", "33.5, 36.2 12", "0x21,36.2 12", "33.5,36.2 0x10"]) {
+    assert.throws(() => validateAlert({ ...valid, circle }), /circle/);
+  }
+  for (const polygon of ["51,0 52,0 52,1 51,1 ,0", "0x33,0 52,0 52,1 0x33,0"]) {
+    assert.throws(() => validateAlert({ ...valid, polygon }), /coordinates/);
+  }
+});
+
+test("closes CAP polygon rings by numeric coordinate equality", () => {
+  assert.equal(validateAlert({ ...valid, polygon: "51.0,0 52,0 52,1 51,1 51,0.0" }), true);
+});
+
+test("counts CAP headline Unicode code points rather than UTF-16 code units", () => {
+  const base = {
+    language: "en-GB", category: "Met", event: "Heavy rainfall",
+    urgency: "Expected", severity: "Moderate", certainty: "Likely",
+    area: { areaDesc: "Test district", circle: "51.5,-0.1 10" }
+  };
+  assert.equal(validateAlert({ ...valid, info_blocks: [{ ...base, headline: "😀".repeat(80) + "x" }] }), true);
+  assert.throws(() => validateAlert({ ...valid, info_blocks: [{ ...base, headline: "😀".repeat(161) }] }), /160 characters/);
+});

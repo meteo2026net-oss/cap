@@ -381,6 +381,13 @@ test("API enforces role separation, public-feed filtering and account deactivati
     "recovery-code rotation must revoke previous sessions");
   const rotatedStatus = await request("/api/auth/mfa/status", { token: rotatedCodes.data.token });
   assert.equal(rotatedStatus.data.recovery_codes_remaining, 10);
+  const oldCodeLogin = await request("/api/auth/login", {
+    method: "POST", body: { username: "mfauser", password: mfaPassword }
+  });
+  const oldRecoveryReplay = await request("/api/auth/mfa/challenge", {
+    method: "POST", body: { challenge_token: oldCodeLogin.data.challenge_token, code: confirmed.data.recovery_codes[2] }
+  });
+  assert.equal(oldRecoveryReplay.status, 401, "all recovery codes from the previous set must be invalid after rotation");
   const disabledMfa = await request("/api/auth/mfa/disable", {
     token: rotatedCodes.data.token, method: "POST",
     body: { password: mfaPassword, code: rotatedCodes.data.recovery_codes[1] }

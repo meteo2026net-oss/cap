@@ -1,7 +1,7 @@
 # Architecture and delivery roadmap
 
 ## Chosen architecture
-- Standalone Node.js 20+ service (CI and Docker runtime use Node.js 22).
+- Standalone Node.js 22+ service (CI and Docker runtime use Node.js 22).
 - Express REST API.
 - SQLite for the first portable deployment; PostgreSQL adapter planned for multi-instance deployments.
 - CAP 1.2 XML generation.

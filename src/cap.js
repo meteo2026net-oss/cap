@@ -21,18 +21,29 @@ function capDateTime(value, field) {
 }
 function validDate(value, field) { if (value) capDateTime(value, field); }
 
+function decimalNumber(value) {
+  if (typeof value !== "string" || !/^[+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)$/.test(value.trim())) return NaN;
+  return Number(value);
+}
+function isDecimalValue(value) {
+  return (typeof value === "number" && Number.isFinite(value)) ||
+    (typeof value === "string" && Number.isFinite(decimalNumber(value)));
+}
 function validatePolygon(value) {
-  const points = value.trim().split(/\s+/);
-  if (points.length < 4) throw new Error("A CAP polygon requires at least four coordinate pairs.");
-  for (const pair of points) {
+  const points = value.trim().split(/\\s+/).map(pair => {
     const coordinates = pair.split(",");
     if (coordinates.length !== 2) throw new Error("Polygon points must use latitude,longitude format.");
-    const [lat, lon] = coordinates.map(Number);
+    const [lat, lon] = coordinates.map(decimalNumber);
     if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) {
       throw new Error("Polygon coordinates must be valid latitude,longitude pairs.");
     }
+    return [lat, lon];
+  });
+  if (points.length < 4) throw new Error("A CAP polygon requires at least four coordinate pairs.");
+  const first = points[0], last = points[points.length - 1];
+  if (first[0] !== last[0] || first[1] !== last[1]) {
+    throw new Error("A CAP polygon must be closed: repeat the first coordinate at the end.");
   }
-  if (points[0] !== points[points.length - 1]) throw new Error("A CAP polygon must be closed: repeat the first coordinate at the end.");
 }
 function validateArea(area) {
   if (!area?.areaDesc?.trim()) throw new Error("Every CAP area requires areaDesc.");
@@ -44,16 +55,19 @@ function validateArea(area) {
   for (const circle of [...(area.circles || []), ...(area.circle ? [area.circle] : [])]) {
     const parts = circle.trim().split(/\s+/);
     if (parts.length !== 2 || parts[0].split(",").length !== 2) throw new Error("A CAP circle must use 'latitude,longitude radiusKm'.");
-    const [lat, lon] = parts[0].split(",").map(Number), radius = Number(parts[1]);
+    const [lat, lon] = parts[0].split(",").map(decimalNumber), radius = decimalNumber(parts[1]);
     if (!Number.isFinite(lat) || Math.abs(lat) > 90 || !Number.isFinite(lon) || Math.abs(lon) > 180 || !Number.isFinite(radius) || radius <= 0) {
       throw new Error("CAP circle coordinates or radius are invalid.");
     }
   }
   for (const item of area.geocodes || []) {
-    if (!item.valueName?.trim() || !item.value?.trim()) throw new Error("CAP geocodes require valueName and value.");
+    if (typeof item.valueName !== "string" || !item.valueName.trim() ||
+        (typeof item.value !== "string" && typeof item.value !== "number") || !String(item.value).trim()) {
+      throw new Error("CAP geocodes require valueName and value.");
+    }
   }
-  if (area.altitude !== undefined && !Number.isFinite(Number(area.altitude))) throw new Error("CAP altitude must be numeric.");
-  if (area.ceiling !== undefined && !Number.isFinite(Number(area.ceiling))) throw new Error("CAP ceiling must be numeric.");
+  if (area.altitude !== undefined && !isDecimalValue(area.altitude)) throw new Error("CAP altitude must be numeric.");
+  if (area.ceiling !== undefined && !isDecimalValue(area.ceiling)) throw new Error("CAP ceiling must be numeric.");
   if (area.altitude !== undefined && area.ceiling !== undefined && Number(area.ceiling) < Number(area.altitude)) throw new Error("CAP ceiling cannot be lower than altitude.");
 }
 function normalizeArea(area) {
@@ -83,7 +97,7 @@ function normalizeInfo(info) {
     if (!values.includes(info[field] || "Unknown")) throw new Error(`Invalid CAP info ${field}.`);
   }
   if (info.language && !/^[A-Za-z]{1,8}(?:-[A-Za-z0-9]{1,8})*$/.test(info.language)) throw new Error("CAP language must use a valid RFC 3066-style language tag.");
-  if (info.headline && info.headline.length > 160) throw new Error("CAP headline must not exceed 160 characters.");
+  if (info.headline && [...info.headline].length > 160) throw new Error("CAP headline must not exceed 160 characters.");
   if (info.expires && info.onset && Date.parse(info.expires) <= Date.parse(info.onset)) throw new Error("Info expiry must be later than onset.");
   const cats = info.categories || [info.category || "Met"];
   if (!cats.length || cats.some(c => !categories.includes(c))) throw new Error("CAP info requires at least one valid category.");

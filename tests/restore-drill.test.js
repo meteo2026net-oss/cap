@@ -6,6 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { createDatabaseBackup, runIsolatedRestoreDrill, verifyRestoredDatabase } from "../src/backup-utils.js";
+import { appendAuditLog, initializeAuditCheckpoint } from "../src/audit.js";
 
 async function fixture(t) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "cap-restore-drill-test-"));
@@ -55,6 +56,77 @@ test("isolated restore drill runs the real restore path and compares every table
     "the drill must reproduce every application table byte-content fingerprint");
   assert.equal(result.table_fingerprints.alert_versions.rows, 1);
   assert.match(result.table_fingerprints.alert_versions.sha256, /^[a-f0-9]{64}$/);
+});
+
+
+test("isolated restore drill verifies a configured external audit checkpoint", async t => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "cap-checkpoint-drill-test-"));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const dbPath = path.join(root, "source.sqlite");
+  const database = new Database(dbPath);
+  database.exec(`
+    CREATE TABLE users (id INTEGER PRIMARY KEY, username TEXT NOT NULL);
+    CREATE TABLE alerts (id INTEGER PRIMARY KEY, identifier TEXT NOT NULL);
+    CREATE TABLE audit_log (
+      id INTEGER PRIMARY KEY, user_id INTEGER, alert_id INTEGER,
+      action TEXT NOT NULL, details TEXT NOT NULL, created_at TEXT NOT NULL,
+      previous_hash TEXT NOT NULL, entry_hash TEXT NOT NULL
+    );
+    INSERT INTO users(username) VALUES ('author');
+    INSERT INTO alerts(identifier) VALUES ('CAP-CHECKPOINT-001');
+  `);
+  appendAuditLog(database, { action: "created", details: "checkpoint drill fixture" });
+  appendAuditLog(database, { action: "submitted", details: "second event" });
+  const backup = await createDatabaseBackup(database, path.join(root, "backups"));
+  const checkpointPath = path.join(root, "independent-audit-anchor.json");
+  const checkpointSecret = "test-only-checkpoint-secret-at-least-32-bytes";
+  const anchor = initializeAuditCheckpoint(database, { checkpointPath, checkpointSecret });
+  database.close();
+
+  const result = await runIsolatedRestoreDrill(backup, {
+    auditOptions: { checkpointPath, checkpointSecret }
+  });
+  assert.equal(result.result, "passed");
+  assert.deepEqual(result.audit_checkpoint, {
+    configured: true,
+    valid: true,
+    checkpoint_latest_id: anchor.latest_id
+  });
+  assert.equal(result.audit.integrity_capabilities.external_checkpoint_configured, true);
+  assert.equal(result.audit.integrity_capabilities.detects_final_tail_truncation, true);
+});
+
+test("restore drill rejects an external audit checkpoint signed with the wrong secret", async t => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "cap-checkpoint-invalid-test-"));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const dbPath = path.join(root, "source.sqlite");
+  const database = new Database(dbPath);
+  database.exec(`
+    CREATE TABLE users (id INTEGER PRIMARY KEY, username TEXT NOT NULL);
+    CREATE TABLE alerts (id INTEGER PRIMARY KEY, identifier TEXT NOT NULL);
+    CREATE TABLE audit_log (
+      id INTEGER PRIMARY KEY, user_id INTEGER, alert_id INTEGER,
+      action TEXT NOT NULL, details TEXT NOT NULL, created_at TEXT NOT NULL,
+      previous_hash TEXT NOT NULL, entry_hash TEXT NOT NULL
+    );
+    INSERT INTO users(username) VALUES ('author');
+    INSERT INTO alerts(identifier) VALUES ('CAP-CHECKPOINT-002');
+  `);
+  appendAuditLog(database, { action: "created", details: "invalid checkpoint fixture" });
+  const backup = await createDatabaseBackup(database, path.join(root, "backups"));
+  const checkpointPath = path.join(root, "independent-audit-anchor.json");
+  initializeAuditCheckpoint(database, {
+    checkpointPath,
+    checkpointSecret: "correct-checkpoint-secret-with-32-bytes-minimum"
+  });
+  database.close();
+
+  await assert.rejects(
+    runIsolatedRestoreDrill(backup, {
+      auditOptions: { checkpointPath, checkpointSecret: "incorrect-checkpoint-secret-with-32-bytes" }
+    }),
+    /Audit hash chain verification failed: checkpoint_signature_invalid/
+  );
 });
 
 test("isolated restore drill rejects a backup whose checksum was changed", async t => {

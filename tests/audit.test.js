@@ -180,3 +180,67 @@ test("audit hash chain detects a modified previous-hash link", () => {
   }
 });
 
+
+
+test("audit verification detects gaps between retained hashed entry IDs", () => {
+  const database = new Database(":memory:");
+  try {
+    database.exec(`
+      CREATE TABLE audit_log (
+        id INTEGER PRIMARY KEY,
+        user_id INTEGER,
+        alert_id INTEGER,
+        action TEXT NOT NULL,
+        details TEXT,
+        created_at TEXT NOT NULL,
+        previous_hash TEXT,
+        entry_hash TEXT
+      )
+    `);
+    installAuditLogGuards(database);
+    appendAuditLog(database, { action: "first_event" });
+    appendAuditLog(database, { action: "second_event" });
+    appendAuditLog(database, { action: "third_event" });
+
+    database.exec("DROP TRIGGER audit_log_no_delete");
+    database.prepare("DELETE FROM audit_log WHERE id=2").run();
+
+    const result = verifyAuditChain(database);
+    assert.equal(result.valid, false);
+    assert.equal(result.first_invalid_id, 3);
+    assert.equal(result.reason, "sequence_gap");
+    assert.equal(result.verified_entries, 1);
+  } finally {
+    database.close();
+  }
+});
+
+test("audit verification cannot detect deletion of the final retained entry without an external checkpoint", () => {
+  const database = new Database(":memory:");
+  try {
+    database.exec(`
+      CREATE TABLE audit_log (
+        id INTEGER PRIMARY KEY,
+        user_id INTEGER,
+        alert_id INTEGER,
+        action TEXT NOT NULL,
+        details TEXT,
+        created_at TEXT NOT NULL,
+        previous_hash TEXT,
+        entry_hash TEXT
+      )
+    `);
+    installAuditLogGuards(database);
+    appendAuditLog(database, { action: "first_event" });
+    appendAuditLog(database, { action: "second_event" });
+
+    database.exec("DROP TRIGGER audit_log_no_delete");
+    database.prepare("DELETE FROM audit_log WHERE id=2").run();
+
+    const result = verifyAuditChain(database);
+    assert.equal(result.valid, true);
+    assert.equal(result.verified_entries, 1);
+  } finally {
+    database.close();
+  }
+});

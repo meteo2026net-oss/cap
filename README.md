@@ -94,7 +94,8 @@ The service listens on `127.0.0.1:8095` by default and stores SQLite data in the
 - `GET /api/auth/mfa/status`, `POST /api/auth/mfa/enroll`, `POST /api/auth/mfa/confirm`, and `POST /api/auth/mfa/disable`
 - `GET /api/users` (admin only)
 - `POST /api/users` (admin only; provisions admin/forecaster/reviewer/approver/publisher/viewer accounts)
-- `POST /api/users/:id/password-reset` (admin only; issues a temporary password once, revokes existing sessions, and forces password change before normal application access)\n- `PATCH /api/users/:id/status` (admin only; activates/deactivates an account with last-admin safeguards and revokes existing sessions on state changes)
+- `POST /api/users/:id/password-reset` (admin only; issues a temporary password once, revokes existing sessions, and forces password change before normal application access)
+- `PATCH /api/users/:id/status` (admin only; activates/deactivates an account with last-admin safeguards and revokes existing sessions on state changes)
 - `PATCH /api/users/:id/role` (admin only; changes an account role, prevents self/last-admin demotion, and revokes existing sessions)
 - `GET /api/alerts`
 - `GET /api/alerts/:id`

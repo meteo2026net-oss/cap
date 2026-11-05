@@ -100,6 +100,10 @@ CREATE INDEX IF NOT EXISTS idx_delivery_alert ON delivery_outbox(alert_id);
    UNIQUE(alert_id,version_no)
   );
   CREATE INDEX IF NOT EXISTS idx_alert_versions_alert ON alert_versions(alert_id,version_no DESC);
+  CREATE TRIGGER IF NOT EXISTS alert_versions_no_update
+  BEFORE UPDATE ON alert_versions BEGIN SELECT RAISE(ABORT, 'Alert versions are immutable'); END;
+  CREATE TRIGGER IF NOT EXISTS alert_versions_no_delete
+  BEFORE DELETE ON alert_versions BEGIN SELECT RAISE(ABORT, 'Alert versions are immutable'); END;
  `);
 
  const alertColumns = db.prepare("PRAGMA table_info(alerts)").all().map(column => column.name);

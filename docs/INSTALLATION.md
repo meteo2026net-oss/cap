@@ -34,7 +34,7 @@ The setup command creates a local `.env` file only if one does not already exist
 
 Alternatively, run `powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\setup-local.ps1` and then `npm start`, or double-click `start-local.bat`. Both Windows startup paths run `npm ci` so an incomplete or stale `node_modules` directory cannot silently bypass the lockfile.
 
-Open http://localhost:8095. Stop the server with Ctrl+C.
+When using `start-local.bat`, the dashboard opens automatically after the health endpoint responds. The server remains in its own console window; stop it with Ctrl+C in that window. For manual startup, open http://localhost:8095 after `npm start`.
 
 ## Linux / macOS
 

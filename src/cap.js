@@ -59,11 +59,11 @@ function capDateTime(value, field) {
     if (calendar.getUTCFullYear() !== year || calendar.getUTCMonth() !== month - 1 ||
         calendar.getUTCDate() !== day || hour > 23 || minute > 59 || second > 59 ||
         offsetHour > 14 || offsetMinute > 59 || (offsetHour === 14 && offsetMinute !== 0)) {
-      throw new Error(\`Invalid date for \${field}.\`);
+      throw new Error(`Invalid date for ${field}.`);
     }
   }
   const date = new Date(value);
-  if (!Number.isFinite(date.getTime())) throw new Error(\`Invalid date for \${field}.\`);
+  if (!Number.isFinite(date.getTime())) throw new Error(`Invalid date for ${field}.`);
   // CAP 1.2 requires a numeric timezone offset; the UTC designator Z is not permitted.
   return date.toISOString().replace(/\.\d{3}Z$/, "-00:00");
 }

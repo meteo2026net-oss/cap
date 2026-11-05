@@ -231,7 +231,7 @@ test("API enforces role separation, public-feed filtering and account deactivati
 
   const inactiveResetUserId = await createUser("inactive-reset-user", "viewer");
   assert.equal((await request(`/api/users/${inactiveResetUserId}/status`, {
-    token: admin, method: "PATCH", body: JSON.stringify({active:false})
+    token: admin, method: "PATCH", body: {active:false}
   })).status, 200);
   assert.equal((await request(`/api/users/${inactiveResetUserId}/password-reset`, {
     token: admin, method: "POST", body: {}

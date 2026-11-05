@@ -236,7 +236,15 @@ async function loadAuditIntegrity(){
   const hasLegacy=Number(data.legacy_unhashed_entries||0)>0;
   const hasNoCheckpoint=capabilities.external_checkpoint_configured!==true;
   status.className=verified&&!hasLegacy&& !hasNoCheckpoint?"pill":"pill red";
-  if(!verified)status.textContent="تحذير: اكتُشف خلل في سلسلة سجل التدقيق.";
+  const checkpointMessages={
+   checkpoint_configuration_invalid:"إعداد نقطة التحقق غير مكتمل؛ تحقق من المسار والمفتاح السري.",
+   checkpoint_unavailable_or_invalid:"ملف نقطة التحقق غير متاح أو غير صالح؛ أوقف عمليات التدقيق وراجع التخزين.",
+   checkpoint_format_invalid:"تنسيق نقطة التحقق غير صالح.",
+   checkpoint_signature_invalid:"توقيع نقطة التحقق غير صحيح؛ قد يكون الملف قد عُدّل أو استُخدم مفتاح خاطئ.",
+   checkpoint_anchor_missing_or_changed:"السجل المرجعي غير موجود أو تغير؛ قد يكون سجل التدقيق قد تراجع أو عُدّل.",
+   checkpoint_stale_or_database_rollback:"نقطة التحقق لا تطابق أحدث سجل؛ تم منع الكتابة الجديدة حتى التحقيق."
+  };
+  if(!verified)status.textContent="تحذير: "+(checkpointMessages[data.reason]||"اكتُشف خلل في سلسلة سجل التدقيق.");
   else if(hasLegacy)status.textContent="تحقق جزئي: توجد سجلات تاريخية غير مجزأة.";
   else if(hasNoCheckpoint)status.textContent="السلسلة متسقة، لكن لا توجد نقطة تحقق خارجية لكشف حذف ذيل السجل.";
   else status.textContent="تم التحقق من سلسلة سجل التدقيق ونقطة التحقق الخارجية.";

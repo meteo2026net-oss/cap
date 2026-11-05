@@ -298,6 +298,15 @@ test("API enforces role separation, public-feed filtering and account deactivati
     const id = created.data.id;
 
     assert.equal((await request(`/api/alerts/${id}/submit`, {
+      token: reviewer, method: "POST", body: {}
+    })).status, 403, "reviewers must not submit warnings for review");
+    assert.equal((await request(`/api/alerts/${id}/submit`, {
+      token: publisher, method: "POST", body: {}
+    })).status, 403, "publishers must not submit warnings for review");
+    assert.equal((await request(`/api/alerts/${id}/submit`, {
+      token: viewer, method: "POST", body: {}
+    })).status, 403, "viewers must not submit warnings for review");
+    assert.equal((await request(`/api/alerts/${id}/submit`, {
       token: forecaster, method: "POST", body: {}
     })).status, 200);
     assert.equal((await request(`/api/alerts/${id}/submit`, {
@@ -306,6 +315,12 @@ test("API enforces role separation, public-feed filtering and account deactivati
     assert.equal((await request(`/api/alerts/${id}/approve`, {
       token: forecaster, method: "POST", body: {}
     })).status, 403, "creator cannot approve their own warning");
+    assert.equal((await request(`/api/alerts/${id}/approve`, {
+      token: publisher, method: "POST", body: {}
+    })).status, 403, "publishers must not approve warnings");
+    assert.equal((await request(`/api/alerts/${id}/approve`, {
+      token: viewer, method: "POST", body: {}
+    })).status, 403, "viewers must not approve warnings");
     assert.equal((await request(`/api/alerts/${id}/approve`, {
       token: reviewer, method: "POST", body: {}
     })).status, 200);

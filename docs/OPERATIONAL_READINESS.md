@@ -48,7 +48,7 @@ These are deployment-time decisions; they are not needed to continue repository 
 - [ ] Replace all example values with unique secrets stored in the hosting platform's secret manager; never place secrets in Git, tickets, chat, or logs.
 - [ ] Keep inbound webhook ingress disabled unless a specific integration has been reviewed, authorized, tested, and has a secret-rotation and replay-response procedure.
 - [ ] Keep outbound delivery disabled until a provider adapter, allowlist, authentication, timeout, retry, idempotency, receipt, and failure policy has been implemented and tested.
-- [ ] Review dependency vulnerabilities, container permissions, filesystem permissions, network exposure, and software update procedures.
+- [ ] Review dependency vulnerabilities, host and filesystem permissions, network exposure, and software update procedures.
 - [ ] Complete independent application, infrastructure, and configuration security testing; track and resolve findings before go-live.
 - [ ] Review privacy, records-management, accessibility, and applicable legal/regulatory obligations.
 

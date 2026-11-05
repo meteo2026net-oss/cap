@@ -81,38 +81,44 @@ export function appendAuditLog(database, { userId = null, alertId = null, action
 }
 
 export function verifyAuditChain(database) {
-  const rows = database.prepare(`
-    SELECT id,user_id,alert_id,action,details,created_at,previous_hash,entry_hash
-    FROM audit_log
-    WHERE entry_hash IS NOT NULL
-    ORDER BY id ASC
-  `).all();
-  const legacyRows = database.prepare(
-    "SELECT id FROM audit_log WHERE entry_hash IS NULL ORDER BY id ASC"
-  ).all();
-  const legacyEntries = legacyRows.length;
-  const firstHashedId = rows[0]?.id;
-  const unhashedAfterChain = firstHashedId === undefined
-    ? []
-    : legacyRows.filter(row => row.id > firstHashedId);
-  if (unhashedAfterChain.length) {
+  const totalHashedEntries = database.prepare(
+    "SELECT COUNT(*) AS count FROM audit_log WHERE entry_hash IS NOT NULL"
+  ).get().count;
+  const legacyEntries = database.prepare(
+    "SELECT COUNT(*) AS count FROM audit_log WHERE entry_hash IS NULL"
+  ).get().count;
+  const firstHashedId = database.prepare(
+    "SELECT MIN(id) AS id FROM audit_log WHERE entry_hash IS NOT NULL"
+  ).get().id;
+  const unhashedAfterChain = firstHashedId === null ? null : database.prepare(
+    "SELECT MIN(id) AS id FROM audit_log WHERE entry_hash IS NULL AND id > ?"
+  ).get(firstHashedId).id;
+
+  if (unhashedAfterChain !== null) {
     return {
       valid: false,
       verified_entries: 0,
-      total_hashed_entries: rows.length,
+      total_hashed_entries: totalHashedEntries,
       legacy_unhashed_entries: legacyEntries,
-      first_invalid_id: unhashedAfterChain[0].id,
+      first_invalid_id: unhashedAfterChain,
       reason: "unhashed_entry_after_chain"
     };
   }
 
   let previousHash = GENESIS_HASH;
-  for (const row of rows) {
+  let verifiedEntries = 0;
+  const rows = database.prepare(`
+    SELECT id,user_id,alert_id,action,details,created_at,previous_hash,entry_hash
+    FROM audit_log
+    WHERE entry_hash IS NOT NULL
+    ORDER BY id ASC
+  `);
+  for (const row of rows.iterate()) {
     if (row.previous_hash !== previousHash) {
       return {
         valid: false,
-        verified_entries: rows.findIndex(item => item.id === row.id),
-        total_hashed_entries: rows.length,
+        verified_entries: verifiedEntries,
+        total_hashed_entries: totalHashedEntries,
         legacy_unhashed_entries: legacyEntries,
         first_invalid_id: row.id,
         reason: "previous_hash_mismatch"
@@ -125,21 +131,22 @@ export function verifyAuditChain(database) {
     if (actualBuffer.length !== expectedBuffer.length || !timingSafeEqual(actualBuffer, expectedBuffer)) {
       return {
         valid: false,
-        verified_entries: rows.findIndex(item => item.id === row.id),
-        total_hashed_entries: rows.length,
+        verified_entries: verifiedEntries,
+        total_hashed_entries: totalHashedEntries,
         legacy_unhashed_entries: legacyEntries,
         first_invalid_id: row.id,
         reason: "entry_hash_mismatch"
       };
     }
     previousHash = row.entry_hash;
+    verifiedEntries++;
   }
 
   return {
     valid: true,
-    verified_entries: rows.length,
-    total_hashed_entries: rows.length,
+    verified_entries: verifiedEntries,
+    total_hashed_entries: totalHashedEntries,
     legacy_unhashed_entries: legacyEntries,
-    latest_hash: rows.at(-1)?.entry_hash || null
+    latest_hash: previousHash === GENESIS_HASH ? null : previousHash
   };
 }

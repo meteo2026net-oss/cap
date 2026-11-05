@@ -33,7 +33,7 @@ To restore, stop the service first, then run:
 npm run restore -- backups/cap-YYYYMMDDTHHMMSSZ.sqlite
 ```
 
-The restore command refuses to overwrite an existing database unless `--force` is supplied. With `--force`, the previous database is retained beside the restored file as a pre-restore copy. Confirm the restored service and its data before removing that copy. In Docker, create a backup with `docker compose exec cap node src/backup.js`. To restore, first stop the app container, then run `docker compose run --rm --no-deps cap node src/restore.js /app/backups/cap-YYYYMMDDTHHMMSSZ.sqlite --force`, and start the service again with `docker compose up -d`. The backup volume remains mounted in the one-off container. Keep a separate off-host copy; a backup stored on the same host is not disaster recovery.
+The restore command refuses to overwrite an existing database unless `--force` is supplied. With `--force`, the previous database is retained beside the restored file as a pre-restore copy. Confirm the restored service and its data before removing that copy. In Docker, create a backup with `docker compose exec cap node src/backup.js`. For restoration, follow the complete Docker procedure in [Installation guide](docs/INSTALLATION.md#mode-b--run-with-docker-compose): stop the app, checkpoint and close SQLite, remove sidecars only after a successful checkpoint, then restore and verify service health. The restore helper intentionally refuses to proceed while WAL/SHM sidecars exist. The backup volume remains mounted in the one-off container. Keep a separate off-host copy; a backup stored on the same host is not disaster recovery.
 
 ## Audit integrity
 

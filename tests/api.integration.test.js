@@ -146,6 +146,18 @@ test("API enforces role separation, public-feed filtering and account deactivati
     return result.data.token;
   };
 
+  const enrollMfa = async (token, password) => {
+    const enrollment = await request("/api/auth/mfa/enroll", {
+      token, method: "POST", body: { password }
+    });
+    assert.equal(enrollment.status, 200, "required-role account should be able to start MFA enrollment");
+    const confirmation = await request("/api/auth/mfa/confirm", {
+      token, method: "POST", body: { password, code: totpAt(enrollment.data.secret) }
+    });
+    assert.equal(confirmation.status, 200, "required-role account should be able to confirm MFA enrollment");
+    return confirmation.data.token;
+  };
+
   assert.equal((await request("/api/auth/login", {
     method: "POST", body: { username: { malformed: true }, password: "anything" }
   })).status, 401, "malformed usernames should receive a generic authentication failure");
@@ -331,8 +343,10 @@ test("API enforces role separation, public-feed filtering and account deactivati
 
   const forecaster = await login("forecaster1", "Temporary-Password-2026!");
   const reviewer = await login("reviewer1", "Temporary-Password-2026!");
-  const publisher = await login("publisher1", "Temporary-Password-2026!");
-  const approver = await login("approver1", "Temporary-Password-2026!");
+  const publisherInitialSession = await login("publisher1", "Temporary-Password-2026!");
+  const publisher = await enrollMfa(publisherInitialSession, "Temporary-Password-2026!");
+  const approverInitialSession = await login("approver1", "Temporary-Password-2026!");
+  const approver = await enrollMfa(approverInitialSession, "Temporary-Password-2026!");
   const viewer = disabledOldSession;
   for (const [roleName, token] of [["forecaster", forecaster], ["reviewer", reviewer], ["publisher", publisher], ["approver", approver], ["viewer", viewer]]) {
     assert.equal((await request("/api/users", { token })).status, 403,

@@ -102,11 +102,25 @@ export async function restoreDatabaseBackup(source, destination, { force = false
   const sidecars = [`${targetPath}-wal`, `${targetPath}-shm`];
   for (const sidecar of sidecars) {
     try {
-      await fs.access(sidecar);
+      // lstat also detects dangling symlinks; access() would treat those as absent.
+      await fs.lstat(sidecar);
       throw new Error("SQLite WAL/SHM sidecar exists. Stop the service and resolve active database files before restoring.");
     } catch (error) {
       if (error.code !== "ENOENT") throw error;
     }
+  }
+
+  let targetStat = null;
+  try {
+    targetStat = await fs.lstat(targetPath);
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+  }
+  if (targetStat && !force) {
+    throw new Error("Restore target already exists. Stop the service and pass --force to replace it.");
+  }
+  if (targetStat && (!targetStat.isFile() || targetStat.isSymbolicLink())) {
+    throw new Error("Restore target must be a regular file, not a directory or symbolic link.");
   }
 
   const restoreId = randomUUID();
@@ -118,13 +132,9 @@ export async function restoreDatabaseBackup(source, destination, { force = false
     await fs.chmod(temporary, 0o600);
     await validateDatabaseFile(temporary);
 
-    try {
-      await fs.access(targetPath);
-      if (!force) throw new Error("Restore target already exists. Stop the service and pass --force to replace it.");
+    if (targetStat) {
       await fileSystem.rename(targetPath, rollback);
       movedOriginal = true;
-    } catch (error) {
-      if (error.code !== "ENOENT") throw error;
     }
 
     await fileSystem.rename(temporary, targetPath);

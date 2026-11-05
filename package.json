@@ -12,7 +12,8 @@
     "backup": "node src/backup.js",
     "restore": "node src/restore.js",
     "setup:local": "node scripts/setup-local.mjs",
-    "worker": "node src/delivery-worker.js"
+    "worker": "node src/delivery-worker.js",
+    "backup:verify": "node src/verify-backup.js"
   },
   "engines": {
     "node": ">=22"

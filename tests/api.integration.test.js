@@ -650,14 +650,14 @@ test("API enforces role separation, public-feed filtering and account deactivati
     if (msg_type === "Cancel") {
       const cancelledOriginal = await request(`/api/alerts/${actualRow.id}`, { token: forecaster });
       assert.equal(cancelledOriginal.status, 200);
-      assert.equal(cancelledOriginal.data.alert.workflow, "cancelled",
-        "publishing a CAP Cancel must mark its referenced source warning as cancelled");
+      assert.equal(cancelledOriginal.data.alert.workflow, "published",
+        "a Test-status cancellation must not cancel the referenced Actual warning");
       assert.equal((await request(`/api/alerts/${actualRow.id}/derive`, {
         token: forecaster, method: "POST", body: { msg_type: "Cancel" }
-      })).status, 409, "a cancelled source warning must not be cancelled again");
+      })).status, 409, "the same source message must not receive a duplicate cancellation");
       assert.equal((await request(`/api/alerts/${actualRow.id}/derive`, {
         token: forecaster, method: "POST", body: { msg_type: "Update" }
-      })).status, 409, "a cancelled source warning must not be updated");
+      })).status, 201, "a Test-status cancellation must leave the Actual source warning active");
     }
   }
 

@@ -50,6 +50,12 @@ test("audit hash chain verifies append order and detects modified entries", () =
     assert.equal(verified.valid, true);
     assert.equal(verified.verified_entries, 2);
     assert.equal(verified.legacy_unhashed_entries, 0);
+    assert.deepEqual(verified.integrity_capabilities, {
+      detects_entry_tampering: true,
+      detects_internal_deletions: true,
+      detects_final_tail_truncation: false,
+      external_checkpoint_configured: false
+    });
 
     database.exec("DROP TRIGGER audit_log_no_update");
     database.exec("DROP TRIGGER audit_log_no_unhashed_tail");
@@ -240,6 +246,8 @@ test("audit verification cannot detect deletion of the final retained entry with
     const result = verifyAuditChain(database);
     assert.equal(result.valid, true);
     assert.equal(result.verified_entries, 1);
+    assert.equal(result.integrity_capabilities.detects_final_tail_truncation, false);
+    assert.equal(result.integrity_capabilities.external_checkpoint_configured, false);
   } finally {
     database.close();
   }

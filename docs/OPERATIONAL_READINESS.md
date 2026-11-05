@@ -61,6 +61,7 @@ These are deployment-time decisions; they are not needed to continue repository 
 
 - [ ] Define encrypted off-host backup storage, access controls, retention, and deletion policy.
 - [x] Provide an optional per-user Windows daily backup task with catch-up scheduling, per-run logs, and a manual backup launcher; verify each backup with SQLite integrity and audit-chain checks.
+- [x] Provide a backup inventory command that reports file size/date and verifies each generated backup's checksum, SQLite integrity, and audit chain; flag corrupt backups and ignore unrelated files/symlinks.
 - [ ] Configure monitoring/alerting for missed or failed backup jobs and deploy equivalent scheduled automation on non-Windows hosts.
 - [ ] Perform a restore drill in an isolated environment using a production-like backup.
 - [ ] Verify SQLite integrity, foreign keys, users, alerts, workflow states, references, and audit-chain verification after restore.

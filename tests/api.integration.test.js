@@ -198,6 +198,46 @@ test("API enforces role separation, public-feed filtering and account deactivati
     return result.data.id;
   };
 
+  const resetUserId = await createUser("resetuser", "viewer");
+  const resetOldSession = await login("resetuser", "Temporary-Password-2026!");
+  const resetResult = await request(`/api/users/${resetUserId}/password-reset`, {
+    token: admin, method: "POST", body: {}
+  });
+  assert.equal(resetResult.status, 200, "an MFA-authenticated administrator should reset another active user's password");
+  assert.equal(resetResult.data.must_change_password, true);
+  assert.equal(resetResult.data.sessions_revoked, true);
+  assert.ok(resetResult.data.temporary_password.length >= 32);
+  assert.equal(resetResult.data.password_hash, undefined, "password hashes must never be returned by reset APIs");
+  assert.equal((await request("/api/me", { token: resetOldSession })).status, 401,
+    "administrator password reset must revoke all existing sessions");
+  assert.equal((await request("/api/auth/login", {
+    method: "POST", body: { username: "resetuser", password: "Temporary-Password-2026!" }
+  })).status, 401, "the previous password must stop working immediately after reset");
+  const temporaryLogin = await request("/api/auth/login", {
+    method: "POST", body: { username: "resetuser", password: resetResult.data.temporary_password }
+  });
+  assert.equal(temporaryLogin.status, 200);
+  assert.equal(temporaryLogin.data.password_change_required, true);
+  assert.equal((await request("/api/alerts", { token: temporaryLogin.data.token })).status, 403,
+    "temporary-password sessions must not access application data");
+  const temporarySessionProfile = await request("/api/me", { token: temporaryLogin.data.token });
+  assert.equal(temporarySessionProfile.data.user.must_change_password, 1);
+  assert.equal((await request("/api/auth/mfa/status", { token: temporaryLogin.data.token })).status, 200,
+    "temporary-password sessions may access account security setup");
+  const passwordReplacement = await request("/api/auth/change-password", {
+    token: temporaryLogin.data.token, method: "POST",
+    body: {
+      currentPassword: resetResult.data.temporary_password,
+      newPassword: "Reset-User-New-Password-2026!"
+    }
+  });
+  assert.equal(passwordReplacement.status, 200);
+  assert.equal(passwordReplacement.data.password_change_required, false);
+  assert.equal((await request("/api/alerts", { token: passwordReplacement.data.token })).status, 200,
+    "normal application access should resume only after the forced password change");
+  assert.equal((await request("/api/me", { token: temporaryLogin.data.token })).status, 401,
+    "changing the temporary password must revoke its prior session");
+
   const mfaUserId = await createUser("mfauser", "forecaster");
   const mfaPassword = "Temporary-Password-2026!";
   const mfaInitialToken = await login("mfauser", mfaPassword);

@@ -23,6 +23,22 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: Verify Node.js version policy is consistent
+        run: |
+          node --input-type=module -e '
+            import fs from "node:fs";
+            import { engines } from "./package.json" with { type: "json" };
+            const workflow = fs.readFileSync(".github/workflows/test.yml", "utf8");
+            const dockerfile = fs.readFileSync("Dockerfile", "utf8");
+            const nvmrc = fs.readFileSync(".nvmrc", "utf8").trim();
+            const expected = "22";
+            if (engines.node !== ">=22" || nvmrc !== expected ||
+                !workflow.includes("node-version: 22") ||
+                !dockerfile.includes("node:22-")) {
+              throw new Error("Node.js version policy differs between package.json, .nvmrc, CI, and Dockerfile");
+            }
+            console.log("Node.js 22 policy is consistent across package, local pin, CI, and Docker.");
+          '
       - name: Install XML schema validator
         run: |
           sudo apt-get update

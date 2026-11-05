@@ -737,6 +737,12 @@ test("API enforces role separation, public-feed filtering and account deactivati
       "timeline events should be returned in chronological order");
     assert.equal((await request(`/api/alerts/${id}/timeline`, { token: forecaster })).status, 403,
       "forecasters must not access the reviewer timeline");
+    assert.equal((await request(`/api/alerts/${id}/timeline`, { token: admin })).status, 200,
+      "administrators should access the unified timeline");
+    assert.equal((await request(`/api/alerts/${id}/timeline`)).status, 401,
+      "the unified timeline must require authentication");
+    assert.equal((await request("/api/alerts/not-a-number/timeline", { token: reviewer })).status, 400,
+      "timeline must reject malformed alert ids");
     assert.equal((await request("/api/alerts/999999/timeline", { token: reviewer })).status, 404,
       "timeline must reject unknown alerts");
     assert.equal((await request("/api/review/queue", { token: forecaster })).status, 403,

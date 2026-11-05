@@ -5,7 +5,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
-import { createDatabaseBackup, runIsolatedRestoreDrill } from "../src/backup-utils.js";
+import { createDatabaseBackup, runIsolatedRestoreDrill, verifyRestoredDatabase } from "../src/backup-utils.js";
 
 async function fixture(t) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "cap-restore-drill-test-"));
@@ -37,6 +37,7 @@ test("isolated restore drill runs the real restore path and compares every table
   liveDb.exec("CREATE TABLE live_sentinel (value TEXT); INSERT INTO live_sentinel VALUES ('must-not-change');");
   liveDb.close();
   const liveBefore = await fs.readFile(livePath);
+  const sourceState = await verifyRestoredDatabase(backup);
   const result = await runIsolatedRestoreDrill(backup);
   const liveAfter = await fs.readFile(livePath);
   assert.deepEqual(liveAfter, liveBefore, "the live database must remain byte-for-byte unchanged");
@@ -45,6 +46,8 @@ test("isolated restore drill runs the real restore path and compares every table
   assert.equal(result.temporary_workspace_removed, true);
   assert.deepEqual(result.counts, { users: 2, alerts: 1, audit_log: 2 });
   assert.equal(result.table_counts.alert_versions, 1);
+  assert.deepEqual(result.table_fingerprints, sourceState.table_fingerprints,
+    "the drill must reproduce every application table byte-content fingerprint");
   assert.equal(result.table_fingerprints.alert_versions.rows, 1);
   assert.match(result.table_fingerprints.alert_versions.sha256, /^[a-f0-9]{64}$/);
 });

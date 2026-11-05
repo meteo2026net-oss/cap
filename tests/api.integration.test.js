@@ -201,6 +201,10 @@ test("API enforces role separation, public-feed filtering and account deactivati
     });
     assert.equal(initialLogin.status, 200);
     assert.equal(initialLogin.data.password_change_required, true);
+    assert.equal((await request("/api/auth/change-password", {
+      token: initialLogin.data.token, method: "POST",
+      body: { currentPassword: "Initial-Temporary-Password-2026!", newPassword: "Initial-Temporary-Password-2026!" }
+    })).status, 400, "the initial temporary password must not be reused as the replacement");
     assert.equal((await request("/api/alerts", { token: initialLogin.data.token })).status, 403,
       "newly provisioned accounts must not access application data before changing the initial password");
     const initialPasswordChange = await request("/api/auth/change-password", {

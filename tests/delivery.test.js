@@ -217,7 +217,14 @@ test("queue maintenance processes bounded batches without exceeding SQLite param
   assert.equal(db.prepare("SELECT COUNT(*) AS count FROM delivery_outbox WHERE status='sending'").get().count,1);
   const second=recoverStaleDeliveries(db,10);
   assert.equal(second.deadLettered.length,1,"subsequent passes must drain the remaining stale entries");
+
+  const addFailed=db.prepare("INSERT INTO delivery_outbox(alert_id,channel,payload,status,attempts,max_attempts) VALUES(?,'webhook','<due/>','failed',1,1)");
+  for(let id=2;id<=502;id++) addFailed.run(id);
+  const firstRetryPass=processDueRetries(db);
+  assert.equal(firstRetryPass.deadLettered.length,500,"dead-letter maintenance must be bounded to 500 rows per pass");
+  const secondRetryPass=processDueRetries(db);
+  assert.equal(secondRetryPass.deadLettered.length,1,"subsequent retry passes must drain the remaining dead letters");
   const due=db.prepare("SELECT COUNT(*) AS count FROM delivery_outbox WHERE status='failed' AND dead_letter_at IS NOT NULL").get().count;
-  assert.equal(due,501);
+  assert.equal(due,1002);
  } finally { db.close(); }
 });

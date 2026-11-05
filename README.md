@@ -26,6 +26,7 @@ A verified SQLite backup can be created from the project directory:
 ```bash
 npm run backup
 npm run backup:verify -- backups/<exact-backup-filename>.sqlite
+npm run backup:list
 ```
 
 Backups are written to `backups/` by default, validated with SQLite integrity checks and audit-chain verification, and old generated backup files are pruned after 30 days. Set `BACKUP_DIR` and `BACKUP_RETENTION_DAYS` to change these defaults.

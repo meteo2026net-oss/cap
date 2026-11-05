@@ -208,6 +208,18 @@ $("#exportGeoBtn")?.addEventListener("click",async()=>{
  }catch(error){alert(error.message)}
 });
 
+$("#exportAlertsCsvBtn").addEventListener("click",async()=>{
+ try{
+  const params=new URLSearchParams();
+  const q=$("#alertSearch").value.trim(),workflow=$("#alertWorkflowFilter").value,severity=$("#alertSeverityFilter").value,status=$("#alertStatusFilter").value;
+  if(q)params.set("q",q);if(workflow)params.set("workflow",workflow);if(severity)params.set("severity",severity);if(status)params.set("status",status);
+  const response=await fetch("/api/alerts/export.csv?"+params.toString(),{headers:{Authorization:"Bearer "+token}});
+  if(!response.ok){const data=await response.json().catch(()=>({}));throw new Error(data.error||"تعذر تصدير التحذيرات");}
+  const blob=await response.blob(),url=URL.createObjectURL(blob),a=document.createElement("a");
+  a.href=url;a.download="cap-alerts-export.csv";document.body.appendChild(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+ }catch(error){alert(error.message)}
+});
 $("#refreshBtn").onclick=()=>{alertOffset=0;loadAlerts()};
 $("#alertSearch").addEventListener("change",()=>{alertOffset=0;loadAlerts()});
 ["#alertWorkflowFilter","#alertSeverityFilter","#alertStatusFilter"].forEach(selector=>$(selector).addEventListener("change",()=>{alertOffset=0;loadAlerts()}));

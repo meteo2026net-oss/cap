@@ -98,8 +98,11 @@
      <label>اليقين<select name="certainty"><option>Observed</option><option>Likely</option><option>Possible</option><option>Unlikely</option><option selected>Unknown</option></select></label>
      <label>حالة CAP<select name="status"><option value="Test">اختبار</option><option value="Exercise">تمرين</option><option value="Actual">فعلي</option></select></label>
      <label>النطاق<select name="scope"><option value="Public">عام</option><option value="Restricted">مقيّد</option><option value="Private">خاص</option></select></label>
+     <label>وقت السريان<input name="effective" type="datetime-local"></label>
      <label>بداية التأثير<input name="onset" type="datetime-local"></label>
      <label>انتهاء التحذير<input name="expires" type="datetime-local"></label>
+     <label>نوع الاستجابة<select name="response_type"><option value="">غير محدد</option><option value="Shelter">احتمِ في مكانك</option><option value="Evacuate">إخلاء</option><option value="Prepare">استعد</option><option value="Execute">نفّذ</option><option value="Avoid">تجنب</option><option value="Monitor">راقب</option><option value="Assess">قيّم</option><option value="AllClear">انتهاء الخطر</option><option value="NoResponse">لا يتطلب استجابة</option></select></label>
+     <label>لغة التحذير<input name="language" value="ar" maxlength="35" placeholder="ar"></label>
      <label class="wide">المنطقة المتأثرة<input name="area_desc" placeholder="محافظة / مدينة / منطقة" required></label>
      <label class="wide">الوصف<textarea name="description" rows="3" required></textarea></label>
      <label class="wide">التعليمات<textarea name="instruction" rows="2"></textarea></label>

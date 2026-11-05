@@ -289,7 +289,7 @@ app.post("/api/alerts/:id/derive",auth,roles("admin","forecaster"),(req,res)=>{
   if(!original) return {kind:"missing"};
   if(!["approved","published"].includes(original.workflow)) return {kind:"source_not_reviewed"};
   const sent=new Date().toISOString();
-  const references=`${original.sender},${original.identifier},${original.sent.replace(/\\.\\d{3}Z$/, "-00:00")}`;
+  const references=`${original.sender},${original.identifier},${original.sent.replace(/\.\d{3}Z$/, "-00:00")}`;
   if(msgType==="Cancel") {
    const existing=db.prepare("SELECT id FROM alerts WHERE msg_type='Cancel' AND references_text=? LIMIT 1").get(references);
    if(existing) return {kind:"already_cancelled",existingId:existing.id};
@@ -350,7 +350,7 @@ app.post("/api/alerts/:id/publish",auth,roles("admin","publisher"),(req,res)=>{
   if(a.approved_by===req.user.id) return {kind:"forbidden"};
   let cancellationSource=null;
   if(["Update","Cancel"].includes(a.msg_type)) {
-   const references=(a.references_text || "").trim().split(/\\s+/);
+   const references=(a.references_text || "").trim().split(/\s+/);
    if(references.length!==1) return {kind:"invalid_reference"};
    const parts=references[0].split(",");
    if(parts.length!==3 || parts.some(part=>!part)) return {kind:"invalid_reference"};

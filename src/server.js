@@ -52,7 +52,7 @@ app.use(helmet({
 const origins = (process.env.CORS_ORIGINS || "").split(",").map(s=>s.trim()).filter(Boolean);
 app.use(cors({ origin: origins.length ? origins : false }));
 app.use("/api", rateLimit({ windowMs: 15*60*1000, limit: 300, standardHeaders: true, legacyHeaders: false }));
-app.use("/api/auth", rateLimit({ windowMs: 15*60*1000, limit: 30, standardHeaders: true, legacyHeaders: false }));
+app.use("/api/auth", rateLimit({ windowMs: 15*60*1000, limit: 60, standardHeaders: true, legacyHeaders: false }));
 
 const webhookIngressEnabled = process.env.CAP_WEBHOOK_INGRESS_ENABLED === "true";
 const webhookSecret = process.env.CAP_WEBHOOK_SECRET || "";
@@ -152,7 +152,8 @@ function rowToCap(r) {
 }
 
 app.get("/api/health", (_req,res)=>res.json({ok:true,service:"Meteo CAP Warning System",cap:"1.2"}));
-app.post("/api/auth/login", (req,res)=>{
+const loginLimiter = rateLimit({windowMs:15*60*1000,limit:10,standardHeaders:true,legacyHeaders:false});
+app.post("/api/auth/login",loginLimiter,(req,res)=>{
  const {username,password} = req.body || {};
  if (typeof username !== "string" || username.length < 1 || username.length > 64 ||
      typeof password !== "string" || password.length > 200) {

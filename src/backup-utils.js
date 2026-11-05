@@ -25,7 +25,12 @@ async function writeChecksum(filePath) {
 }
 
 async function verifyChecksum(filePath) {
-  const content = await fs.readFile(`${filePath}.sha256`, "utf8");
+  const manifestPath = `${filePath}.sha256`;
+  const manifestStat = await fs.lstat(manifestPath);
+  if (!manifestStat.isFile() || manifestStat.isSymbolicLink() || manifestStat.size > 512) {
+    throw new Error("Backup SHA-256 manifest must be a regular file no larger than 512 bytes");
+  }
+  const content = await fs.readFile(manifestPath, "utf8");
   const match = /^([a-f0-9]{64})  ([^\r\n]+)\n?$/.exec(content);
   if (!match || match[2] !== path.basename(filePath)) throw new Error("Backup SHA-256 manifest is malformed or names a different file");
   const expected = Buffer.from(match[1], "hex");

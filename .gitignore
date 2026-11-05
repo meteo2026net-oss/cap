@@ -5,3 +5,4 @@ storage/*.sqlite-shm
 storage/*.sqlite-wal
 
 backups/
+logs/*.log

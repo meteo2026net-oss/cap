@@ -811,7 +811,13 @@ app.get("/api/audit",auth,roles("admin","reviewer","approver"),(req,res)=>{
 app.use((error,_req,res,next)=>{
  if(res.headersSent) return next(error);
  console.error("Unhandled request error:",error);
- return res.status(500).json({error:"Internal server error"});
+ const status=Number.isInteger(error?.status) && error.status>=400 && error.status<500
+  ? error.status : 500;
+ const message=status===413 ? "Request body exceeds the permitted size"
+  : status===415 ? "Unsupported request content type"
+  : status===400 ? "Invalid request body"
+  : "Internal server error";
+ return res.status(status).json({error:message});
 });
 app.get("*",(req,res)=>res.sendFile(path.join(appRoot, "public", "index.html")));
 app.listen(port,process.env.HOST || "127.0.0.1",()=>console.log(`Meteo CAP Warning System running at http://${process.env.HOST || "127.0.0.1"}:${port}`));

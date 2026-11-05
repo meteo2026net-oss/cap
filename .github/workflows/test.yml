@@ -78,33 +78,18 @@ jobs:
         run: |
           npm audit --json > npm-audit.json || true
           node -e "const a=require('./npm-audit.json'); for (const [name,v] of Object.entries(a.vulnerabilities||{})) console.log(JSON.stringify({name,severity:v.severity,isDirect:v.isDirect,range:v.range,via:v.via,fixAvailable:v.fixAvailable})); const totals=a.metadata?.vulnerabilities||{}; console.log('Total vulnerabilities: '+JSON.stringify(totals)); if((totals.total||0)>0) process.exit(1)"
-      - name: Check JavaScript syntax
+      - name: Check syntax of every tracked JavaScript file
+        shell: bash
         run: |
-          node --check scripts/setup-local.mjs
-          node --check src/webhook-signature.js
-          node --check src/webhook-replay.js
-          node --check tests/webhook-replay.test.js
-          node --check tests/webhook-signature.test.js
-          node --check src/delivery-worker.js
-          node --check src/server.js
-          node --check src/db.js
-          node --check src/lease-migration.js
-          node --check tests/lease-migration.test.js
-          node --check src/cap.js
-          node --check src/geojson.js
-          node --check src/audit.js
-          node --check src/backup-utils.js
-          node --check src/backup.js
-          node --check src/restore.js
-          node --check tests/backup.test.js
-          node --check tests/delivery.test.js
-          node --check public/geojson-validation.js
-          node --check public/app.js
-          node --check tests/cap.test.js
-          node --check tests/cap-schema.test.js
-          node --check tests/geojson.test.js
-          node --check tests/geojson-import.test.js
-          node --check tests/audit.test.js
-          node --check tests/api.integration.test.js
+          count=0
+          while IFS= read -r -d '' file; do
+            node --check "$file"
+            count=$((count + 1))
+          done < <(git ls-files -z -- '*.js' '*.mjs')
+          if [ "$count" -eq 0 ]; then
+            echo "No tracked JavaScript files were checked."
+            exit 1
+          fi
+          echo "Syntax checks passed for $count tracked JavaScript files."
       - run: npm test
       - run: npm run test:cap-schema

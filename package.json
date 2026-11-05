@@ -15,7 +15,7 @@
     "worker": "node src/delivery-worker.js"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

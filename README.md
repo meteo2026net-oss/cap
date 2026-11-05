@@ -15,7 +15,7 @@ npm start
 
 The committed `package-lock.json` pins the full dependency tree; `npm ci` installs those exact locked versions and fails if the manifest and lockfile disagree. The setup command creates `.env` (without overwriting an existing file), generates a unique JWT secret, initial administrator password, and persistent MFA encryption key, and creates local data folders. To require MFA for selected roles, set `MFA_REQUIRED_ROLES` in `.env` (for example `admin,approver,publisher`); leave it empty for opt-in MFA. Save the displayed initial password. Open http://localhost:8095. Stop with Ctrl+C. The interactive map uses Leaflet and OpenStreetMap tiles and therefore needs internet access.
 
-For Windows PowerShell, Linux/macOS, backup, restore, and troubleshooting instructions, see [Installation guide](docs/INSTALLATION.md).
+On Windows, double-click `start-local.bat` for a guided start; it creates `.env` if needed, checks Node.js/npm, runs `npm ci` against the lockfile, then starts the app. It deliberately verifies dependencies on every launch. For a faster manual restart after setup, use `npm start`. For PowerShell, Linux/macOS, backup, restore, and troubleshooting instructions, see [Installation guide](docs/INSTALLATION.md).
 
 Dependency maintenance: use `npm ci` for normal installs and CI. When intentionally adding, removing, or upgrading a dependency, use `npm install <package>@<version>`, review both `package.json` and `package-lock.json`, then run `npm ci`, `npm test`, and `npm audit` before committing both files.
 

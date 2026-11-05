@@ -367,9 +367,9 @@ app.post("/api/users",auth,roles("admin"),(req,res)=>{
  try {
   const data=userSchema.parse(req.body);
   const hash=bcrypt.hashSync(data.password,12);
-  const result=db.prepare("INSERT INTO users(username,password_hash,role) VALUES(?,?,?)").run(data.username,hash,data.role);
+  const result=db.prepare("INSERT INTO users(username,password_hash,role,must_change_password) VALUES(?,?,?,1)").run(data.username,hash,data.role);
   audit(req.user.id,null,"user_created",`Created user ${data.username} with role ${data.role}`);
-  res.status(201).json({id:result.lastInsertRowid,username:data.username,role:data.role});
+  res.status(201).json({id:result.lastInsertRowid,username:data.username,role:data.role,must_change_password:true});
  } catch(e) {
   if(e.code==="SQLITE_CONSTRAINT_UNIQUE") return res.status(409).json({error:"Username already exists"});
   res.status(400).json({error:e.message});

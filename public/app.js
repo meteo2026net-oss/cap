@@ -306,6 +306,15 @@ async function loadAuditHistory(append=false){
   }
  }
 }
+$("#auditExportCsvBtn")?.addEventListener("click",async()=>{
+ try{
+  const response=await fetch("/api/audit/export.csv",{headers:{Authorization:"Bearer "+token}});
+  if(!response.ok){const data=await response.json().catch(()=>({}));throw new Error(data.error||"تعذر تصدير سجل التدقيق");}
+  const blob=await response.blob(),url=URL.createObjectURL(blob),a=document.createElement("a");
+  a.href=url;a.download="cap-audit-export.csv";document.body.appendChild(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+ }catch(error){alert(error.message)}
+});
 $("#auditHistoryRefreshBtn")?.addEventListener("click",()=>loadAuditHistory());
 $("#auditHistoryLoadMoreBtn")?.addEventListener("click",()=>loadAuditHistory(true));
 

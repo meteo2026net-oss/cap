@@ -373,7 +373,7 @@ test("new backups include SHA-256 manifests and restore verifies them", async ()
   try {
     const backup = await createDatabaseBackup(database, path.join(directory, "backups"));
     const manifestPath = `${backup}.sha256`;
-    assert.match(await fs.readFile(manifestPath, "utf8"), /^[a-f0-9]{64}  cap-.*\\.sqlite\\n$/);
+    assert.match(await fs.readFile(manifestPath, "utf8"), /^[a-f0-9]{64}  cap-.*\.sqlite\\n$/);
     assert.equal((await fs.stat(manifestPath)).mode & 0o777, 0o600);
     await restoreDatabaseBackup(backup, path.join(directory, "restored.sqlite"));
   } finally { database.close(); await fs.rm(directory, { recursive: true, force: true }); }

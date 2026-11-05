@@ -266,9 +266,11 @@ app.post("/api/auth/mfa/enroll",auth,mfaEnrollLimiter,(req,res)=>{
  try {
   const secretValue=generateTotpSecret();
   const expiresAt=new Date(Date.now()+10*60*1000).toISOString();
-  db.prepare("UPDATE users SET mfa_pending_secret_enc=?,mfa_pending_expires_at=? WHERE id=?")
-   .run(encryptTotpSecret(secretValue),expiresAt,req.user.id);
-  audit(req.user.id,null,"mfa_enrollment_started","Pending TOTP enrollment created; confirmation required");
+  db.transaction(()=>{
+   db.prepare("UPDATE users SET mfa_pending_secret_enc=?,mfa_pending_expires_at=? WHERE id=?")
+    .run(encryptTotpSecret(secretValue),expiresAt,req.user.id);
+   audit(req.user.id,null,"mfa_enrollment_started","Pending TOTP enrollment created; confirmation required");
+  }).immediate();
   const issuer="Meteo CAP";
   const label=encodeURIComponent(issuer+":"+req.user.username);
   const otpauthUrl="otpauth://totp/"+label+"?secret="+secretValue+"&issuer="+encodeURIComponent(issuer)+"&algorithm=SHA1&digits=6&period=30";
@@ -422,8 +424,11 @@ app.post("/api/users",auth,roles("admin"),(req,res)=>{
  try {
   const data=userSchema.parse(req.body);
   const hash=bcrypt.hashSync(data.password,12);
-  const result=db.prepare("INSERT INTO users(username,password_hash,role,must_change_password) VALUES(?,?,?,1)").run(data.username,hash,data.role);
-  audit(req.user.id,null,"user_created",`Created user ${data.username} with role ${data.role}`);
+  const result=db.transaction(()=>{
+   const inserted=db.prepare("INSERT INTO users(username,password_hash,role,must_change_password) VALUES(?,?,?,1)").run(data.username,hash,data.role);
+   audit(req.user.id,null,"user_created",`Created user ${data.username} with role ${data.role}`);
+   return inserted;
+  }).immediate();
   res.status(201).json({id:result.lastInsertRowid,username:data.username,role:data.role,must_change_password:true});
  } catch(e) {
   if(e.code==="SQLITE_CONSTRAINT_UNIQUE") return res.status(409).json({error:"Username already exists"});
@@ -527,10 +532,13 @@ app.post("/api/alerts",auth,roles("admin","forecaster"),(req,res)=>{
   };
   validateAlert(alert);
   const { info_blocks: _infoBlocks, ...alertParams } = alert;
-  const result = db.prepare(`INSERT INTO alerts
-   (identifier,sender,sent,status,msg_type,scope,references_text,event,category,response_type,urgency,severity,certainty,effective,onset,expires,headline,description,instruction,area_desc,polygon,circle,language,info_json,workflow,created_by)
-   VALUES (@identifier,@sender,@sent,@status,@msg_type,@scope,@references_text,@event,@category,@response_type,@urgency,@severity,@certainty,@effective,@onset,@expires,@headline,@description,@instruction,@area_desc,@polygon,@circle,@language,@info_json,@workflow,@created_by )`).run(alertParams);
-  audit(req.user.id,result.lastInsertRowid,"created","Draft created");
+  const result = db.transaction(()=>{
+   const inserted = db.prepare(`INSERT INTO alerts
+    (identifier,sender,sent,status,msg_type,scope,references_text,event,category,response_type,urgency,severity,certainty,effective,onset,expires,headline,description,instruction,area_desc,polygon,circle,language,info_json,workflow,created_by)
+    VALUES (@identifier,@sender,@sent,@status,@msg_type,@scope,@references_text,@event,@category,@response_type,@urgency,@severity,@certainty,@effective,@onset,@expires,@headline,@description,@instruction,@area_desc,@polygon,@circle,@language,@info_json,@workflow,@created_by )`).run(alertParams);
+   audit(req.user.id,inserted.lastInsertRowid,"created","Draft created");
+   return inserted;
+  }).immediate();
   res.status(201).json({id:result.lastInsertRowid,identifier:alert.identifier});
  } catch(e) { res.status(400).json({error:e.message}); }
 });

@@ -702,6 +702,8 @@ test("API enforces role separation, public-feed filtering and account deactivati
       certainty: "Likely",
       scope: "Public",
       status: "Test",
+      effective: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+      response_type: "Shelter",
       headline: "Corrected integration warning headline",
       description: "Updated description after reviewer feedback.",
       instruction: "Follow official updates and avoid exposed areas.",
@@ -725,10 +727,12 @@ test("API enforces role separation, public-feed filtering and account deactivati
       }]
     } });
     assert.equal(correctedDraft.status, 200, "the original author should be able to correct all editable CAP draft fields");
-    assert.deepEqual(correctedDraft.data.updated_fields.sort(), ["area_desc","category","certainty","circle","description","event","expires","headline","info_json","instruction","language","onset","polygon","scope","severity","status","urgency"]);
+    assert.deepEqual(correctedDraft.data.updated_fields.sort(), ["area_desc","category","certainty","circle","description","effective","event","expires","headline","info_json","instruction","language","onset","polygon","response_type","scope","severity","status","urgency"]);
     const correctedReadback = await request(`/api/alerts/${id}`, { token: forecaster });
     assert.equal(correctedReadback.data.alert.event, "Updated integration weather event");
     assert.equal(correctedReadback.data.alert.area_desc, "Northern test district");
+    assert.equal(correctedReadback.data.alert.response_type, "Shelter");
+    assert.ok(correctedReadback.data.alert.effective);
     assert.equal(correctedReadback.data.alert.info_blocks[0].headline, "تحذير تجريبي محدث");
     assert.equal(correctedReadback.data.alert.info_blocks[0].area.circle, "33.5,36.2 10");
     assert.equal((await request(`/api/alerts/${id}`, { token: reviewer, method: "PATCH", body: { headline: "Unauthorized reviewer edit" } })).status, 403,

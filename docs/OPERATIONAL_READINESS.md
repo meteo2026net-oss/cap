@@ -21,7 +21,8 @@ These are deployment-time decisions; they are not needed to continue repository 
 - [x] Implement TOTP MFA, encrypted secret storage, one-time recovery codes, and single-use login challenges; automated tests cover enrollment, login, recovery, disable, and TOTP replay prevention.
 - [x] Implement configurable `MFA_REQUIRED_ROLES` enforcement; protected operations for listed roles are blocked until MFA enrollment is confirmed, while setup endpoints remain accessible.
 - [ ] Set the deployment's approved `MFA_REQUIRED_ROLES` policy and complete independent security review.
-- [ ] Implement secure password recovery with expiring, single-use tokens and abuse/rate controls.
+- [x] Implement administrator-assisted password reset with a generated temporary password, session revocation, forced change before normal access, audit event, and rate limiting.
+- [ ] Implement secure self-service password recovery with verified delivery, expiring single-use tokens, and abuse controls.
 - [ ] Enforce institutional identity lifecycle: onboarding, approval, suspension, offboarding, and periodic access review.
 - [ ] Review role separation and last-administrator safeguards against the institution's approved policy.
 - [ ] Define session lifetime, revocation, secret rotation, and emergency account recovery.

@@ -209,7 +209,7 @@ $("#exportGeoBtn")?.addEventListener("click",async()=>{
 });
 
 $("#refreshBtn").onclick=()=>{alertOffset=0;loadAlerts()};
-$("#alertSearch").addEventListener("input",()=>{alertOffset=0;loadAlerts()});
+$("#alertSearch").addEventListener("change",()=>{alertOffset=0;loadAlerts()});
 ["#alertWorkflowFilter","#alertSeverityFilter","#alertStatusFilter"].forEach(selector=>$(selector).addEventListener("change",()=>{alertOffset=0;loadAlerts()}));
 $("#alertPrevPage").addEventListener("click",()=>{alertOffset=Math.max(0,alertOffset-alertPageSize);loadAlerts()});
 $("#alertNextPage").addEventListener("click",()=>{if(alertHasMore){alertOffset+=alertPageSize;loadAlerts()}});
@@ -369,9 +369,9 @@ async function loadAlerts(){
   $("#alertPrevPage").disabled=alertOffset===0;
   $("#alertNextPage").disabled=!alertHasMore;
   $("#total").textContent=pagination.total;
-  $("#drafts").textContent="—";
-  $("#pending").textContent="—";
-  $("#published").textContent="—";
+  $("#drafts").textContent=alerts.filter(a=>a.workflow==="draft").length;
+  $("#pending").textContent=alerts.filter(a=>a.workflow==="pending").length;
+  $("#published").textContent=alerts.filter(a=>a.workflow==="published").length;
   $("#alertsList").innerHTML=alerts.map(a=>{
    const actions=[];
    const id=esc(a.id);

@@ -21,6 +21,13 @@ const app = express();
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 // Use a real bcrypt hash for unknown/inactive accounts to reduce username-enumeration timing differences.
 const DUMMY_PASSWORD_HASH = bcrypt.hashSync("CAP-login-timing-equalization-only-not-a-user-password", 12);
+const validMfaRoles = new Set(["admin","forecaster","reviewer","approver","publisher","viewer"]);
+const configuredMfaRoles = (process.env.MFA_REQUIRED_ROLES || "").split(",").map(value=>value.trim()).filter(Boolean);
+if (configuredMfaRoles.some(role=>!validMfaRoles.has(role)) || new Set(configuredMfaRoles).size!==configuredMfaRoles.length) {
+ console.error("FATAL: MFA_REQUIRED_ROLES must be a comma-separated list of unique supported roles.");
+ process.exit(1);
+}
+const mfaRequiredRoles = new Set(configuredMfaRoles);
 const port = Number(process.env.PORT || 8095);
 const secret = process.env.JWT_SECRET;
 if (!secret || secret.length < 32 || /^REPLACE_WITH_/i.test(secret)) {
@@ -137,13 +144,18 @@ function auth(req,res,next) {
  const token = (req.headers.authorization || "").replace(/^Bearer\s+/i,"");
  try {
    req.user = jwt.verify(token, secret);
-   const user = db.prepare("SELECT id,username,role,active,token_version FROM users WHERE id=?").get(req.user.id);
+   const user = db.prepare("SELECT id,username,role,active,token_version,mfa_enabled FROM users WHERE id=?").get(req.user.id);
    if (!user || !user.active) return res.status(401).json({error:"Account unavailable"});
    if (req.user.token_version !== user.token_version) return res.status(401).json({error:"Session expired; please sign in again"});
    req.user = user; next();
  } catch { return res.status(401).json({error:"Authentication required"}); }
 }
-const roles = (...allowed) => (req,res,next) => allowed.includes(req.user.role) ? next() : res.status(403).json({error:"Insufficient permissions"});
+const roles = (...allowed) => (req,res,next) => {
+ if(!allowed.includes(req.user.role)) return res.status(403).json({error:"Insufficient permissions"});
+ if(mfaRequiredRoles.has(req.user.role) && req.user.mfa_enabled!==1)
+  return res.status(403).json({error:"MFA enrollment is required for this role before accessing protected operations",code:"MFA_REQUIRED"});
+ return next();
+};
 function audit(userId, alertId, action, details="") {
  appendAuditLog(db, { userId, alertId, action, details });
 }
@@ -230,7 +242,7 @@ app.post("/api/auth/mfa/challenge",mfaChallengeLimiter,(req,res)=>{
 app.get("/api/auth/mfa/status",auth,(req,res)=>{
  const row=db.prepare("SELECT mfa_enabled,mfa_pending_expires_at,mfa_recovery_hashes FROM users WHERE id=?").get(req.user.id);
  let count=0;try{count=JSON.parse(row.mfa_recovery_hashes||"[]").length}catch{}
- res.json({enabled:row.mfa_enabled===1,pending:!!row.mfa_pending_expires_at && Date.parse(row.mfa_pending_expires_at)>Date.now(),recovery_codes_remaining:count});
+ res.json({enabled:row.mfa_enabled===1,required:mfaRequiredRoles.has(req.user.role),required_roles:[...mfaRequiredRoles],pending:!!row.mfa_pending_expires_at && Date.parse(row.mfa_pending_expires_at)>Date.now(),recovery_codes_remaining:count});
 });
 app.post("/api/auth/mfa/enroll",auth,mfaChallengeLimiter,(req,res)=>{
  const {password}=req.body||{};
@@ -340,8 +352,8 @@ const userSchema = z.object({
  role: z.enum(["admin","forecaster","reviewer","approver","publisher","viewer"])
 });
 app.get("/api/users",auth,roles("admin"),(_req,res)=>{
- const users=db.prepare("SELECT id,username,role,active,created_at,last_login_at FROM users ORDER BY id").all();
- res.json({users});
+ const users=db.prepare("SELECT id,username,role,active,mfa_enabled,created_at,last_login_at FROM users ORDER BY id").all();
+ res.json({users:users.map(user=>({...user,mfa_required:mfaRequiredRoles.has(user.role)}))});
 });
 app.post("/api/users",auth,roles("admin"),(req,res)=>{
  try {

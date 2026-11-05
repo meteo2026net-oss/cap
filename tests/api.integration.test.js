@@ -743,6 +743,14 @@ test("API enforces role separation, public-feed filtering and account deactivati
   assert.equal(original.status, 200, "authenticated alert history should be available");
   const actualRow = original.data.alerts.find(alert => alert.identifier === actualIdentifier);
   assert.ok(actualRow, "published warning should remain in authenticated history");
+  const initialRelations = await request(`/api/alerts/${actualRow.id}/relations`, { token: forecaster });
+  assert.equal(initialRelations.status, 200, "authenticated users should be able to inspect a CAP message relationship chain");
+  assert.equal(initialRelations.data.count, 1, "a standalone CAP alert should initially have a one-message chain");
+  assert.equal(initialRelations.data.messages[0].identifier, actualIdentifier);
+  assert.equal((await request("/api/alerts/999999/relations", { token: forecaster })).status, 404,
+    "relationship history should return not found for an unknown alert");
+  assert.equal((await request(`/api/alerts/${actualRow.id}/relations`)).status, 401,
+    "relationship history must require authentication");
 
   const unreviewedDraft = await request("/api/alerts", {
     token: forecaster, method: "POST",

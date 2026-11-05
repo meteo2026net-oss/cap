@@ -22,7 +22,8 @@ This matrix records the automated conformance coverage currently present in this
 ## Required follow-up before interoperability acceptance
 
 - Continue positive and negative cases for optional CAP elements and malformed calendar date-times; the newly covered metadata/resource/parameter cases remain subject to XSD and receiver interoperability checks.
-- Run the isolated restore drill (`npm run restore:drill -- <backup-file>`) against a representative backup and retain its report; CI now covers the drill workflow with a synthetic database.\n- Validate representative production-profile messages with an independent CAP validator in addition to the bundled OASIS XSD.
+- Run the isolated restore drill (`npm run restore:drill -- <backup-file>`) against a representative backup and retain its report; CI now covers the drill workflow with a synthetic database.
+- Validate representative production-profile messages with an independent CAP validator in addition to the bundled OASIS XSD.
 - Exchange Alert, Update, Cancel, Ack, and Error test messages with each intended receiving organization/provider.
 - Record receiver name/version, test date, message identifiers, acknowledgements, rejected-message diagnostics, and written acceptance.
 - Confirm operational policy for Test/Exercise messages, correction/cancellation chains, multilingual publication, and geographic coding with the authorized warning authority.

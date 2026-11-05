@@ -35,7 +35,7 @@ These are deployment-time decisions; they are not needed to continue repository 
 
 ## 3. CAP 1.2 conformance and interoperability
 
-- [ ] Expand validation beyond the current generated sample to a documented CAP 1.2 conformance matrix.
+- [x] Document the current CAP 1.2 automated conformance matrix, test evidence, coverage boundaries, and remaining receiver-interoperability work in [CAP conformance matrix](CAP_CONFORMANCE_MATRIX.md).
 - [ ] Test Alert, Update, Cancel, Ack, and Error message handling against applicable OASIS CAP 1.2 rules and receiving-system profiles.
 - [ ] Test required/optional fields, enumerations, timestamps/time zones, multilingual blocks, references, resources, geocodes, polygons, circles, altitude/ceiling, and boundary cases.
 - [ ] Validate generated XML with the official OASIS CAP 1.2 XSD and independent receiving-system validators.

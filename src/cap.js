@@ -22,7 +22,7 @@ function capDateTime(value, field) {
 function validDate(value, field) { if (value) capDateTime(value, field); }
 
 function decimalNumber(value) {
-  if (typeof value !== "string" || !/^[+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)$/.test(value.trim())) return NaN;
+  if (typeof value !== "string" || !/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(value.trim())) return NaN;
   return Number(value);
 }
 function isDecimalValue(value) {
@@ -30,7 +30,7 @@ function isDecimalValue(value) {
     (typeof value === "string" && Number.isFinite(decimalNumber(value)));
 }
 function validatePolygon(value) {
-  const points = value.trim().split(/\\s+/).map(pair => {
+  const points = value.trim().split(/\s+/).map(pair => {
     const coordinates = pair.split(",");
     if (coordinates.length !== 2) throw new Error("Polygon points must use latitude,longitude format.");
     const [lat, lon] = coordinates.map(decimalNumber);

@@ -125,7 +125,7 @@ export function verifyAuditChain(database) {
     if (previousId !== null && row.id !== previousId + 1) {
       return {
         valid: false,
-      integrity_capabilities: integrityCapabilities,
+        integrity_capabilities: integrityCapabilities,
         verified_entries: verifiedEntries,
         total_hashed_entries: totalHashedEntries,
         legacy_unhashed_entries: legacyEntries,
@@ -136,7 +136,7 @@ export function verifyAuditChain(database) {
     if (row.previous_hash !== previousHash) {
       return {
         valid: false,
-      integrity_capabilities: integrityCapabilities,
+        integrity_capabilities: integrityCapabilities,
         verified_entries: verifiedEntries,
         total_hashed_entries: totalHashedEntries,
         legacy_unhashed_entries: legacyEntries,
@@ -151,7 +151,7 @@ export function verifyAuditChain(database) {
     if (actualBuffer.length !== expectedBuffer.length || !timingSafeEqual(actualBuffer, expectedBuffer)) {
       return {
         valid: false,
-      integrity_capabilities: integrityCapabilities,
+        integrity_capabilities: integrityCapabilities,
         verified_entries: verifiedEntries,
         total_hashed_entries: totalHashedEntries,
         legacy_unhashed_entries: legacyEntries,
@@ -166,7 +166,7 @@ export function verifyAuditChain(database) {
 
   return {
     valid: true,
-      integrity_capabilities: integrityCapabilities,
+    integrity_capabilities: integrityCapabilities,
     verified_entries: verifiedEntries,
     total_hashed_entries: totalHashedEntries,
     legacy_unhashed_entries: legacyEntries,

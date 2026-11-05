@@ -343,6 +343,7 @@ app.post("/api/auth/change-password",auth,rateLimit({windowMs:15*60*1000,limit:5
  const {currentPassword,newPassword}=req.body || {};
  if(typeof newPassword!=="string" || newPassword.length<14 || newPassword.length>200) return res.status(400).json({error:"New password must contain 14 to 200 characters"});
  if(typeof currentPassword!=="string" || currentPassword.length>200) return res.status(401).json({error:"Current password is incorrect"});
+ if(currentPassword===newPassword) return res.status(400).json({error:"New password must be different from the current password"});
  const row=db.prepare("SELECT password_hash FROM users WHERE id=?").get(req.user.id);
  if(!row || !bcrypt.compareSync(currentPassword,row.password_hash)) return res.status(401).json({error:"Current password is incorrect"});
  const hash=bcrypt.hashSync(newPassword,12);

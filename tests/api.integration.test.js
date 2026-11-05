@@ -367,11 +367,9 @@ test("API enforces role separation, public-feed filtering and account deactivati
     method: "POST", body: { challenge_token: secondTotpChallenge.data.challenge_token, code: freshTotp }
   });
   assert.equal(replayedTotp.status, 401, "a TOTP time step must not be reusable across separate login challenges");
-  const untilRecoveryRotationStep = 30_000 - (Date.now() % 30_000) + 150;
-  await new Promise(resolve => setTimeout(resolve, untilRecoveryRotationStep));
   const rotatedCodes = await request("/api/auth/mfa/recovery-codes", {
     token: completedMfa.data.token, method: "POST",
-    body: { password: mfaPassword, code: totpAt(enrollment.data.secret) }
+    body: { password: mfaPassword, code: confirmed.data.recovery_codes[3] }
   });
   assert.equal(rotatedCodes.status, 200, "recovery codes should rotate after password and fresh TOTP verification");
   assert.equal(rotatedCodes.data.recovery_codes.length, 10);

@@ -315,3 +315,48 @@ test("restore rejects symbolic-link backup sources", async () => {
     await fs.rm(directory, { recursive: true, force: true });
   }
 });
+
+
+test("restore refuses symbolic-link targets without moving or replacing the link", async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "cap-restore-target-symlink-"));
+  const source = path.join(directory, "source.sqlite");
+  const target = path.join(directory, "target.sqlite");
+  const external = path.join(directory, "external.sqlite");
+  const database = createFixtureDatabase(source);
+  try {
+    await fs.writeFile(external, "keep external target");
+    await fs.symlink(external, target, "file");
+    await assert.rejects(
+      () => restoreDatabaseBackup(source, target, { force: true }),
+      /Restore target must be a regular file/
+    );
+    assert.equal((await fs.lstat(target)).isSymbolicLink(), true);
+    assert.equal(await fs.readFile(external, "utf8"), "keep external target");
+  } finally {
+    database.close();
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("restore detects dangling WAL and SHM symlinks", async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "cap-restore-dangling-sidecar-"));
+  const source = path.join(directory, "source.sqlite");
+  const target = path.join(directory, "target.sqlite");
+  const database = createFixtureDatabase(source);
+  try {
+    await fs.symlink(path.join(directory, "missing-wal-target"), target + "-wal", "file");
+    await assert.rejects(
+      () => restoreDatabaseBackup(source, target),
+      /WAL\\/SHM sidecar exists/
+    );
+    await fs.rm(target + "-wal");
+    await fs.symlink(path.join(directory, "missing-shm-target"), target + "-shm", "file");
+    await assert.rejects(
+      () => restoreDatabaseBackup(source, target),
+      /WAL\\/SHM sidecar exists/
+    );
+  } finally {
+    database.close();
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});

@@ -174,3 +174,12 @@ Examples: `GET /api/audit/export.csv` and `GET /api/audit/export.csv?action=logi
 The response includes `root_id`, `count`, `truncated` and a `messages` array with CAP identifiers, message types, workflow states, CAP status and reference values. The dashboard exposes this history from each alert card through the “سلسلة الرسائل” action. This is an internal relationship view; it does not change approval, cancellation or publication state.
 
 Example: `GET /api/alerts/42/relations`
+## Return a pending warning to its author
+
+Reviewers, approvers and administrators can return a pending warning to its author when corrections are required:
+
+`POST /api/alerts/:id/return`
+
+Request body: `{"reason":"Please clarify the affected area and expected timing."}`
+
+The reason is mandatory (5–1000 characters). The creator cannot return their own warning. A successful return moves the warning from `pending` back to `draft`, clears any approval attribution, and appends a `returned_to_author` audit event containing the reviewer feedback. The author can then edit and resubmit the draft for a fresh independent review. The endpoint does not publish or distribute the warning.

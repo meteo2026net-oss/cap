@@ -354,8 +354,12 @@ app.post("/api/alerts/:id/publish",auth,roles("admin","publisher"),(req,res)=>{
    if(references.length!==1) return {kind:"invalid_reference"};
    const parts=references[0].split(",");
    if(parts.length!==3 || parts.some(part=>!part)) return {kind:"invalid_reference"};
-   cancellationSource=db.prepare("SELECT id,workflow FROM alerts WHERE sender=? AND identifier=? AND sent=?").get(parts[0],parts[1],parts[2]);
+   cancellationSource=db.prepare("SELECT id,workflow,sent FROM alerts WHERE sender=? AND identifier=?").get(parts[0],parts[1]);
    if(!cancellationSource) return {kind:"source_missing"};
+   const referenceTime=Date.parse(parts[2]);
+   const sourceTime=Date.parse(cancellationSource.sent);
+   if(!Number.isFinite(referenceTime) || !Number.isFinite(sourceTime) ||
+      Math.floor(referenceTime/1000)!==Math.floor(sourceTime/1000)) return {kind:"invalid_reference"};
    if(cancellationSource.workflow!=="published") return {kind:"source_not_active"};
   }
   const changed=db.prepare("UPDATE alerts SET workflow='published',status=?,published_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE id=? AND workflow='approved'").run(a.status,a.id);

@@ -520,6 +520,34 @@ app.patch("/api/users/:id/status",auth,roles("admin"),(req,res)=>{
  res.json({ok:true,id,active,changed:result.kind==="updated",sessions_revoked:result.kind==="updated"});
 });
 
+function csvCell(value) {
+ const text = value === null || value === undefined ? "" : String(value);
+ const safe = /^[\\s]*[=+@\\-\\t\\r]/.test(text) ? "'" + text : text;
+ return '"' + safe.replace(/"/g, '""') + '"';
+}
+
+app.get("/api/alerts/export.csv",auth,(req,res)=>{
+ const workflow=req.query.workflow, severity=req.query.severity, status=req.query.status;
+ const search=typeof req.query.q==="string" ? req.query.q.trim().slice(0,160) : "";
+ if(workflow!==undefined && !["draft","pending","approved","published","cancelled"].includes(workflow)) return res.status(400).json({error:"Invalid workflow filter"});
+ if(severity!==undefined && !["Extreme","Severe","Moderate","Minor","Unknown"].includes(severity)) return res.status(400).json({error:"Invalid severity filter"});
+ if(status!==undefined && !["Actual","Exercise","System","Test"].includes(status)) return res.status(400).json({error:"Invalid CAP status filter"});
+ const clauses=[],params=[];
+ if(workflow!==undefined){clauses.push("workflow=?");params.push(workflow);}
+ if(severity!==undefined){clauses.push("severity=?");params.push(severity);}
+ if(status!==undefined){clauses.push("status=?");params.push(status);}
+ if(search){clauses.push("(instr(lower(identifier),lower(?))>0 OR instr(lower(event),lower(?))>0 OR instr(lower(headline),lower(?))>0 OR instr(lower(area_desc),lower(?))>0)");params.push(search,search,search,search);}
+ const where=clauses.length ? "WHERE "+clauses.join(" AND ") : "";
+ const rows=db.prepare("SELECT identifier,event,headline,area_desc,urgency,severity,certainty,status,workflow,msg_type,sent,expires FROM alerts "+where+" ORDER BY sent DESC,id DESC LIMIT 5001").all(...params);
+ if(rows.length>5000) return res.status(413).json({error:"Export exceeds 5000 rows; narrow the filters before exporting",maximum_rows:5000});
+ const headers=["identifier","event","headline","area_desc","urgency","severity","certainty","status","workflow","msg_type","sent","expires"];
+ const lines=[headers.map(csvCell).join(","),...rows.map(row=>headers.map(key=>csvCell(row[key])).join(","))];
+ res.status(200).set({
+  "Content-Type":"text/csv; charset=utf-8",
+  "Content-Disposition":'attachment; filename="cap-alerts-export.csv"',
+  "Cache-Control":"no-store"
+ }).send("\\uFEFF"+lines.join("\\r\\n")+"\\r\\n");
+});
 app.get("/api/alerts",auth,(req,res)=>{
  const workflow = req.query.workflow;
  const severity = req.query.severity;

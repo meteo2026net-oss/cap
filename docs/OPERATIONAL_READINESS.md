@@ -48,6 +48,7 @@ These are deployment-time decisions; they are not needed to continue repository 
 ## 4. Hosting and application security
 
 - [ ] Deploy only to a supported, patched host with restricted administrative access.
+- [ ] Enable and verify GitHub `main` branch protection: require pull requests and the relevant passing CAP system checks and CodeQL checks, block force pushes and branch deletion, and restrict bypass permissions. The repository's current branch metadata reports protection disabled; re-check the live setting after configuration.
 - [ ] Configure HTTPS, secure proxy headers, trusted proxy boundaries, and a reviewed origin/CORS allowlist.
 - [ ] Replace all example values with unique secrets stored in the hosting platform's secret manager; never place secrets in Git, tickets, chat, or logs.
 - [ ] Keep inbound webhook ingress disabled unless a specific integration has been reviewed, authorized, tested, and has a secret-rotation and replay-response procedure.

@@ -75,7 +75,7 @@ export async function verifyDatabaseBackup(source) {
   if (!sourceStat.isFile() || sourceStat.isSymbolicLink()) {
     throw new Error("Backup source must be a regular file, not a symbolic link.");
   }
-  const isNewFormat = /-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.sqlite$/i.test(sourcePath);
+  const isNewFormat = /-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.sqlite$/i.test(sourcePath);
   let checksum = "legacy";
   try {
     await fs.lstat(`${sourcePath}.sha256`);

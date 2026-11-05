@@ -81,6 +81,12 @@ export function appendAuditLog(database, { userId = null, alertId = null, action
 }
 
 export function verifyAuditChain(database) {
+  const integrityCapabilities = {
+    detects_entry_tampering: true,
+    detects_internal_deletions: true,
+    detects_final_tail_truncation: false,
+    external_checkpoint_configured: false
+  };
   const totalHashedEntries = database.prepare(
     "SELECT COUNT(*) AS count FROM audit_log WHERE entry_hash IS NOT NULL"
   ).get().count;
@@ -97,6 +103,7 @@ export function verifyAuditChain(database) {
   if (unhashedAfterChain !== null) {
     return {
       valid: false,
+      integrity_capabilities: integrityCapabilities,
       verified_entries: 0,
       total_hashed_entries: totalHashedEntries,
       legacy_unhashed_entries: legacyEntries,
@@ -118,6 +125,7 @@ export function verifyAuditChain(database) {
     if (previousId !== null && row.id !== previousId + 1) {
       return {
         valid: false,
+      integrity_capabilities: integrityCapabilities,
         verified_entries: verifiedEntries,
         total_hashed_entries: totalHashedEntries,
         legacy_unhashed_entries: legacyEntries,
@@ -128,6 +136,7 @@ export function verifyAuditChain(database) {
     if (row.previous_hash !== previousHash) {
       return {
         valid: false,
+      integrity_capabilities: integrityCapabilities,
         verified_entries: verifiedEntries,
         total_hashed_entries: totalHashedEntries,
         legacy_unhashed_entries: legacyEntries,
@@ -142,6 +151,7 @@ export function verifyAuditChain(database) {
     if (actualBuffer.length !== expectedBuffer.length || !timingSafeEqual(actualBuffer, expectedBuffer)) {
       return {
         valid: false,
+      integrity_capabilities: integrityCapabilities,
         verified_entries: verifiedEntries,
         total_hashed_entries: totalHashedEntries,
         legacy_unhashed_entries: legacyEntries,
@@ -156,6 +166,7 @@ export function verifyAuditChain(database) {
 
   return {
     valid: true,
+      integrity_capabilities: integrityCapabilities,
     verified_entries: verifiedEntries,
     total_hashed_entries: totalHashedEntries,
     legacy_unhashed_entries: legacyEntries,

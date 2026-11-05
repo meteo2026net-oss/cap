@@ -193,7 +193,8 @@ app.post("/api/auth/login",loginLimiter,(req,res)=>{
  res.json({token,user:{id:user.id,username:user.username,role:user.role}});
 });
 const mfaLoginLimiter = rateLimit({windowMs:15*60*1000,limit:10,standardHeaders:true,legacyHeaders:false});
-const mfaEnrollmentLimiter = rateLimit({windowMs:15*60*1000,limit:10,standardHeaders:true,legacyHeaders:false});
+const mfaEnrollLimiter = rateLimit({windowMs:15*60*1000,limit:10,standardHeaders:true,legacyHeaders:false});
+const mfaConfirmLimiter = rateLimit({windowMs:15*60*1000,limit:10,standardHeaders:true,legacyHeaders:false});
 const mfaDisableLimiter = rateLimit({windowMs:15*60*1000,limit:10,standardHeaders:true,legacyHeaders:false});
 app.post("/api/auth/mfa/challenge",mfaLoginLimiter,(req,res)=>{
  const {challenge_token:challengeToken,code}=req.body || {};
@@ -246,7 +247,7 @@ app.get("/api/auth/mfa/status",auth,(req,res)=>{
  let count=0;try{count=JSON.parse(row.mfa_recovery_hashes||"[]").length}catch{}
  res.json({enabled:row.mfa_enabled===1,required:mfaRequiredRoles.has(req.user.role),required_roles:[...mfaRequiredRoles],pending:!!row.mfa_pending_expires_at && Date.parse(row.mfa_pending_expires_at)>Date.now(),recovery_codes_remaining:count});
 });
-app.post("/api/auth/mfa/enroll",auth,mfaEnrollmentLimiter,(req,res)=>{
+app.post("/api/auth/mfa/enroll",auth,mfaEnrollLimiter,(req,res)=>{
  const {password}=req.body||{};
  if(typeof password!=="string" || password.length>200) return res.status(401).json({error:"Current password is incorrect"});
  const row=db.prepare("SELECT password_hash,mfa_enabled FROM users WHERE id=?").get(req.user.id);
@@ -267,7 +268,7 @@ app.post("/api/auth/mfa/enroll",auth,mfaEnrollmentLimiter,(req,res)=>{
   res.status(503).json({error:"MFA encryption is not configured correctly"});
  }
 });
-app.post("/api/auth/mfa/confirm",auth,mfaEnrollmentLimiter,(req,res)=>{
+app.post("/api/auth/mfa/confirm",auth,mfaConfirmLimiter,(req,res)=>{
  const {password,code}=req.body||{};
  if(typeof password!=="string" || password.length>200 || typeof code!=="string" || !/^\d{6}$/.test(code))
   return res.status(400).json({error:"A current password and six-digit authenticator code are required"});

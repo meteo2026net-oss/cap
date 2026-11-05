@@ -80,6 +80,7 @@ The polling interval defaults to 30 seconds and can be adjusted with `CAP_DELIVE
 - Backups: `backups/`
 - Create a verified backup: `npm run backup`
 - List all generated backups and verify each file: `npm run backup:list` (or pass a directory as the first argument).
+- Check backup freshness and integrity for scheduled-task/CI integration: `npm run backup:health` (optional directory argument). It exits `0` only when the newest backup candidate is verified and no older than 26 hours; missing, corrupt, or stale backups exit `1`, while an execution error exits `2`. Set `BACKUP_MAX_AGE_HOURS` to change the limit. The command prints JSON and does not send notifications.
 - Verify one saved backup without restoring it: `npm run backup:verify -- backups/<exact-backup-filename>.sqlite`
 - Restore while every application process is stopped: `npm run restore -- backups/<backup-file>.sqlite`
 

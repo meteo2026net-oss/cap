@@ -589,11 +589,52 @@ async function loadAlertRelations(id){
  panel.scrollIntoView({behavior:"smooth",block:"nearest"});
  try{
   const data=await api("/api/alerts/"+encodeURIComponent(id)+"/relations");
-  meta.textContent="عدد الرسائل المرتبطة: "+data.count+(data.truncated?" • تم بلوغ حد العرض":"");
-  list.innerHTML=data.messages.map(message=>{
-   const label=message.msg_type==="Alert"?"رسالة أصلية":message.msg_type==="Update"?"تحديث":message.msg_type==="Cancel"?"إلغاء":message.msg_type;
-   return "<article class='alertItem'><b>"+esc(message.headline||message.event||message.identifier)+"</b><div class='alertMeta'><span>"+esc(label)+"</span><span class='pill'>"+esc(message.workflow)+"</span><span class='pill'>"+esc(message.status)+"</span><span>"+esc(message.sent)+"</span><span>"+esc(message.identifier)+"</span></div><div class='muted small'>"+esc(message.references_text||"لا توجد رسالة مرجعية")+"</div></article>";
-  }).join("")||"<p class='muted'>لا توجد رسائل مرتبطة.</p>";
+  const typeLabel=type=>type==="Alert"?"رسالة أصلية":type==="Update"?"تحديث":type==="Cancel"?"إلغاء":type;
+  meta.textContent="الرسائل: "+data.count+" • روابط CAP المثبتة: "+(data.relation_count??data.relations?.length??0)+(data.truncated?" • تم بلوغ حد العرض":"");
+  list.replaceChildren();
+  const edges=Array.isArray(data.relations)?data.relations:[];
+  const graph=document.createElement("section");graph.className="reviewHistory small";
+  const graphTitle=document.createElement("b");graphTitle.textContent="خريطة الترابط بين الرسائل";graph.append(graphTitle);
+  if(edges.length){
+   const edgeList=document.createElement("div");edgeList.className="relationEdges";
+   for(const edge of edges){
+    const row=document.createElement("p");row.className="versionChange";
+    const from=data.messages.find(message=>message.id===edge.from_id);
+    const to=data.messages.find(message=>message.id===edge.to_id);
+    const fromName=from?.headline||from?.event||from?.identifier||("#"+edge.from_id);
+    const toName=to?.headline||to?.event||to?.identifier||("#"+edge.to_id);
+    const description=document.createElement("span");
+    description.textContent=fromName+" ← "+typeLabel(edge.msg_type)+" ← "+toName;
+    row.append(description);
+    const jump=document.createElement("button");jump.type="button";jump.className="secondary";jump.textContent="عرض الرسالة";
+    jump.addEventListener("click",()=>{
+     const target=list.querySelector('[data-rel-message="'+String(edge.to_id)+'"]');
+     target?.scrollIntoView({behavior:"smooth",block:"center"});
+     if(target){target.setAttribute("tabindex","-1");target.focus({preventScroll:true});}
+    });
+    row.append(jump);edgeList.append(row);
+   }
+   graph.append(edgeList);
+  }else{
+   const empty=document.createElement("p");empty.className="muted";empty.textContent="لم يُعثر على روابط أبوة/اشتقاق مؤكدة ضمن الرسائل المعروضة.";graph.append(empty);
+  }
+  list.append(graph);
+  const messagesHeading=document.createElement("h3");messagesHeading.textContent="الرسائل في هذه السلسلة";list.append(messagesHeading);
+  for(const message of data.messages){
+   const card=document.createElement("article");card.className="alertItem";card.dataset.relMessage=String(message.id);
+   const title=document.createElement("b");title.textContent=message.headline||message.event||message.identifier;card.append(title);
+   const details=document.createElement("div");details.className="alertMeta";
+   for(const value of [typeLabel(message.msg_type),"#"+message.id,message.workflow,message.status,message.sent,message.identifier]){
+    const item=document.createElement("span");item.textContent=value;details.append(item);
+   }
+   card.append(details);
+   const reference=document.createElement("p");reference.className="muted small";reference.textContent=message.references_text||"لا توجد رسالة مرجعية";card.append(reference);
+   const incoming=edges.filter(edge=>edge.to_id===message.id).length;
+   const outgoing=edges.filter(edge=>edge.from_id===message.id).length;
+   const counts=document.createElement("p");counts.className="muted small";counts.textContent="روابط واردة: "+incoming+" • رسائل مشتقة: "+outgoing;card.append(counts);
+   list.append(card);
+  }
+  if(data.truncated){const note=document.createElement("p");note.className="muted small";note.textContent="تم بلوغ حد 100 رسالة؛ قد توجد رسائل أقدم أو أحدث خارج هذه النتيجة.";list.append(note);}
  }catch(error){list.textContent=error.message;}
 }
 $("#alertRelationsClose")?.addEventListener("click",()=>{$("#alertRelationsPanel").hidden=true;});

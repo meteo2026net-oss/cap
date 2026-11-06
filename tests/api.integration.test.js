@@ -142,7 +142,7 @@ test("API enforces role separation, public-feed filtering and account deactivati
       },
       ...(body ? { body: JSON.stringify(body) } : {})
     });
-    return { status: response.status, data: await response.json().catch(() => ({})) };
+    return { status: response.status, headers: response.headers, data: await response.json().catch(() => ({})) };
   };
 
   const login = async (username, password) => {
@@ -1363,6 +1363,10 @@ test("API enforces role separation, public-feed filtering and account deactivati
   const auditHistory = await request("/api/audit", { token: reviewer });
   assert.equal(auditHistory.status, 200,
     "reviewers should be able to inspect audit history");
+  assert.equal(auditHistory.headers.get("cache-control"), "no-store",
+    "restricted audit history must not be stored by browsers or shared caches");
+  assert.equal(auditHistory.headers.get("pragma"), "no-cache",
+    "restricted audit history must carry a legacy no-cache directive");
   assert.ok(auditHistory.data.entries.some(entry => entry.action === "login_succeeded" && entry.username === "admin"),
     "successful administrator sign-ins should be included in the audit history");
   assert.ok(auditHistory.data.entries.some(entry => entry.action === "user_created" && entry.details.includes("approver1")),

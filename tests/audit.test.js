@@ -355,3 +355,34 @@ test("checkpoint initialization refuses to anchor a tampered audit chain", async
     fs.rmSync(directory, { recursive: true, force: true });
   }
 });
+
+
+test("audit verification rejects malformed hexadecimal entry hashes", () => {
+  const database = new Database(":memory:");
+  try {
+    database.exec(`
+      CREATE TABLE audit_log (
+        id INTEGER PRIMARY KEY,
+        user_id INTEGER,
+        alert_id INTEGER,
+        action TEXT NOT NULL,
+        details TEXT,
+        created_at TEXT NOT NULL,
+        previous_hash TEXT,
+        entry_hash TEXT
+      )
+    `);
+    installAuditLogGuards(database);
+    const entry = appendAuditLog(database, { action: "hash_format_fixture" });
+    database.exec("DROP TRIGGER audit_log_no_update");
+    database.prepare("UPDATE audit_log SET entry_hash=? WHERE id=?")
+      .run(entry.entry_hash + "zz", entry.id);
+
+    const result = verifyAuditChain(database);
+    assert.equal(result.valid, false);
+    assert.equal(result.first_invalid_id, entry.id);
+    assert.equal(result.reason, "entry_hash_format_invalid");
+  } finally {
+    database.close();
+  }
+});

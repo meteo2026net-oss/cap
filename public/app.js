@@ -605,6 +605,22 @@ async function loadAlertRelations(id){
    anchor.href=url;anchor.download="cap-lineage-"+String(data.root_id||id)+".json";
    document.body.append(anchor);anchor.click();anchor.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
   });
+  const exportReport=document.createElement("button");exportReport.type="button";exportReport.className="secondary";exportReport.textContent="تنزيل تقرير HTML للطباعة";
+  exportReport.addEventListener("click",()=>{
+   const escapeHtml=value=>String(value??"").replace(/[&<>"']/g,char=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[char]));
+   const byId=new Map(data.messages.map(message=>[message.id,message]));
+   const messageRows=data.messages.map(message=>'<tr><td>'+escapeHtml(message.id)+'</td><td>'+escapeHtml(typeLabel(message.msg_type))+'</td><td>'+escapeHtml(message.headline||message.event||message.identifier)+'</td><td>'+escapeHtml(message.workflow)+'</td><td>'+escapeHtml(message.status)+'</td><td>'+escapeHtml(message.sent)+'</td><td>'+escapeHtml(message.identifier)+'</td></tr>').join("");
+   const relationRows=edges.map(edge=>{
+    const from=byId.get(edge.from_id)||{},to=byId.get(edge.to_id)||{};
+    return '<tr><td>'+escapeHtml(from.headline||from.event||from.identifier||("#"+edge.from_id))+'</td><td>'+escapeHtml(typeLabel(edge.msg_type))+'</td><td>'+escapeHtml(to.headline||to.event||to.identifier||("#"+edge.to_id))+'</td><td>'+escapeHtml(edge.reference)+'</td></tr>';
+   }).join("");
+   const warning=data.truncated?'<p class="warning">تنبيه: تم بلوغ حد 100 رسالة؛ قد توجد رسائل أخرى خارج هذا التقرير.</p>':"";
+   const html='<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>تقرير سلسلة رسائل CAP</title><style>body{font-family:Arial,sans-serif;margin:28px;color:#172033;line-height:1.6}h1,h2{margin:0 0 12px}header{border-bottom:2px solid #334155;padding-bottom:14px;margin-bottom:20px}.meta{color:#475569}.warning{background:#fff4d6;padding:10px;border:1px solid #eab308}table{width:100%;border-collapse:collapse;margin:12px 0 26px;font-size:12px;table-layout:fixed}th,td{border:1px solid #cbd5e1;padding:7px;text-align:right;overflow-wrap:anywhere}th{background:#e2e8f0}section{break-inside:avoid}footer{margin-top:30px;color:#64748b;font-size:11px}@media print{body{margin:12mm}button{display:none}tr{break-inside:avoid}h2{break-after:avoid}}</style></head><body><header><h1>تقرير سلسلة رسائل CAP</h1><div class="meta">معرّف الجذر: '+escapeHtml(data.root_id??id)+' • عدد الرسائل: '+escapeHtml(data.count)+' • عدد الروابط: '+escapeHtml(data.relation_count??edges.length)+'</div><div class="meta">وقت إنشاء التقرير: '+escapeHtml(new Date().toISOString())+'</div></header>'+warning+'<section><h2>علاقات الرسائل</h2><table><thead><tr><th>الرسالة الأصلية</th><th>نوع العلاقة</th><th>الرسالة المشتقة</th><th>مرجع CAP</th></tr></thead><tbody>'+relationRows+'</tbody></table></section><section><h2>الرسائل ضمن السلسلة</h2><table><thead><tr><th>رقم</th><th>النوع</th><th>العنوان / الحدث</th><th>سير العمل</th><th>حالة CAP</th><th>وقت الإرسال</th><th>المعرّف</th></tr></thead><tbody>'+messageRows+'</tbody></table></section><footer>تقرير معلوماتي مستخرج من سجل النظام. لا يغيّر حالة التحذيرات ولا ينشئ أو ينشر رسائل CAP.</footer></body></html>';
+   const blob=new Blob([html],{type:"text/html;charset=utf-8"});
+   const url=URL.createObjectURL(blob),anchor=document.createElement("a");
+   anchor.href=url;anchor.download="cap-lineage-report-"+String(data.root_id||id)+".html";
+   document.body.append(anchor);anchor.click();anchor.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
+  });
   const exportCsv=document.createElement("button");exportCsv.type="button";exportCsv.className="secondary";exportCsv.textContent="تصدير الروابط CSV";
   exportCsv.addEventListener("click",()=>{
    const byId=new Map(data.messages.map(message=>[message.id,message]));
@@ -620,7 +636,7 @@ async function loadAlertRelations(id){
    anchor.href=url;anchor.download="cap-lineage-"+String(data.root_id||id)+".csv";
    document.body.append(anchor);anchor.click();anchor.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
   });
-  exportActions.append(exportGraph,exportCsv);graphHeader.append(graphTitle,exportActions);graph.append(graphHeader);
+  exportActions.append(exportGraph,exportCsv,exportReport);graphHeader.append(graphTitle,exportActions);graph.append(graphHeader);
   if(edges.length){
    const edgeList=document.createElement("div");edgeList.className="relationEdges";
    for(const edge of edges){

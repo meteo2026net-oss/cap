@@ -1243,7 +1243,7 @@ test("API enforces role separation, public-feed filtering and account deactivati
   const lineageDb = new Database(path.join(cwd, "storage", "cap.sqlite"));
   try {
     const parentIdentity = lineageDb.prepare("SELECT sender,identifier,sent FROM alerts WHERE id=?").get(publishedUpdate.id);
-    const equivalentUtcReference = parentIdentity.sent.replace(/\\.\\d{3}Z$/, "+00:00");
+    const equivalentUtcReference = new Date(Date.parse(parentIdentity.sent) + 3 * 60 * 60 * 1000).toISOString().replace(/\.\d{3}Z$/, "+03:00");
     lineageDb.prepare("UPDATE alerts SET references_text=? WHERE id=?")
       .run(`${parentIdentity.sender},${parentIdentity.identifier},${equivalentUtcReference}`, chainedUpdate.data.id);
   } finally {

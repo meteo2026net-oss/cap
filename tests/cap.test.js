@@ -143,6 +143,25 @@ test("rejects resources missing mandatory description or MIME type", () => {
   }), /resourceDesc and mimeType/);
 });
 
+
+test("validates CAP resource MIME types, URLs, dereferenced content and SHA-1 digests", () => {
+  const block = {
+    language: "en-GB", category: "Met", event: "Heavy rainfall",
+    urgency: "Expected", severity: "Moderate", certainty: "Likely",
+    area: { areaDesc: "Test district", circle: "51.5,-0.1 10" }
+  };
+  const build = resource => buildCapXml({ ...valid, info_blocks: [{ ...block, resources: [resource] }] });
+  const base = { resourceDesc: "Map", mimeType: "image/png", uri: "https://example.org/map.png" };
+  assert.match(build({ ...base, digest: "qZk+NkcGgWq6PiVxeFDCbJzQ2J0=" }), /<digest>qZk\+NkcGgWq6PiVxeFDCbJzQ2J0=<\/digest>/);
+  assert.throws(() => build({ ...base, mimeType: "image/png; charset=utf-8" }), /valid type\/subtype/);
+  assert.throws(() => build({ ...base, mimeType: "image" }), /valid type\/subtype/);
+  assert.throws(() => build({ ...base, uri: "javascript:alert(1)" }), /HTTP or HTTPS/);
+  assert.throws(() => build({ ...base, uri: "https://user:pass@example.org/map.png" }), /embedded credentials/);
+  assert.throws(() => build({ ...base, digest: "0123456789abcdef" }), /Base64-encoded SHA-1/);
+  assert.throws(() => build({ ...base, derefUri: "bad\u0000value" }), /without control characters/);
+  assert.throws(() => build({ ...base, derefUri: "😀".repeat(500_001) }), /up to 2 MB/);
+});
+
 test("requires each warning language block to define a geographic area", () => {
   assert.throws(() => buildCapXml({
     ...valid,
@@ -318,7 +337,7 @@ test("serializes optional CAP metadata, response types, parameters and full area
         size: 4096,
         uri: "https://example.org/rain.png",
         derefUri: "embedded-map",
-        digest: "0123456789abcdef"
+        digest: "qZk+NkcGgWq6PiVxeFDCbJzQ2J0="
       }]
     }]
   });

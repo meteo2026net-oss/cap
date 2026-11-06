@@ -544,6 +544,10 @@ test("API enforces role separation, public-feed filtering and account deactivati
     "forecasters must not inspect inbound webhook messages");
   const webhookInbox = await request("/api/webhooks/inbox?status=pending", { token: reviewer });
   assert.equal(webhookInbox.status, 200, "reviewers should inspect pending inbound webhook messages");
+  assert.equal(webhookInbox.headers.get("cache-control"), "no-store",
+    "restricted webhook payloads must not be stored by browsers or shared caches");
+  assert.equal(webhookInbox.headers.get("pragma"), "no-cache",
+    "restricted webhook inbox must carry a legacy no-cache directive");
   assert.ok(webhookInbox.data.messages.some(item => item.id === acceptedWebhookData.inbox_id));
   const inboxMessage = webhookInbox.data.messages.find(item => item.id === acceptedWebhookData.inbox_id);
   assert.equal(inboxMessage.payload.provider, "synthetic-test");
@@ -551,6 +555,10 @@ test("API enforces role separation, public-feed filtering and account deactivati
     token: reviewer, method: "PATCH", body: { status: "reviewed", note: "Synthetic integration test reviewed" }
   });
   assert.equal(reviewedInboxMessage.status, 200);
+  assert.equal(reviewedInboxMessage.headers.get("cache-control"), "no-store",
+    "restricted webhook review responses must not be cached");
+  assert.equal(reviewedInboxMessage.headers.get("pragma"), "no-cache",
+    "restricted webhook review responses must carry a legacy no-cache directive");
   assert.equal(reviewedInboxMessage.data.status, "reviewed");
   assert.equal(reviewedInboxMessage.data.reviewer_username, "reviewer1", "review response should identify the authenticated reviewer");
   const repeatedReview = await request(`/api/webhooks/inbox/${acceptedWebhookData.inbox_id}/review`, {

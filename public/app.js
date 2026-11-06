@@ -420,6 +420,7 @@ $("#alertForm").addEventListener("submit",async e=>{
  const obj=Object.fromEntries(new FormData(e.target));
  const jsonBlocks=obj.info_blocks_json?.trim();delete obj.info_blocks_json;
  if(jsonBlocks){try{obj.info_blocks=JSON.parse(jsonBlocks);if(!Array.isArray(obj.info_blocks)||obj.info_blocks.length<1)throw new Error("يجب إدخال مصفوفة غير فارغة")}catch(error){alert("صيغة JSON غير صحيحة في كتل اللغات المتعددة: "+error.message);return}}
+ if(obj.info_blocks?.length&&(obj.polygon?.trim()||obj.circle?.trim())&&!obj.info_blocks.some(b=>b.area||b.areas?.length)){const area={areaDesc:obj.area_desc};if(obj.polygon?.trim())area.polygon=obj.polygon.trim();if(obj.circle?.trim())area.circle=obj.circle.trim();obj.info_blocks[0].area=area;}
  const hasInfoArea=obj.info_blocks?.some(b=>b.area||b.areas?.length);
  if(!obj.polygon?.trim()&&!obj.circle?.trim()&&!hasInfoArea){alert("أدخل مضلعاً أو دائرة أو منطقة جغرافية ضمن كتل المعلومات.");return}
  for(const k of ["effective","onset","expires"])if(obj[k])obj[k]=new Date(obj[k]).toISOString();else obj[k]="";
@@ -460,7 +461,9 @@ $("#addCapResourceBtn")?.addEventListener("click",()=>{
   const area={areaDesc:value("area_desc")};
   if(value("polygon").trim())area.polygon=value("polygon").trim();
   if(value("circle").trim())area.circle=value("circle").trim();
-  blocks=[{language:value("language")||"ar",category:value("category")||"Met",event:value("event"),urgency:value("urgency")||"Unknown",severity:value("severity")||"Unknown",certainty:value("certainty")||"Unknown",headline:value("headline"),description:value("description"),instruction:value("instruction"),area}];
+  const firstBlock={language:value("language")||"ar",category:value("category")||"Met",event:value("event"),urgency:value("urgency")||"Unknown",severity:value("severity")||"Unknown",certainty:value("certainty")||"Unknown",headline:value("headline"),description:value("description"),instruction:value("instruction")};
+  if(area.polygon||area.circle)firstBlock.area=area;
+  blocks=[firstBlock];
  }
  while(blocks.length<blockNumber)blocks.push({});
  if(!blocks[blockNumber-1]||typeof blocks[blockNumber-1]!=="object"||Array.isArray(blocks[blockNumber-1])){status.textContent="كتلة المعلومات المحددة غير صالحة.";return}

@@ -132,16 +132,40 @@ function normalizeArea(area) {
 }
 function normalizeResource(resource) {
   if (!resource.resourceDesc?.trim() || !resource.mimeType?.trim()) throw new Error("CAP resources require resourceDesc and mimeType.");
-  const out = { resourceDesc: resource.resourceDesc, mimeType: resource.mimeType };
+  if ([...resource.resourceDesc].length > 256) throw new Error("CAP resource description must not exceed 256 characters.");
+  if (!/^[!#$%&'*+.^_\`|~0-9A-Za-z-]+\/[!#$%&'*+.^_\`|~0-9A-Za-z-]+$/.test(resource.mimeType)) {
+    throw new Error("CAP resource mimeType must be a valid type/subtype media type.");
+  }
+  const out = { resourceDesc: resource.resourceDesc, mimeType: resource.mimeType.toLowerCase() };
   if (resource.size !== undefined) {
     const sizeText = typeof resource.size === "string" ? resource.size.trim() : resource.size;
-    const size = typeof sizeText === "number"
-      ? sizeText
-      : typeof sizeText === "string" && /^\d+$/.test(sizeText) ? Number(sizeText) : NaN;
+    const size = typeof sizeText === "number" ? sizeText : typeof sizeText === "string" && /^\d+$/.test(sizeText) ? Number(sizeText) : NaN;
     if (!Number.isSafeInteger(size) || size < 0) throw new Error("CAP resource size must be a non-negative integer.");
     out.size = String(size);
   }
-  for (const key of ["uri","derefUri","digest"]) if (resource[key]) out[key] = resource[key];
+  if (resource.uri) {
+    let parsed;
+    try { parsed = new URL(resource.uri); } catch { throw new Error("CAP resource uri must be an absolute HTTP or HTTPS URL."); }
+    if (!["http:", "https:"].includes(parsed.protocol) || parsed.username || parsed.password) {
+      throw new Error("CAP resource uri must use HTTP or HTTPS and must not contain embedded credentials.");
+    }
+    out.uri = parsed.toString();
+  }
+  if (resource.derefUri !== undefined) {
+    if (typeof resource.derefUri !== "string" || !resource.derefUri.trim() ||
+        /[\u0000-\u0008\u000B\u000C\u000E-\u001F]/.test(resource.derefUri) ||
+        Buffer.byteLength(resource.derefUri, "utf8") > 2_000_000) {
+      throw new Error("CAP resource derefUri must be non-empty text up to 2 MB without control characters.");
+    }
+    out.derefUri = resource.derefUri;
+  }
+  if (resource.digest !== undefined) {
+    if (typeof resource.digest !== "string" || !/^[A-Za-z0-9+/]{27}=$/.test(resource.digest) ||
+        Buffer.from(resource.digest, "base64").toString("base64") !== resource.digest) {
+      throw new Error("CAP resource digest must be a canonical Base64-encoded SHA-1 digest.");
+    }
+    out.digest = resource.digest;
+  }
   return out;
 }
 function normalizeInfo(info) {

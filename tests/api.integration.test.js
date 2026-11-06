@@ -173,9 +173,12 @@ test("API enforces role separation, public-feed filtering and account deactivati
     return confirmation.data.token;
   };
 
-  assert.equal((await request("/api/auth/login", {
+  const malformedLogin = await request("/api/auth/login", {
     method: "POST", body: { username: { malformed: true }, password: "anything" }
-  })).status, 401, "malformed usernames should receive a generic authentication failure");
+  });
+  assert.equal(malformedLogin.status, 401, "malformed usernames should receive a generic authentication failure");
+  assert.equal(malformedLogin.headers.get("cache-control"), "no-store",
+    "failed authentication responses must not be cached");
   assert.equal((await request("/api/auth/login", {
     method: "POST", body: { username: "admin", password: "x".repeat(201) }
   })).status, 401, "oversized login passwords should be rejected before password hashing");
@@ -189,6 +192,8 @@ test("API enforces role separation, public-feed filtering and account deactivati
     "an administrator without required MFA must not access protected administrator operations");
   const adminMfaStatus = await request("/api/auth/mfa/status", { token: admin });
   assert.equal(adminMfaStatus.data.required, true);
+  assert.equal(adminMfaStatus.headers.get("cache-control"), "no-store",
+    "MFA status responses must not be cached");
   const adminEnrollment = await request("/api/auth/mfa/enroll", {
     token: admin, method: "POST", body: { password: "Integration-Test-Admin-Password-2026" }
   });

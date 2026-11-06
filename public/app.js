@@ -434,6 +434,43 @@ $("#alertForm").addEventListener("submit",async e=>{
   }
  }catch(error){alert(error.message)}
 });
+$("#addCapResourceBtn")?.addEventListener("click",()=>{
+ const form=$("#alertForm");
+ const status=$("#resourceEditorStatus");
+ const description=$("#resourceDesc").value.trim();
+ const mimeType=$("#resourceMime").value.trim().toLowerCase();
+ const uriText=$("#resourceUri").value.trim();
+ const blockNumber=Number($("#resourceBlockIndex").value);
+ if(!description||description.length>256){status.textContent="أدخل وصفاً للمورد بين 1 و256 حرفاً.";return}
+ if(!/^[a-z0-9!#$("#cancelAlertEditBtn")?.addEventListener("click",resetAlertEditor);^_.+-]+\\/[a-z0-9!#$("#cancelAlertEditBtn")?.addEventListener("click",resetAlertEditor);^_.+-]+$/.test(mimeType)){status.textContent="نوع MIME غير صالح؛ استخدم صيغة مثل image/png.";return}
+ let resourceUrl;
+ try{resourceUrl=new URL(uriText);if(!["http:","https:"].includes(resourceUrl.protocol)||resourceUrl.username||resourceUrl.password)throw new Error()}catch{status.textContent="رابط المورد يجب أن يكون HTTP أو HTTPS دون بيانات دخول.";return}
+ if(!Number.isSafeInteger(blockNumber)||blockNumber<1){status.textContent="رقم كتلة المعلومات يجب أن يكون عدداً صحيحاً يبدأ من 1.";return}
+ const sizeText=$("#resourceSize").value.trim();
+ const digest=$("#resourceDigest").value.trim();
+ const resource={resourceDesc:description,mimeType,uri:resourceUrl.href};
+ if(sizeText!==""){const size=Number(sizeText);if(!Number.isSafeInteger(size)||size<0){status.textContent="الحجم يجب أن يكون عدداً صحيحاً غير سالب.";return}resource.size=size}
+ if(digest!==""){if(!/^[A-Za-z0-9+/]{27}=$/.test(digest)){status.textContent="Digest يجب أن يكون Base64 بطول 28 حرفاً.";return}resource.digest=digest}
+ const field=form.elements.namedItem("info_blocks_json");
+ let blocks=[];
+ if(field.value.trim()){
+  try{blocks=JSON.parse(field.value);if(!Array.isArray(blocks)||!blocks.length)throw new Error("يجب أن تكون مصفوفة غير فارغة")}catch(error){status.textContent="تعذر قراءة JSON: "+error.message;return}
+ }else{
+  const value=name=>form.elements.namedItem(name)?.value||"";
+  const area={areaDesc:value("area_desc")};
+  if(value("polygon").trim())area.polygon=value("polygon").trim();
+  if(value("circle").trim())area.circle=value("circle").trim();
+  blocks=[{language:value("language")||"ar",category:value("category")||"Met",event:value("event"),urgency:value("urgency")||"Unknown",severity:value("severity")||"Unknown",certainty:value("certainty")||"Unknown",headline:value("headline"),description:value("description"),instruction:value("instruction"),area}];
+ }
+ while(blocks.length<blockNumber)blocks.push({});
+ if(!blocks[blockNumber-1]||typeof blocks[blockNumber-1]!=="object"||Array.isArray(blocks[blockNumber-1])){status.textContent="كتلة المعلومات المحددة غير صالحة.";return}
+ const target=blocks[blockNumber-1];
+ target.resources=Array.isArray(target.resources)?target.resources:[];
+ target.resources.push(resource);
+ field.value=JSON.stringify(blocks,null,2);
+ status.textContent="تمت إضافة المورد إلى كتلة المعلومات رقم "+blockNumber+". راجع JSON ثم احفظ التحذير كمسودة.";
+ $("#resourceDesc").value="";$("#resourceUri").value="";$("#resourceSize").value="";$("#resourceDigest").value="";
+});
 $("#cancelAlertEditBtn")?.addEventListener("click",resetAlertEditor);
 async function editDraft(id){
  try{

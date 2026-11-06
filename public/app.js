@@ -413,7 +413,7 @@ function dateForLocalInput(value){
  return local.toISOString().slice(0,16);
 }
 function resetAlertEditor(){
- editingAlertId=null;$("#alertForm").reset();setAlertEditorMode(false);
+ editingAlertId=null;$("#alertForm").reset();renderCapResourceList();setAlertEditorMode(false);
 }
 $("#alertForm").addEventListener("submit",async e=>{
  e.preventDefault();
@@ -435,6 +435,36 @@ $("#alertForm").addEventListener("submit",async e=>{
   }
  }catch(error){alert(error.message)}
 });
+function readResourceBlocks(){
+ const field=$("#alertForm").elements.namedItem("info_blocks_json");
+ if(!field.value.trim())return [];
+ try{const blocks=JSON.parse(field.value);return Array.isArray(blocks)?blocks:[]}catch{return []}
+}
+function renderCapResourceList(){
+ const host=$("#capResourceList");
+ if(!host)return;
+ host.replaceChildren();
+ const blocks=readResourceBlocks();
+ let count=0;
+ blocks.forEach((block,blockIndex)=>{
+  (Array.isArray(block?.resources)?block.resources:[]).forEach((resource,resourceIndex)=>{
+   count++;
+   const row=document.createElement("div");
+   row.className="alertItem";
+   const description=document.createElement("strong");
+   description.textContent=resource.resourceDesc||"مورد دون وصف";
+   const meta=document.createElement("p");
+   meta.className="muted small";
+   meta.textContent="الكتلة "+(blockIndex+1)+" • "+(resource.mimeType||"نوع غير محدد")+" • "+(resource.uri||"دون رابط");
+   const remove=document.createElement("button");
+   remove.type="button";remove.className="secondary";
+   remove.textContent="حذف هذا المورد";
+   remove.dataset.block=String(blockIndex);remove.dataset.resource=String(resourceIndex);
+   row.append(description,meta,remove);host.append(row);
+  });
+ });
+ if(!count){const empty=document.createElement("p");empty.className="muted small";empty.textContent="لا توجد موارد مضافة بعد.";host.append(empty);}
+}
 $("#addCapResourceBtn")?.addEventListener("click",()=>{
  const form=$("#alertForm");
  const status=$("#resourceEditorStatus");
@@ -443,7 +473,53 @@ $("#addCapResourceBtn")?.addEventListener("click",()=>{
  const uriText=$("#resourceUri").value.trim();
  const blockNumber=Number($("#resourceBlockIndex").value);
  if(!description||description.length>256){status.textContent="أدخل وصفاً للمورد بين 1 و256 حرفاً.";return}
- if(!/^[a-z0-9!#$("#cancelAlertEditBtn")?.addEventListener("click",resetAlertEditor);^_.+-]+\\/[a-z0-9!#$("#cancelAlertEditBtn")?.addEventListener("click",resetAlertEditor);^_.+-]+$/.test(mimeType)){status.textContent="نوع MIME غير صالح؛ استخدم صيغة مثل image/png.";return}
+ if(!/^[a-z0-9!#$&^_.+-]+\/[a-z0-9!#$&^_.+-]+$/.test(mimeType)){status.textContent="نوع MIME غير صالح؛ استخدم صيغة مثل image/png.";return}
+ let resourceUrl;
+ try{resourceUrl=new URL(uriText);if(!["http:","https:"].includes(resourceUrl.protocol)||resourceUrl.username||resourceUrl.password)throw new Error()}catch{status.textContent="رابط المورد يجب أن يكون HTTP أو HTTPS دون بيانات دخول.";return}
+ if(!Number.isSafeInteger(blockNumber)||blockNumber<1){status.textContent="رقم كتلة المعلومات يجب أن يكون عدداً صحيحاً يبدأ من 1.";return}
+ const sizeText=$("#resourceSize").value.trim();
+ const digest=$("#resourceDigest").value.trim();
+ const resource={resourceDesc:description,mimeType,uri:resourceUrl.href};
+ if(sizeText!==""){const size=Number(sizeText);if(!Number.isSafeInteger(size)||size<0){status.textContent="الحجم يجب أن يكون عدداً صحيحاً غير سالب.";return}resource.size=size}
+ if(digest!==""){if(!/^[A-Za-z0-9+/]{27}=$/.test(digest)){status.textContent="Digest يجب أن يكون Base64 بطول 28 حرفاً.";return}resource.digest=digest}
+ const field=form.elements.namedItem("info_blocks_json");
+ let blocks=[];
+ if(field.value.trim()){
+  try{blocks=JSON.parse(field.value);if(!Array.isArray(blocks)||!blocks.length)throw new Error("يجب أن تكون مصفوفة غير فارغة")}catch(error){status.textContent="تعذر قراءة JSON: "+error.message;return}
+ }else{
+  const value=name=>form.elements.namedItem(name)?.value||"";
+  const area={areaDesc:value("area_desc")};
+  if(value("polygon").trim())area.polygon=value("polygon").trim();
+  if(value("circle").trim())area.circle=value("circle").trim();
+  const firstBlock={language:value("language")||"ar",category:value("category")||"Met",event:value("event"),urgency:value("urgency")||"Unknown",severity:value("severity")||"Unknown",certainty:value("certainty")||"Unknown",headline:value("headline"),description:value("description"),instruction:value("instruction")};
+  if(area.polygon||area.circle)firstBlock.area=area;
+  blocks=[firstBlock];
+ }
+ while(blocks.length<blockNumber)blocks.push({});
+ const target=blocks[blockNumber-1];
+ if(!target||typeof target!=="object"||Array.isArray(target)){status.textContent="كتلة المعلومات المحددة غير صالحة.";return}
+ target.resources=Array.isArray(target.resources)?target.resources:[];
+ target.resources.push(resource);
+ field.value=JSON.stringify(blocks,null,2);
+ renderCapResourceList();
+ status.textContent="تمت إضافة المورد إلى كتلة المعلومات رقم "+blockNumber+".";
+ $("#resourceDesc").value="";$("#resourceUri").value="";$("#resourceSize").value="";$("#resourceDigest").value="";
+});
+$("#capResourceList")?.addEventListener("click",event=>{
+ const button=event.target.closest("button[data-block][data-resource]");
+ if(!button)return;
+ const field=$("#alertForm").elements.namedItem("info_blocks_json");
+ const blocks=readResourceBlocks();
+ const blockIndex=Number(button.dataset.block),resourceIndex=Number(button.dataset.resource);
+ if(!Number.isSafeInteger(blockIndex)||!Number.isSafeInteger(resourceIndex)||!blocks[blockIndex]||!Array.isArray(blocks[blockIndex].resources))return;
+ blocks[blockIndex].resources.splice(resourceIndex,1);
+ field.value=JSON.stringify(blocks,null,2);
+ renderCapResourceList();
+ $("#resourceEditorStatus").textContent="تم حذف المورد المحدد فقط. راجع البيانات ثم احفظ المسودة.";
+});
+$("#alertForm")?.elements.namedItem("info_blocks_json")?.addEventListener("input",renderCapResourceList);
+renderCapResourceList();
+$("#cancelAlertEditBtn")?.addEventListener("click",resetAlertEditor);^_.+-]+\\/[a-z0-9!#$("#cancelAlertEditBtn")?.addEventListener("click",resetAlertEditor);^_.+-]+$/.test(mimeType)){status.textContent="نوع MIME غير صالح؛ استخدم صيغة مثل image/png.";return}
  let resourceUrl;
  try{resourceUrl=new URL(uriText);if(!["http:","https:"].includes(resourceUrl.protocol)||resourceUrl.username||resourceUrl.password)throw new Error()}catch{status.textContent="رابط المورد يجب أن يكون HTTP أو HTTPS دون بيانات دخول.";return}
  if(!Number.isSafeInteger(blockNumber)||blockNumber<1){status.textContent="رقم كتلة المعلومات يجب أن يكون عدداً صحيحاً يبدأ من 1.";return}
@@ -483,6 +559,7 @@ async function editDraft(id){
   const form=$("#alertForm");
   const values={event:alertData.event,headline:alertData.headline,category:alertData.category,urgency:alertData.urgency,severity:alertData.severity,certainty:alertData.certainty,status:alertData.status,scope:alertData.scope,effective:dateForLocalInput(alertData.effective),onset:dateForLocalInput(alertData.onset),expires:dateForLocalInput(alertData.expires),response_type:alertData.response_type,language:alertData.language,area_desc:alertData.area_desc,description:alertData.description,instruction:alertData.instruction,polygon:alertData.polygon,circle:alertData.circle,info_blocks_json:alertData.info_blocks?.length?JSON.stringify(alertData.info_blocks,null,2):""};
   for(const [name,value] of Object.entries(values)){const field=form.elements.namedItem(name);if(field)field.value=value??""}
+  renderCapResourceList();
   editingAlertId=id;setAlertEditorMode(true);form.scrollIntoView({behavior:"smooth",block:"start"});
  }catch(error){alert(error.message)}
 }

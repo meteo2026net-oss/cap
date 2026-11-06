@@ -149,7 +149,8 @@ function normalizeResource(resource) {
     if (!Number.isSafeInteger(size) || size < 0) throw new Error("CAP resource size must be a non-negative integer.");
     out.size = String(size);
   }
-  if (resource.uri) {
+  if (resource.uri !== undefined && resource.uri !== null && resource.uri !== "") {
+    if (typeof resource.uri !== "string") throw new Error("CAP resource uri must be text.");
     let parsed;
     try { parsed = new URL(resource.uri); } catch { throw new Error("CAP resource uri must be an absolute HTTP or HTTPS URL."); }
     if (!["http:", "https:"].includes(parsed.protocol) || parsed.username || parsed.password) {

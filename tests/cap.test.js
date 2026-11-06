@@ -160,7 +160,7 @@ test("validates CAP resource MIME types, URLs, dereferenced content and SHA-1 di
   assert.throws(() => build({ ...base, digest: "0123456789abcdef" }), /Base64-encoded SHA-1/);
   assert.throws(() => build({ ...base, derefUri: "not-base64!" }), /canonical Base64/);
   assert.throws(() => build({ ...base, derefUri: "ZW1iZWRkZWQtbWFw " }), /canonical Base64/);
-  assert.throws(() => build({ ...base, derefUri: "😀".repeat(500_001) }), /up to 2 MB/);
+  assert.throws(() => build({ ...base, derefUri: "A".repeat(2_000_004) }), /up to 2 MB/);
 });
 
 test("requires each warning language block to define a geographic area", () => {

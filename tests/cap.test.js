@@ -462,12 +462,14 @@ test("rejects malformed CAP info collections and nested area records with clear 
     [{ areaDesc: "District", circle: "51.5,-0.1 10", geocodes: [null] }, /geocodes require object records/],
     [{ areaDesc: "District", circle: "51.5,-0.1 10", geocodes: ["bad-record"] }, /geocodes require object records/],
     [{ areaDesc: "District", circle: "51.5,-0.1 10", polygons: [null] }, /polygon and circle entries must be text/],
-    [null, /Each CAP area must be an object/]
   ]) {
     assert.throws(() => buildCapXml({
       ...valid, info_blocks: [{ ...block, area }]
     }), pattern);
   }
+  assert.throws(() => buildCapXml({
+    ...valid, info_blocks: [{ ...block, areas: [null], area: undefined }]
+  }), /Each CAP area must be an object/);
   for (const parameter of [null, "invalid", { valueName: 5, value: "35" }, { valueName: "rain", value: {} }]) {
     assert.throws(() => buildCapXml({
       ...valid, info_blocks: [{ ...block, parameters: [parameter] }]

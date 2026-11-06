@@ -487,7 +487,15 @@ async function loadAlerts(){
    actions.push("<button class='secondary' data-alert-relations='1' data-alert-id='"+id+"'>سلسلة الرسائل</button>");
    actions.push("<button class='secondary' data-alert-download='"+id+"'>CAP XML</button>");
    const severityClass=a.severity==="Extreme"||a.severity==="Severe"?"red":"orange";
-   return "<article class='alertItem'><b>"+esc(a.headline)+"</b><div class='alertMeta'><span>"+esc(a.event)+"</span><span class='pill'>"+esc(a.workflow)+"</span><span class='pill "+severityClass+"'>"+esc(a.severity)+"</span><span>"+esc(a.area_desc)+"</span></div><div class='actions'>"+actions.join("")+"</div></article>";
+   const resources=(a.info_blocks||[]).flatMap(block=>(block.resources||[]).map(resource=>({language:block.language||a.language||"",...resource})));
+   const resourceHtml=resources.length
+    ? "<div class='alertMeta'><strong>موارد CAP ("+resources.length+"):</strong> "+resources.map(resource=>{
+       let link="";
+       try{const url=new URL(resource.uri);if(["http:","https:"].includes(url.protocol)&&!url.username&&!url.password)link=" <a href='"+esc(url.href)+"' target='_blank' rel='noopener noreferrer'>فتح المورد</a>";}catch{}
+       return "<span>"+esc(resource.resourceDesc)+" · "+esc(resource.mimeType)+(resource.size!==undefined?" · "+esc(resource.size)+" بايت":"")+(resource.language?" · "+esc(resource.language):"")+link+"</span>";
+      }).join(" | ")+"</div>"
+    : "";
+   return "<article class='alertItem'><b>"+esc(a.headline)+"</b><div class='alertMeta'><span>"+esc(a.event)+"</span><span class='pill'>"+esc(a.workflow)+"</span><span class='pill "+severityClass+"'>"+esc(a.severity)+"</span><span>"+esc(a.area_desc)+"</span></div>"+resourceHtml+"<div class='actions'>"+actions.join("")+"</div></article>";
   }).join("")||'<p class="muted">لا توجد تحذيرات حتى الآن.</p>';
   if(["admin","reviewer","approver"].includes(currentRole))await loadReviewQueue();
  }catch(e){

@@ -150,6 +150,10 @@ test("API enforces role separation, public-feed filtering and account deactivati
       method: "POST", body: { username, password }
     });
     assert.equal(result.status, 200, "login should succeed for " + username);
+    assert.equal(result.headers.get("cache-control"), "no-store",
+      "authentication responses must not be stored by browsers or shared caches");
+    assert.equal(result.headers.get("pragma"), "no-cache",
+      "authentication responses must carry a legacy no-cache directive");
     return result.data.token;
   };
 
@@ -158,6 +162,10 @@ test("API enforces role separation, public-feed filtering and account deactivati
       token, method: "POST", body: { password }
     });
     assert.equal(enrollment.status, 200, "required-role account should be able to start MFA enrollment");
+    assert.equal(enrollment.headers.get("cache-control"), "no-store",
+      "MFA enrollment secrets must not be cached");
+    assert.equal(enrollment.headers.get("pragma"), "no-cache",
+      "MFA enrollment responses must carry a legacy no-cache directive");
     const confirmation = await request("/api/auth/mfa/confirm", {
       token, method: "POST", body: { password, code: totpAt(enrollment.data.secret) }
     });

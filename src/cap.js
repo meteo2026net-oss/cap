@@ -48,8 +48,9 @@ function capDateTime(value, field) {
   if (!value) return undefined;
   // JavaScript Date normalizes impossible calendar dates (for example, 30 February).
   // Reject malformed ISO calendar/time components before parsing to prevent silent changes.
-  const iso = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?(Z|([+-])(\d{2}):(\d{2}))?$/.exec(String(value));
-  if (iso) {
+  const iso = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?(Z|([+-])(\d{2}):(\d{2}))$/.exec(String(value));
+  if (!iso) throw new Error(\`Invalid date for \${field}; CAP date-time values must include an explicit timezone.\`);
+  {
     const [year, month, day, hour, minute, second] = iso.slice(1, 7).map(Number);
     const calendar = new Date(0);
     calendar.setUTCFullYear(year, month - 1, day);
@@ -59,7 +60,7 @@ function capDateTime(value, field) {
     if (calendar.getUTCFullYear() !== year || calendar.getUTCMonth() !== month - 1 ||
         calendar.getUTCDate() !== day || hour > 23 || minute > 59 || second > 59 ||
         offsetHour > 14 || offsetMinute > 59 || (offsetHour === 14 && offsetMinute !== 0)) {
-      throw new Error(`Invalid date for ${field}.`);
+      throw new Error(\`Invalid date for \${field}.\`);
     }
   }
   const date = new Date(value);

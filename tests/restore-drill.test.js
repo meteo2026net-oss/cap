@@ -205,7 +205,7 @@ test("restore validation rejects impossible CAP calendar dates and timezone offs
     database.prepare(`
       INSERT INTO alerts(identifier,sender,sent,status,msg_type,references_text,workflow)
       VALUES (?,?,?,?,?,?,?)
-    `).run("CAP-INVALID-" + label, "warnings@example.test", sent, "Actual", msgType, references, "pending");
+    `).run("CAP-INVALID-" + label.replaceAll(" ", "-"), "warnings@example.test", sent, "Actual", msgType, references, "pending");
     await assert.rejects(
       createDatabaseBackup(database, path.join(root, "backups")),
       /invalid CAP sent timestamp|malformed CAP reference/

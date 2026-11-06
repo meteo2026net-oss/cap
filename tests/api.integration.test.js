@@ -943,6 +943,18 @@ test("API enforces role separation, public-feed filtering and account deactivati
     token: publisher, method: "POST", body: { status: "failed", details: "Missing lease token" }
   });
   assert.equal(missingLeaseReceipt.status, 400, "receipt API must require a lease token");
+  const malformedLeaseReceipt = await request(`/api/delivery/outbox/${queuedDelivery.id}/receipt`, {
+    token: publisher, method: "POST", body: { status: "failed", leaseToken: "not-a-uuid" }
+  });
+  assert.equal(malformedLeaseReceipt.status, 400, "receipt API must reject malformed lease tokens");
+  const wrongLeaseReceipt = await request(`/api/delivery/outbox/${queuedDelivery.id}/receipt`, {
+    token: publisher, method: "POST", body: { status: "failed", leaseToken: "00000000-0000-4000-8000-000000000000" }
+  });
+  assert.equal(wrongLeaseReceipt.status, 409, "receipt API must reject a well-formed but unowned lease token");
+  const invalidReceiptStatus = await request(`/api/delivery/outbox/${queuedDelivery.id}/receipt`, {
+    token: publisher, method: "POST", body: { status: "accepted", leaseToken: claimedDelivery.data.delivery.lease_token }
+  });
+  assert.equal(invalidReceiptStatus.status, 400, "receipt API must accept only delivered or failed outcomes");
   const failedReceipt = await request(`/api/delivery/outbox/${queuedDelivery.id}/receipt`, {
     token: publisher, method: "POST", body: { status: "failed", leaseToken: claimedDelivery.data.delivery.lease_token, details: "Synthetic test failure" }
   });
@@ -965,6 +977,11 @@ test("API enforces role separation, public-feed filtering and account deactivati
   });
   assert.equal(deliveredReceipt.status, 200);
   assert.equal(deliveredReceipt.data.delivery.status, "delivered");
+  const duplicateDeliveredReceipt = await request(`/api/delivery/outbox/${queuedDelivery.id}/receipt`, {
+    token: publisher, method: "POST", body: { status: "delivered", leaseToken: retryClaim.data.delivery.lease_token }
+  });
+  assert.equal(duplicateDeliveredReceipt.status, 409,
+    "a duplicate receipt must not rewrite a delivery after its lease has been consumed");
 
   const inboxDatabase = new Database(path.join(cwd, "storage", "cap.sqlite"));
   try {

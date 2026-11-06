@@ -961,6 +961,10 @@ test("API enforces role separation, public-feed filtering and account deactivati
     token: publisher, method: "POST", body: {}
   });
   assert.equal(claimedDelivery.status, 200);
+  assert.equal(claimedDelivery.headers.get("cache-control"), "no-store",
+    "delivery lease credentials must not be cached");
+  assert.equal(claimedDelivery.headers.get("pragma"), "no-cache",
+    "delivery lease responses must carry a legacy no-cache directive");
   assert.equal(claimedDelivery.data.delivery.status, "sending");
   assert.equal(claimedDelivery.data.external_adapters_enabled, false);
   assert.match(claimedDelivery.data.delivery.payload, /<alert xmlns=/);

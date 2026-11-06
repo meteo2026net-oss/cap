@@ -442,3 +442,35 @@ test("rejects malformed CAP resource records and non-text resource URLs", () => 
     }), /CAP resource|resourceDesc and mimeType/);
   }
 });
+
+
+test("rejects malformed CAP info collections and nested area records with clear validation errors", () => {
+  const block = {
+    language: "en-GB", category: "Met", event: "Heavy rainfall",
+    urgency: "Expected", severity: "Moderate", certainty: "Likely",
+    area: { areaDesc: "District", circle: "51.5,-0.1 10" }
+  };
+  for (const field of ["categories", "response_types"]) {
+    assert.throws(() => validateAlert({
+      ...valid, info_blocks: [{ ...block, [field]: { invalid: true } }]
+    }), new RegExp(`CAP info ${field} must be an array`));
+  }
+  for (const [area, pattern] of [
+    [{ areaDesc: "District", circle: "51.5,-0.1 10", polygons: "not-an-array" }, /CAP area polygons must be an array/],
+    [{ areaDesc: "District", circle: "51.5,-0.1 10", geocodes: {} }, /CAP area geocodes must be an array/],
+    [{ areaDesc: "District", circle: 12 }, /CAP area circle must be text/],
+    [{ areaDesc: "District", circle: "51.5,-0.1 10", geocodes: [null] }, /geocodes require object records/],
+    [{ areaDesc: "District", circle: "51.5,-0.1 10", geocodes: ["bad-record"] }, /geocodes require object records/],
+    [{ areaDesc: "District", circle: "51.5,-0.1 10", polygons: [null] }, /polygon and circle entries must be text/],
+    [null, /Each CAP area must be an object/]
+  ]) {
+    assert.throws(() => buildCapXml({
+      ...valid, info_blocks: [{ ...block, area }]
+    }), pattern);
+  }
+  for (const parameter of [null, "invalid", { valueName: 5, value: "35" }, { valueName: "rain", value: {} }]) {
+    assert.throws(() => buildCapXml({
+      ...valid, info_blocks: [{ ...block, parameters: [parameter] }]
+    }), /CAP parameters require object records/);
+  }
+});

@@ -327,3 +327,31 @@ test("checkpoint initialization anchors an existing verified chain once", async 
     fs.rmSync(directory, { recursive: true, force: true });
   }
 });
+
+
+test("checkpoint initialization refuses to anchor a tampered audit chain", async () => {
+  const fs = await import("node:fs");
+  const os = await import("node:os");
+  const path = await import("node:path");
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "cap-audit-invalid-bootstrap-"));
+  const checkpointPath = path.join(directory, "anchor.json");
+  const checkpointSecret = "test-only-checkpoint-secret-at-least-32-bytes";
+  const database = new Database(":memory:");
+  try {
+    database.exec("CREATE TABLE audit_log (id INTEGER PRIMARY KEY,user_id INTEGER,alert_id INTEGER,action TEXT NOT NULL,details TEXT,created_at TEXT NOT NULL,previous_hash TEXT,entry_hash TEXT)");
+    installAuditLogGuards(database);
+    appendAuditLog(database, { action: "original_event" });
+    database.exec("DROP TRIGGER audit_log_no_update");
+    database.prepare("UPDATE audit_log SET details=? WHERE id=1").run("tampered_event");
+
+    assert.throws(
+      () => initializeAuditCheckpoint(database, { checkpointPath, checkpointSecret }),
+      /Cannot anchor an invalid audit chain/
+    );
+    assert.equal(fs.existsSync(checkpointPath), false,
+      "an invalid audit chain must never produce a trusted external checkpoint");
+  } finally {
+    database.close();
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});

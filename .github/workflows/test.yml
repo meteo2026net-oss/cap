@@ -5,7 +5,8 @@ permissions:
 
 concurrency:
   group: cap-system-checks-${{ github.ref }}
-  cancel-in-progress: true
+  # Preserve the full Linux and Windows test matrix when successive commits are pushed.
+  cancel-in-progress: false
 
 on:
   workflow_dispatch:

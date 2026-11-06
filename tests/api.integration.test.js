@@ -1182,6 +1182,11 @@ test("API enforces role separation, public-feed filtering and account deactivati
       msg_type + " should appear in the source alert relationship history");
     assert.ok(relationHistory.data.messages.some(message => message.identifier === actualIdentifier),
       "relationship history should retain the original CAP message");
+    assert.ok(relationHistory.data.relations.some(edge =>
+      edge.from_id === actualRow.id && edge.to_id === derived.data.id && edge.msg_type === msg_type
+    ), msg_type + " relationship history should expose a validated parent-to-derived-message edge");
+    assert.equal(relationHistory.data.relation_count, relationHistory.data.relations.length,
+      "relationship edge count should match the returned edge list");
     const derivedRelations = await request(`/api/alerts/${derived.data.id}/relations`, { token: forecaster });
     assert.equal(derivedRelations.status, 200);
     assert.ok(derivedRelations.data.messages.some(message => message.id === actualRow.id),

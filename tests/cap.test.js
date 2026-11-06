@@ -346,3 +346,24 @@ test("rejects normalized impossible calendar dates and out-of-range offsets in a
     assert.throws(() => validateAlert({ ...valid, info_blocks: [{ ...block, [field]: value }] }), /Invalid date/);
   }
 });
+
+test("rejects CAP date-only and timezone-free date-time values", () => {
+  for (const [field, value] of [
+    ["sent", "2026-11-05"],
+    ["sent", "2026-11-05T12:30:00"],
+    ["effective", "2026-11-05T12:30:00"],
+    ["onset", "2026-11-05"],
+    ["expires", "2026-11-05T18:00:00"]
+  ]) {
+    assert.throws(() => validateAlert({ ...valid, [field]: value }), /explicit timezone/);
+  }
+  const block = {
+    language: "en-GB", category: "Met", event: "Heavy rainfall",
+    urgency: "Expected", severity: "Moderate", certainty: "Likely",
+    area: { areaDesc: "District", circle: "51.5,-0.1 10" }
+  };
+  assert.throws(() => validateAlert({
+    ...valid,
+    info_blocks: [{ ...block, effective: "2026-11-05T12:30:00" }]
+  }), /explicit timezone/);
+});

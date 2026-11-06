@@ -732,6 +732,7 @@ app.get("/api/alerts/:id/relations",auth,(req,res)=>{
  if(!root) return res.status(404).json({error:"Alert not found"});
  const found=new Map([[root.id,root]]);
  const queue=[root];
+ let truncated=false;
  while(queue.length && found.size<100){
   const current=queue.shift();
   for(const reference of String(current.references_text||"").trim().split(/\s+/).filter(Boolean)){
@@ -747,6 +748,7 @@ app.get("/api/alerts/:id/relations",auth,(req,res)=>{
   }
   const currentReferencePrefix=[current.sender,current.identifier,""].join(",");
   const children=db.prepare("SELECT "+columns+" FROM alerts WHERE instr(' '||COALESCE(references_text,'')||' ',?)>0 ORDER BY sent,id LIMIT 100").all(" "+currentReferencePrefix);
+  if(children.length===100) truncated=true;
   for(const child of children) {
    const matchesCurrent=String(child.references_text||"").trim().split(/\s+/).some(reference=>{
     const parts=reference.split(",");
@@ -782,7 +784,7 @@ app.get("/api/alerts/:id/relations",auth,(req,res)=>{
   root_id:root.id,
   count:messages.length,
   relation_count:relations.length,
-  truncated:queue.length>0,
+  truncated:truncated || queue.length>0,
   messages,
   relations
  });

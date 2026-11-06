@@ -65,6 +65,11 @@ const origins = (process.env.CORS_ORIGINS || "").split(",").map(s=>s.trim()).fil
 app.use(cors({ origin: origins.length ? origins : false }));
 app.use("/api", rateLimit({ windowMs: 15*60*1000, limit: apiRateLimit, standardHeaders: true, legacyHeaders: false }));
 app.use("/api/auth", rateLimit({ windowMs: 15*60*1000, limit: 60, skipSuccessfulRequests: true, standardHeaders: true, legacyHeaders: false }));
+app.use("/api/auth", (_req,res,next) => {
+ res.set("Cache-Control","no-store");
+ res.set("Pragma","no-cache");
+ next();
+});
 
 const webhookIngressEnabled = process.env.CAP_WEBHOOK_INGRESS_ENABLED === "true";
 const webhookSecret = process.env.CAP_WEBHOOK_SECRET || "";

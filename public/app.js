@@ -503,16 +503,19 @@ $("#addCapResourceBtn")?.addEventListener("click",()=>{
  target.resources=Array.isArray(target.resources)?target.resources:[];
  if(editingCapResource){
   const {blockIndex,resourceIndex}=editingCapResource;
-  if(blockIndex<0||resourceIndex<0||!blocks[blockIndex]||!Array.isArray(blocks[blockIndex].resources)||!blocks[blockIndex].resources[resourceIndex]){
-   status.textContent="تعذر العثور على المورد المراد تعديله؛ أعد اختيار المورد من القائمة.";return;
+  const source=blocks[blockIndex];
+  if(!source||!Array.isArray(source.resources)||!source.resources[resourceIndex]){
+   status.textContent="تعذر العثور على المورد المراد تعديله؛ أعد اختياره من القائمة.";return;
   }
-  blocks[blockIndex].resources[resourceIndex]=resource;
+  if(blockIndex===blockNumber-1)target.resources[resourceIndex]=resource;
+  else{source.resources.splice(resourceIndex,1);target.resources.push(resource);}
  }else target.resources.push(resource);
  field.value=JSON.stringify(blocks,null,2);
+ const wasEditing=Boolean(editingCapResource);
  editingCapResource=null;
  $("#addCapResourceBtn").textContent="إضافة المورد إلى JSON";
  renderCapResourceList();
- status.textContent=editingCapResource?"":(blocks[blockNumber-1].resources.length?"تم حفظ المورد في كتلة المعلومات رقم "+blockNumber+".":"تمت إضافة المورد.");
+ status.textContent=(wasEditing?"تم تحديث المورد ونقله إلى":"تمت إضافة المورد إلى")+" كتلة المعلومات رقم "+blockNumber+".";
  $("#resourceDesc").value="";$("#resourceUri").value="";$("#resourceSize").value="";$("#resourceDigest").value="";
 });
 $("#capResourceList")?.addEventListener("click",event=>{

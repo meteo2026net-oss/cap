@@ -452,6 +452,16 @@ app.post("/api/auth/change-password",auth,passwordChangeLimiter,(req,res)=>{
   res.status(500).json({error:"Unable to safely change password"});
  }
 });
+app.use("/api/me",(_req,res,next)=>{
+ res.set("Cache-Control","no-store");
+ res.set("Pragma","no-cache");
+ next();
+});
+app.use("/api/users",(_req,res,next)=>{
+ res.set("Cache-Control","no-store");
+ res.set("Pragma","no-cache");
+ next();
+});
 app.get("/api/me",auth,(req,res)=>res.json({user:req.user}));
 
 const userSchema = z.object({
@@ -479,11 +489,6 @@ app.post("/api/users",auth,roles("admin"),(req,res)=>{
  }
 });
 
-app.use("/api/users/:id/password-reset",(_req,res,next)=>{
- res.set("Cache-Control","no-store");
- res.set("Pragma","no-cache");
- next();
-});
 const adminPasswordResetLimiter=rateLimit({windowMs:15*60*1000,limit:5,standardHeaders:true,legacyHeaders:false});
 app.post("/api/users/:id/password-reset",auth,roles("admin"),adminPasswordResetLimiter,(req,res)=>{
  const id=Number(req.params.id);

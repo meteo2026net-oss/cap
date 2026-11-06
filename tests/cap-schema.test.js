@@ -209,3 +209,42 @@ test("CAP 1.2 XSD accepts escaped multilingual text and combined area/resource s
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("independent OASIS XSD validator rejects malformed CAP documents", { skip: !hasSchema || !hasXmllint }, () => {
+  const xml = buildCapXml({
+    identifier: makeIdentifier(),
+    sender: "alerts@example.test",
+    sent: "2026-11-07T05:00:00.000Z",
+    status: "Test",
+    msg_type: "Alert",
+    scope: "Public",
+    info_blocks: [{
+      language: "en-GB",
+      categories: ["Met"],
+      event: "Heavy rainfall",
+      urgency: "Expected",
+      severity: "Moderate",
+      certainty: "Likely",
+      headline: "Heavy rain warning",
+      description: "Heavy rain is possible.",
+      areas: [{ areaDesc: "Test district", circle: "51.5,-0.1 10" }]
+    }]
+  });
+  const invalidDocuments = [
+    ["missing required sender", xml.replace(/<sender>[^<]*<\\/sender>/, "")],
+    ["invalid severity enumeration", xml.replace("<severity>Moderate</severity>", "<severity>Catastrophic</severity>")]
+  ];
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cap-xsd-negative-"));
+  try {
+    for (const [label, invalidXml] of invalidDocuments) {
+      assert.notEqual(invalidXml, xml, `Negative fixture was not applied: ${label}`);
+      const xmlPath = path.join(dir, "invalid.xml");
+      fs.writeFileSync(xmlPath, invalidXml, "utf8");
+      const result = spawnSync("xmllint", ["--noout", "--schema", schemaPath, xmlPath], { encoding: "utf8" });
+      assert.notEqual(result.status, 0,
+        `Independent OASIS XSD validator unexpectedly accepted ${label}`);
+    }
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});

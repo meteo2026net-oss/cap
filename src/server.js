@@ -746,13 +746,13 @@ app.get("/api/alerts/:id/relations",auth,(req,res)=>{
   for(const child of children){if(!found.has(child.id)){found.set(child.id,child);queue.push(child);}}
  }
  const messages=[...found.values()].sort((a,b)=>a.sent.localeCompare(b.sent)||a.id-b.id);
- const byIdentity=new Map(messages.map(message=>[message.sender+"\\0"+message.identifier,message]));
+ const byIdentity=new Map(messages.map(message=>[message.sender+"\0"+message.identifier,message]));
  const relations=[];
  for(const child of messages) {
-  for(const reference of String(child.references_text||"").trim().split(/\\s+/).filter(Boolean)) {
+  for(const reference of String(child.references_text||"").trim().split(/\s+/).filter(Boolean)) {
    const parts=reference.split(",");
    if(parts.length!==3 || parts.some(part=>!part)) continue;
-   const parent=byIdentity.get(parts[0]+"\\0"+parts[1]);
+   const parent=byIdentity.get(parts[0]+"\0"+parts[1]);
    if(!parent) continue;
    const referenceTime=Date.parse(parts[2]);
    const parentTime=Date.parse(parent.sent);

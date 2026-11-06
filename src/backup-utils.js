@@ -69,11 +69,11 @@ function inspectAlertState(database) {
 
   for (const alert of alerts) {
     if (!alert.identifier?.trim() || !alert.sender?.trim() ||
-        !/^[^\\s,<>]+$/.test(alert.identifier) || !/^[^\\s,<>]+$/.test(alert.sender)) {
+        !/^[^\s,<>]+$/.test(alert.identifier) || !/^[^\s,<>]+$/.test(alert.sender)) {
       throw new Error("Restored alert has an invalid CAP sender or identifier");
     }
     if (!Number.isFinite(Date.parse(alert.sent)) ||
-        !/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{2}:\\d{2})$/.test(alert.sent)) {
+        !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(alert.sent)) {
       throw new Error(`Restored alert ${alert.identifier} has an invalid CAP sent timestamp`);
     }
     if (!CAP_STATUSES.has(alert.status)) throw new Error(`Restored alert ${alert.identifier} has an invalid CAP status`);
@@ -84,15 +84,15 @@ function inspectAlertState(database) {
     messageTypeCounts[alert.msg_type] = (messageTypeCounts[alert.msg_type] || 0) + 1;
     workflowCounts[alert.workflow] = (workflowCounts[alert.workflow] || 0) + 1;
 
-    const references = String(alert.references_text || "").trim().split(/\\s+/).filter(Boolean);
+    const references = String(alert.references_text || "").trim().split(/\s+/).filter(Boolean);
     if (["Update", "Cancel", "Ack", "Error"].includes(alert.msg_type) && !references.length) {
       throw new Error(`Restored CAP ${alert.msg_type} ${alert.identifier} is missing its references`);
     }
     for (const reference of references) {
       const parts = reference.split(",");
       if (parts.length !== 3 || parts.some(part => !part.trim()) ||
-          !/^[^\\s<>]+$/.test(parts[0]) || !/^[^\\s<>]+$/.test(parts[1]) ||
-          !/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{2}:\\d{2})$/.test(parts[2]) ||
+          !/^[^\s<>]+$/.test(parts[0]) || !/^[^\s<>]+$/.test(parts[1]) ||
+          !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(parts[2]) ||
           !Number.isFinite(Date.parse(parts[2]))) {
         throw new Error(`Restored alert ${alert.identifier} contains a malformed CAP reference`);
       }

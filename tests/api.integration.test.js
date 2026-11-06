@@ -325,8 +325,13 @@ test("API enforces role separation, public-feed filtering and account deactivati
   });
   assert.equal(passwordReplacement.status, 200);
   assert.equal(passwordReplacement.data.password_change_required, false);
-  assert.equal((await request("/api/alerts", { token: passwordReplacement.data.token })).status, 200,
+  const accessibleAlerts = await request("/api/alerts", { token: passwordReplacement.data.token });
+  assert.equal(accessibleAlerts.status, 200,
     "normal application access should resume only after the forced password change");
+  assert.equal(accessibleAlerts.headers.get("cache-control"), "no-store",
+    "authenticated warning records must not be cached");
+  assert.equal(accessibleAlerts.headers.get("pragma"), "no-cache",
+    "authenticated warning records must carry a legacy no-cache directive");
   assert.equal((await request("/api/me", { token: temporaryLogin.data.token })).status, 401,
     "changing the temporary password must revoke its prior session");
 

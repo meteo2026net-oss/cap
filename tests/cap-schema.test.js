@@ -135,7 +135,7 @@ test("optional CAP metadata, response types, parameters, resources and area fiel
         size: 4096,
         uri: "https://example.org/rain.png",
         derefUri: "embedded-map",
-        digest: "0123456789abcdef"
+        digest: "qZk+NkcGgWq6PiVxeFDCbJzQ2J0="
       }]
     }]
   });

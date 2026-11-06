@@ -740,10 +740,17 @@ app.get("/api/alerts/:id/relations",auth,(req,res)=>{
    const parent=db.prepare("SELECT "+columns+" FROM alerts WHERE sender=? AND identifier=? AND (sent=? OR substr(sent,1,19)||char(45)||'00:00'=?)").get(parts[0],parts[1],parts[2],parts[2]);
    if(parent && !found.has(parent.id)){found.set(parent.id,parent);queue.push(parent);}
   }
-  const normalizedSent=current.sent.replace(/\.\d{3}Z$/,"-00:00");
-  const currentReference=[current.sender,current.identifier,normalizedSent].join(",");
-  const children=db.prepare("SELECT "+columns+" FROM alerts WHERE instr(' '||COALESCE(references_text,'')||' ',?)>0 ORDER BY sent,id LIMIT 100").all(" "+currentReference+" ");
-  for(const child of children){if(!found.has(child.id)){found.set(child.id,child);queue.push(child);}}
+  const currentReferencePrefix=[current.sender,current.identifier,""].join(",");
+  const children=db.prepare("SELECT "+columns+" FROM alerts WHERE instr(' '||COALESCE(references_text,'')||' ',?)>0 ORDER BY sent,id LIMIT 100").all(" "+currentReferencePrefix);
+  for(const child of children) {
+   const matchesCurrent=String(child.references_text||"").trim().split(/\s+/).some(reference=>{
+    const parts=reference.split(",");
+    return parts.length===3 && parts[0]===current.sender && parts[1]===current.identifier &&
+     Number.isFinite(Date.parse(parts[2])) && Number.isFinite(Date.parse(current.sent)) &&
+     Math.floor(Date.parse(parts[2])/1000)===Math.floor(Date.parse(current.sent)/1000);
+   });
+   if(matchesCurrent && !found.has(child.id)){found.set(child.id,child);queue.push(child);}
+  }
  }
  const messages=[...found.values()].sort((a,b)=>a.sent.localeCompare(b.sent)||a.id-b.id);
  const byIdentity=new Map(messages.map(message=>[message.sender+"\0"+message.identifier,message]));

@@ -747,9 +747,9 @@ app.get("/api/alerts/:id/relations",auth,(req,res)=>{
    if(parent && !found.has(parent.id)){found.set(parent.id,parent);queue.push(parent);}
   }
   const currentReferencePrefix=[current.sender,current.identifier,""].join(",");
-  const children=db.prepare("SELECT "+columns+" FROM alerts WHERE instr(' '||COALESCE(references_text,'')||' ',?)>0 ORDER BY sent,id LIMIT 100").all(" "+currentReferencePrefix);
-  if(children.length===100) truncated=true;
-  for(const child of children) {
+  const children=db.prepare("SELECT "+columns+" FROM alerts WHERE instr(' '||COALESCE(references_text,'')||' ',?)>0 ORDER BY sent,id LIMIT 101").all(" "+currentReferencePrefix);
+  if(children.length>100) truncated=true;
+  for(const child of children.slice(0,100)) {
    const matchesCurrent=String(child.references_text||"").trim().split(/\s+/).some(reference=>{
     const parts=reference.split(",");
     return parts.length===3 && parts[0]===current.sender && parts[1]===current.identifier &&

@@ -596,7 +596,7 @@ async function loadAlertRelations(id){
   const graph=document.createElement("section");graph.className="reviewHistory small";
   const graphHeader=document.createElement("div");graphHeader.className="sectionHead";
   const graphTitle=document.createElement("b");graphTitle.textContent="خريطة الترابط بين الرسائل";
-  const exportActions=document.createElement("div");exportActions.className="buttonRow";
+  const exportActions=document.createElement("div");exportActions.className="actions";
   const exportGraph=document.createElement("button");exportGraph.type="button";exportGraph.className="secondary";exportGraph.textContent="تصدير السلسلة JSON";
   exportGraph.addEventListener("click",()=>{
    const exportData={format:"meteo-cap-lineage-v1",exported_at:new Date().toISOString(),root_id:data.root_id,count:data.count,relation_count:data.relation_count??edges.length,truncated:data.truncated===true,messages:data.messages,relations:edges};
@@ -609,12 +609,12 @@ async function loadAlertRelations(id){
   exportCsv.addEventListener("click",()=>{
    const byId=new Map(data.messages.map(message=>[message.id,message]));
    const columns=["from_id","from_identifier","from_headline","to_id","to_identifier","to_headline","message_type","reference","from_workflow","to_workflow","from_sent","to_sent"];
-   const cell=value=>{const text=String(value??"");return /[",\\r\\n]/.test(text)?'"'+text.replace(/"/g,'""')+'"':text;};
+   const cell=value=>{const text=String(value??"");return /[",\r\n]/.test(text)?'"'+text.replace(/"/g,'""')+'"':text;};
    const rows=edges.map(edge=>{
     const from=byId.get(edge.from_id)||{},to=byId.get(edge.to_id)||{};
     return [edge.from_id,from.identifier,from.headline||from.event,edge.to_id,to.identifier,to.headline||to.event,edge.msg_type,edge.reference,from.workflow,to.workflow,from.sent,to.sent];
    });
-   const csv="\\uFEFF"+[columns,...rows].map(row=>row.map(cell).join(",")).join("\\r\\n")+"\\r\\n";
+   const csv="\uFEFF"+[columns,...rows].map(row=>row.map(cell).join(",")).join("\r\n")+"\r\n";
    const blob=new Blob([csv],{type:"text/csv;charset=utf-8"});
    const url=URL.createObjectURL(blob),anchor=document.createElement("a");
    anchor.href=url;anchor.download="cap-lineage-"+String(data.root_id||id)+".csv";

@@ -405,3 +405,39 @@ test("rejects CAP date-only and timezone-free date-time values", () => {
     info_blocks: [{ ...block, effective: "2026-11-05T12:30:00" }]
   }), /explicit timezone/);
 });
+
+
+test("rejects malformed CAP info block and resource containers instead of silently ignoring them", () => {
+  assert.throws(() => validateAlert({ ...valid, info_blocks: {} }), /info_blocks must be an array/);
+  assert.throws(() => validateAlert({ ...valid, info_blocks: [null] }), /info block must be an object/);
+
+  const block = {
+    language: "en-GB", category: "Met", event: "Heavy rainfall",
+    urgency: "Expected", severity: "Moderate", certainty: "Likely",
+    area: { areaDesc: "District", circle: "51.5,-0.1 10" }
+  };
+  for (const field of ["resources", "parameters", "areas"]) {
+    assert.throws(() => validateAlert({
+      ...valid, info_blocks: [{ ...block, [field]: { invalid: true } }]
+    }), new RegExp(`CAP info ${field} must be an array`));
+  }
+});
+
+test("rejects malformed CAP resource records and non-text resource URLs", () => {
+  const block = {
+    language: "en-GB", category: "Met", event: "Heavy rainfall",
+    urgency: "Expected", severity: "Moderate", certainty: "Likely",
+    area: { areaDesc: "District", circle: "51.5,-0.1 10" }
+  };
+  for (const resource of [
+    null,
+    "not-an-object",
+    { resourceDesc: 123, mimeType: "image/png" },
+    { resourceDesc: "Map", mimeType: 123 },
+    { resourceDesc: "Map", mimeType: "image/png", uri: 123 }
+  ]) {
+    assert.throws(() => buildCapXml({
+      ...valid, info_blocks: [{ ...block, resources: [resource] }]
+    }), /CAP resource|resourceDesc and mimeType/);
+  }
+});

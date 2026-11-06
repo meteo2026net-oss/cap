@@ -970,6 +970,8 @@ app.post("/api/alerts/:id/publish",auth,roles("admin","publisher"),(req,res)=>{
  res.json({ok:true,workflow:"published",delivery:{id:delivery.id,status:delivery.status,channel:delivery.channel},note:"Internal publication only. External delivery adapters remain disabled; the outbox entry is queued for controlled processing."});
 });
 app.get("/api/webhooks/inbox",auth,roles("admin","reviewer"),(req,res)=>{
+ res.set("Cache-Control","no-store");
+ res.set("Pragma","no-cache");
  const status=req.query.status;
  if(status!==undefined && !["pending","reviewed","rejected"].includes(status)) return res.status(400).json({error:"Invalid webhook inbox status"});
  const beforeRaw=req.query.before_id;
@@ -988,6 +990,8 @@ app.get("/api/webhooks/inbox",auth,roles("admin","reviewer"),(req,res)=>{
  });
 });
 app.patch("/api/webhooks/inbox/:id/review",auth,roles("admin","reviewer"),(req,res)=>{
+ res.set("Cache-Control","no-store");
+ res.set("Pragma","no-cache");
  const id=Number(req.params.id);
  if(!Number.isSafeInteger(id) || id<1) return res.status(400).json({error:"Invalid inbox id"});
  const parsed=z.object({status:z.enum(["reviewed","rejected"]),note:z.string().max(2000).optional().default("")}).safeParse(req.body);

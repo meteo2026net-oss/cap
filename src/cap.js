@@ -134,8 +134,12 @@ function normalizeResource(resource) {
   if (!resource.resourceDesc?.trim() || !resource.mimeType?.trim()) throw new Error("CAP resources require resourceDesc and mimeType.");
   const out = { resourceDesc: resource.resourceDesc, mimeType: resource.mimeType };
   if (resource.size !== undefined) {
-    if (!Number.isInteger(Number(resource.size)) || Number(resource.size) < 0) throw new Error("CAP resource size must be a non-negative integer.");
-    out.size = String(resource.size);
+    const sizeText = typeof resource.size === "string" ? resource.size.trim() : resource.size;
+    const size = typeof sizeText === "number"
+      ? sizeText
+      : typeof sizeText === "string" && /^\d+$/.test(sizeText) ? Number(sizeText) : NaN;
+    if (!Number.isSafeInteger(size) || size < 0) throw new Error("CAP resource size must be a non-negative integer.");
+    out.size = String(size);
   }
   for (const key of ["uri","derefUri","digest"]) if (resource[key]) out[key] = resource[key];
   return out;

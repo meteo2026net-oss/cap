@@ -1017,6 +1017,11 @@ app.patch("/api/webhooks/inbox/:id/review",auth,roles("admin","reviewer"),(req,r
  res.json({ok:true,id,status:data.status,reviewed_by:req.user.id,reviewer_username:req.user.username});
 });
 
+app.use("/api/delivery",(_req,res,next)=>{
+ res.set("Cache-Control","no-store");
+ res.set("Pragma","no-cache");
+ next();
+});
 app.get("/api/delivery/outbox",auth,roles("admin","publisher"),(req,res)=>{
  const status=req.query.status;
  if(status!==undefined && !["queued","sending","delivered","failed","dead_letter"].includes(status)) return res.status(400).json({error:"Invalid delivery status filter"});

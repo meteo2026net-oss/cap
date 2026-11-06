@@ -594,7 +594,17 @@ async function loadAlertRelations(id){
   list.replaceChildren();
   const edges=Array.isArray(data.relations)?data.relations:[];
   const graph=document.createElement("section");graph.className="reviewHistory small";
-  const graphTitle=document.createElement("b");graphTitle.textContent="خريطة الترابط بين الرسائل";graph.append(graphTitle);
+  const graphHeader=document.createElement("div");graphHeader.className="sectionHead";
+  const graphTitle=document.createElement("b");graphTitle.textContent="خريطة الترابط بين الرسائل";
+  const exportGraph=document.createElement("button");exportGraph.type="button";exportGraph.className="secondary";exportGraph.textContent="تصدير السلسلة JSON";
+  exportGraph.addEventListener("click",()=>{
+   const exportData={format:"meteo-cap-lineage-v1",exported_at:new Date().toISOString(),root_id:data.root_id,count:data.count,relation_count:data.relation_count??edges.length,truncated:data.truncated===true,messages:data.messages,relations:edges};
+   const blob=new Blob([JSON.stringify(exportData,null,2)],{type:"application/json;charset=utf-8"});
+   const url=URL.createObjectURL(blob),anchor=document.createElement("a");
+   anchor.href=url;anchor.download="cap-lineage-"+String(data.root_id||id)+".json";
+   document.body.append(anchor);anchor.click();anchor.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
+  });
+  graphHeader.append(graphTitle,exportGraph);graph.append(graphHeader);
   if(edges.length){
    const edgeList=document.createElement("div");edgeList.className="relationEdges";
    for(const edge of edges){

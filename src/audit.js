@@ -230,6 +230,17 @@ export function verifyAuditChain(database, options = {}) {
     }
 
     const expected = digest(row);
+    if (typeof row.entry_hash !== "string" || !/^[a-f0-9]{64}$/.test(row.entry_hash)) {
+      return {
+        valid: false,
+        integrity_capabilities: integrityCapabilities,
+        verified_entries: verifiedEntries,
+        total_hashed_entries: totalHashedEntries,
+        legacy_unhashed_entries: legacyEntries,
+        first_invalid_id: row.id,
+        reason: "entry_hash_format_invalid"
+      };
+    }
     const actualBuffer = Buffer.from(row.entry_hash, "hex");
     const expectedBuffer = Buffer.from(expected, "hex");
     if (actualBuffer.length !== expectedBuffer.length || !timingSafeEqual(actualBuffer, expectedBuffer)) {

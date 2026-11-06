@@ -71,6 +71,21 @@ test("failed delivery can be requeued and retains attempt history",()=>{
  } finally { db.close(); }
 });
 
+test("outbox enforces the 2 MB payload limit using UTF-8 bytes", () => {
+ const db = fixture();
+ try {
+  const multibytePayload = "😀".repeat(500_001);
+  assert.ok(multibytePayload.length < 2_000_000);
+  assert.ok(Buffer.byteLength(multibytePayload, "utf8") > 2_000_000);
+  assert.throws(
+   () => enqueueDelivery(db, { alertId: 1, payload: multibytePayload }),
+   /UTF-8 string up to 2 MB/
+  );
+  const accepted = enqueueDelivery(db, { alertId: 1, payload: "😀".repeat(500_000) });
+  assert.equal(accepted.status, "queued");
+ } finally { db.close(); }
+});
+
 test("outbox validates payload size and channel",()=>{
  const db=fixture();
  try {

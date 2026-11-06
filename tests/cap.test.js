@@ -158,7 +158,8 @@ test("validates CAP resource MIME types, URLs, dereferenced content and SHA-1 di
   assert.throws(() => build({ ...base, uri: "javascript:alert(1)" }), /HTTP or HTTPS/);
   assert.throws(() => build({ ...base, uri: "https://user:pass@example.org/map.png" }), /embedded credentials/);
   assert.throws(() => build({ ...base, digest: "0123456789abcdef" }), /Base64-encoded SHA-1/);
-  assert.throws(() => build({ ...base, derefUri: "bad\u0000value" }), /without control characters/);
+  assert.throws(() => build({ ...base, derefUri: "not-base64!" }), /canonical Base64/);
+  assert.throws(() => build({ ...base, derefUri: "ZW1iZWRkZWQtbWFw " }), /canonical Base64/);
   assert.throws(() => build({ ...base, derefUri: "😀".repeat(500_001) }), /up to 2 MB/);
 });
 
@@ -336,7 +337,7 @@ test("serializes optional CAP metadata, response types, parameters and full area
         mimeType: "image/png",
         size: 4096,
         uri: "https://example.org/rain.png",
-        derefUri: "embedded-map",
+        derefUri: "ZW1iZWRkZWQtbWFw",
         digest: "qZk+NkcGgWq6PiVxeFDCbJzQ2J0="
       }]
     }]

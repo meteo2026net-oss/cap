@@ -1240,6 +1240,15 @@ test("API enforces role separation, public-feed filtering and account deactivati
   assert.equal((await request(`/api/alerts/${chainedUpdate.data.id}/publish`, {
     token: publisher, method: "POST", body: {}
   })).status, 200);
+  const lineageDb = new Database(path.join(cwd, "storage", "cap.sqlite"));
+  try {
+    const parentIdentity = lineageDb.prepare("SELECT sender,identifier,sent FROM alerts WHERE id=?").get(publishedUpdate.id);
+    const equivalentUtcReference = parentIdentity.sent.replace(/\\.\\d{3}Z$/, "+00:00");
+    lineageDb.prepare("UPDATE alerts SET references_text=? WHERE id=?")
+      .run(`${parentIdentity.sender},${parentIdentity.identifier},${equivalentUtcReference}`, chainedUpdate.data.id);
+  } finally {
+    lineageDb.close();
+  }
   const chainedLineage = await request(`/api/alerts/${chainedUpdate.data.id}/relations`, { token: forecaster });
   assert.equal(chainedLineage.status, 200);
   assert.ok(chainedLineage.data.messages.some(message => message.id === actualRow.id),

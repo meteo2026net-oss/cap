@@ -95,7 +95,24 @@ function validatePolygon(value) {
   }
 }
 function validateArea(area) {
-  if (!area?.areaDesc?.trim()) throw new Error("Every CAP area requires areaDesc.");
+  if (!area || typeof area !== "object" || Array.isArray(area)) {
+    throw new Error("Each CAP area must be an object.");
+  }
+  for (const field of ["polygons", "circles", "geocodes"]) {
+    if (area[field] !== undefined && !Array.isArray(area[field])) {
+      throw new Error(`CAP area ${field} must be an array.`);
+    }
+  }
+  for (const field of ["polygon", "circle"]) {
+    if (area[field] !== undefined && typeof area[field] !== "string") {
+      throw new Error(`CAP area ${field} must be text.`);
+    }
+  }
+  if (typeof area.areaDesc !== "string" || !area.areaDesc.trim()) throw new Error("Every CAP area requires areaDesc.");
+  if ((area.polygons || []).some(value => typeof value !== "string") ||
+      (area.circles || []).some(value => typeof value !== "string")) {
+    throw new Error("CAP area polygon and circle entries must be text.");
+  }
   const shapes = [...(area.polygons || []), ...(area.circles || [])];
   if (area.polygon) shapes.push(area.polygon);
   if (area.circle) shapes.push(area.circle);
@@ -110,9 +127,10 @@ function validateArea(area) {
     }
   }
   for (const item of area.geocodes || []) {
-    if (typeof item.valueName !== "string" || !item.valueName.trim() ||
+    if (!item || typeof item !== "object" || Array.isArray(item) ||
+        typeof item.valueName !== "string" || !item.valueName.trim() ||
         (typeof item.value !== "string" && typeof item.value !== "number") || !String(item.value).trim()) {
-      throw new Error("CAP geocodes require valueName and value.");
+      throw new Error("CAP geocodes require object records with valueName and value.");
     }
   }
   if (area.altitude !== undefined && !isDecimalValue(area.altitude)) throw new Error("CAP altitude must be numeric.");
@@ -180,12 +198,15 @@ function normalizeInfo(info) {
   if (!info || typeof info !== "object" || Array.isArray(info)) {
     throw new Error("Each CAP info block must be an object.");
   }
-  for (const [field, value] of [["resources", info.resources], ["parameters", info.parameters], ["areas", info.areas]]) {
+  for (const [field, value] of [
+    ["resources", info.resources], ["parameters", info.parameters], ["areas", info.areas],
+    ["categories", info.categories], ["response_types", info.response_types]
+  ]) {
     if (value !== undefined && !Array.isArray(value)) {
       throw new Error(`CAP info ${field} must be an array.`);
     }
   }
-  if (!info.event?.trim()) throw new Error("Every CAP info block requires an event.");
+  if (typeof info.event !== "string" || !info.event.trim()) throw new Error("Every CAP info block requires an event.");
   for (const [field, values] of [["urgency", allowed.urgency], ["severity", allowed.severity], ["certainty", allowed.certainty]]) {
     if (!values.includes(info[field] || "Unknown")) throw new Error(`Invalid CAP info ${field}.`);
   }
@@ -216,7 +237,14 @@ function normalizeInfo(info) {
     ...(info.contact ? { contact: info.contact } : {})
   };
   if (info.parameters?.length) {
-    for (const parameter of info.parameters) if (!parameter.valueName?.trim() || parameter.value === undefined || parameter.value === null) throw new Error("CAP parameters require valueName and value.");
+    for (const parameter of info.parameters) {
+      if (!parameter || typeof parameter !== "object" || Array.isArray(parameter) ||
+          typeof parameter.valueName !== "string" || !parameter.valueName.trim() ||
+          (typeof parameter.value !== "string" && typeof parameter.value !== "number") ||
+          !String(parameter.value).trim()) {
+        throw new Error("CAP parameters require object records with valueName and a text or numeric value.");
+      }
+    }
     out.parameter = info.parameters.map(p => ({ valueName: p.valueName, value: p.value }));
   }
   if (info.resources?.length) out.resource = info.resources.map(normalizeResource);

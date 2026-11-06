@@ -479,6 +479,11 @@ app.post("/api/users",auth,roles("admin"),(req,res)=>{
  }
 });
 
+app.use("/api/users/:id/password-reset",(_req,res,next)=>{
+ res.set("Cache-Control","no-store");
+ res.set("Pragma","no-cache");
+ next();
+});
 const adminPasswordResetLimiter=rateLimit({windowMs:15*60*1000,limit:5,standardHeaders:true,legacyHeaders:false});
 app.post("/api/users/:id/password-reset",auth,roles("admin"),adminPasswordResetLimiter,(req,res)=>{
  const id=Number(req.params.id);

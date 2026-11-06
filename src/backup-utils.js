@@ -47,6 +47,24 @@ const CAP_STATUSES = new Set(["Actual", "Exercise", "System", "Test"]);
 const CAP_MESSAGE_TYPES = new Set(["Alert", "Update", "Cancel", "Ack", "Error"]);
 const ALERT_WORKFLOWS = new Set(["draft", "pending", "approved", "published", "cancelled"]);
 
+function isValidCapTimestamp(value) {
+  if (typeof value !== "string") return false;
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(Z|([+-])(\d{2}):(\d{2}))$/.exec(value);
+  if (!match || !Number.isFinite(Date.parse(value))) return false;
+  const [year, month, day, hour, minute, second] = match.slice(1, 7).map(Number);
+  const calendar = new Date(0);
+  calendar.setUTCFullYear(year, month - 1, day);
+  calendar.setUTCHours(hour, minute, second, 0);
+  const offsetHour = match[9] === undefined ? 0 : Number(match[9]);
+  const offsetMinute = match[10] === undefined ? 0 : Number(match[10]);
+  return calendar.getUTCFullYear() === year &&
+    calendar.getUTCMonth() === month - 1 &&
+    calendar.getUTCDate() === day &&
+    hour <= 23 && minute <= 59 && second <= 59 &&
+    offsetHour <= 14 && offsetMinute <= 59 &&
+    (offsetHour !== 14 || offsetMinute === 0);
+}
+
 function inspectAlertState(database) {
   const columns = new Set(database.prepare("PRAGMA table_info(alerts)").all().map(column => column.name));
   const required = ["identifier", "sender", "sent", "status", "msg_type", "references_text", "workflow"];
@@ -72,8 +90,7 @@ function inspectAlertState(database) {
         !/^[^\s,<>]+$/.test(alert.identifier) || !/^[^\s,<>]+$/.test(alert.sender)) {
       throw new Error("Restored alert has an invalid CAP sender or identifier");
     }
-    if (!Number.isFinite(Date.parse(alert.sent)) ||
-        !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(alert.sent)) {
+    if (!isValidCapTimestamp(alert.sent)) {
       throw new Error(`Restored alert ${alert.identifier} has an invalid CAP sent timestamp`);
     }
     if (!CAP_STATUSES.has(alert.status)) throw new Error(`Restored alert ${alert.identifier} has an invalid CAP status`);
@@ -92,8 +109,7 @@ function inspectAlertState(database) {
       const parts = reference.split(",");
       if (parts.length !== 3 || parts.some(part => !part.trim()) ||
           !/^[^\s<>]+$/.test(parts[0]) || !/^[^\s<>]+$/.test(parts[1]) ||
-          !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(parts[2]) ||
-          !Number.isFinite(Date.parse(parts[2]))) {
+          !isValidCapTimestamp(parts[2])) {
         throw new Error(`Restored alert ${alert.identifier} contains a malformed CAP reference`);
       }
       referenceCount += 1;

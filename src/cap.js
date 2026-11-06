@@ -35,7 +35,7 @@ function validateReferences(value) {
     calendar.setUTCHours(hour, minute, second, 0);
     const offsetHour = timestamp[9] === undefined ? 0 : Number(timestamp[9]);
     const offsetMinute = timestamp[10] === undefined ? 0 : Number(timestamp[10]);
-    if (calendar.getUTCFullYear() !== year || calendar.getUTCMonth() !== month - 1 ||
+    if (year < 1 || calendar.getUTCFullYear() !== year || calendar.getUTCMonth() !== month - 1 ||
         calendar.getUTCDate() !== day || hour > 23 || minute > 59 || second > 59 ||
         offsetHour > 14 || offsetMinute > 59 || (offsetHour === 14 && offsetMinute !== 0)) {
       throw new Error("CAP reference sent timestamp contains an out-of-range date, time or timezone offset.");
@@ -57,7 +57,7 @@ function capDateTime(value, field) {
     calendar.setUTCHours(hour, minute, second, 0);
     const offsetHour = iso[10] === undefined ? 0 : Number(iso[10]);
     const offsetMinute = iso[11] === undefined ? 0 : Number(iso[11]);
-    if (calendar.getUTCFullYear() !== year || calendar.getUTCMonth() !== month - 1 ||
+    if (year < 1 || calendar.getUTCFullYear() !== year || calendar.getUTCMonth() !== month - 1 ||
         calendar.getUTCDate() !== day || hour > 23 || minute > 59 || second > 59 ||
         offsetHour > 14 || offsetMinute > 59 || (offsetHour === 14 && offsetMinute !== 0)) {
       throw new Error(`Invalid date for ${field}.`);

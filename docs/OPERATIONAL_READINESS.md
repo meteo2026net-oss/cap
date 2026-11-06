@@ -59,7 +59,7 @@ A valid checkpoint detects deletion or rollback of the anchored tail. The checkp
 ## 4. Hosting and application security
 
 - [ ] Deploy only to a supported, patched host with restricted administrative access.
-- [x] Prevent browser/proxy caching of authenticated warning records, profile, user administration, authentication/MFA, password-reset, audit, webhook-review, and delivery responses; API integration tests assert `Cache-Control: no-store` and `Pragma: no-cache` for the covered sensitive responses.
+- [x] Prevent browser/proxy caching of authenticated warning records, profile, user administration, authentication/MFA, password-reset, audit, webhook-review, and delivery responses, including unauthenticated warning-API errors; API integration tests assert `Cache-Control: no-store` and `Pragma: no-cache` for the covered sensitive responses.
 - [ ] Enable and verify GitHub `main` branch protection: require pull requests and the relevant passing CAP system checks and CodeQL checks, block force pushes and branch deletion, and restrict bypass permissions. The repository's current branch metadata reports protection disabled; re-check the live setting after configuration.
 - [ ] Configure HTTPS, secure proxy headers, trusted proxy boundaries, and a reviewed origin/CORS allowlist.
 - [ ] Replace all example values with unique secrets stored in the hosting platform's secret manager; never place secrets in Git, tickets, chat, or logs.

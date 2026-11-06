@@ -112,6 +112,25 @@ test("creates CAP cancellation messages with references and no info block", () =
   assert.doesNotMatch(xml, /<info>/);
 });
 
+test("rejects non-decimal, fractional and unsafe CAP resource sizes", () => {
+  const base = {
+    language: "en-GB", category: "Met", event: "Heavy rainfall",
+    urgency: "Expected", severity: "Moderate", certainty: "Likely",
+    area: { areaDesc: "Test district", circle: "51.5,-0.1 10" }
+  };
+  for (const size of ["", " ", "1.5", "1e3", "0x10", "-1", Number.MAX_SAFE_INTEGER + 1]) {
+    assert.throws(() => buildCapXml({
+      ...valid,
+      info_blocks: [{ ...base, resources: [{ resourceDesc: "Map", mimeType: "image/png", size }] }]
+    }), /resource size must be a non-negative integer/);
+  }
+  const xml = buildCapXml({
+    ...valid,
+    info_blocks: [{ ...base, resources: [{ resourceDesc: "Map", mimeType: "image/png", size: "00042" }] }]
+  });
+  assert.match(xml, /<size>42<\/size>/);
+});
+
 test("rejects resources missing mandatory description or MIME type", () => {
   assert.throws(() => buildCapXml({
     ...valid,

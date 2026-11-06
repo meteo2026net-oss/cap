@@ -296,9 +296,13 @@ test("external audit checkpoint detects unanchored append and forged signature",
     appendAuditLog(database, { action: "unanchored" });
     assert.equal(verifyAuditChain(database, { checkpointPath, checkpointSecret }).reason, "checkpoint_stale_or_database_rollback");
     const document = JSON.parse(fs.readFileSync(checkpointPath, "utf8"));
+    const validSignature = document.signature;
     document.signature = "0".repeat(64);
     fs.writeFileSync(checkpointPath, JSON.stringify(document));
     assert.equal(verifyAuditChain(database, { checkpointPath, checkpointSecret }).reason, "checkpoint_signature_invalid");
+    document.signature = validSignature + "zz";
+    fs.writeFileSync(checkpointPath, JSON.stringify(document));
+    assert.equal(verifyAuditChain(database, { checkpointPath, checkpointSecret }).reason, "checkpoint_signature_format_invalid");
   } finally {
     database.close();
     fs.rmSync(directory, { recursive: true, force: true });

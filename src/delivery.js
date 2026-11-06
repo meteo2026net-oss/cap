@@ -11,8 +11,8 @@ function hashLeaseToken(token) {
 export function enqueueDelivery(database, { alertId, channel = "cap_feed", payload, maxAttempts = 5 }) {
   if (!Number.isInteger(Number(alertId)) || Number(alertId) < 1) throw new TypeError("A valid alertId is required");
   if (!CHANNELS.has(channel)) throw new TypeError("Unsupported delivery channel");
-  if (typeof payload !== "string" || payload.length === 0 || payload.length > 2_000_000) {
-    throw new TypeError("Delivery payload must be a non-empty string up to 2 MB");
+  if (typeof payload !== "string" || payload.length === 0 || Buffer.byteLength(payload, "utf8") > 2_000_000) {
+    throw new TypeError("Delivery payload must be a non-empty UTF-8 string up to 2 MB");
   }
   if (!Number.isInteger(maxAttempts) || maxAttempts < 1 || maxAttempts > 20) {
     throw new TypeError("maxAttempts must be an integer from 1 to 20");

@@ -1127,6 +1127,7 @@ test("API enforces role separation, public-feed filtering and account deactivati
   assert.ok((capXml.headers.get("content-type") || "").includes("application/xml"));
   assert.match(await capXml.text(), /<alert xmlns=/);
 
+  let publishedUpdate = null;
   for (const msg_type of ["Update", "Cancel"]) {
     let derived;
     if (msg_type === "Cancel") {
@@ -1168,6 +1169,7 @@ test("API enforces role separation, public-feed filtering and account deactivati
     });
     assert.equal(publishedDerived.status, 200, msg_type + " should be internally published after approval");
     assert.equal(publishedDerived.data.workflow, "published");
+    if (msg_type === "Update") publishedUpdate = { id: derived.data.id, identifier: derived.data.identifier };
     const derivedTimeline = await request(`/api/alerts/${derived.data.id}/timeline`, { token: reviewer });
     assert.equal(derivedTimeline.status, 200);
     assert.ok(derivedTimeline.data.timeline.some(item => item.source === "version" && item.version_no === 1),
@@ -1218,6 +1220,43 @@ test("API enforces role separation, public-feed filtering and account deactivati
       })).status, 201, "a Test-status cancellation must leave the Actual source warning active");
     }
   }
+
+  assert.ok(publishedUpdate, "the first Update should be published before testing a chained Update");
+  const chainedUpdate = await request(`/api/alerts/${publishedUpdate.id}/derive`, {
+    token: forecaster, method: "POST", body: { msg_type: "Update" }
+  });
+  assert.equal(chainedUpdate.status, 201,
+    "a published Update must be a valid source for a subsequent Update");
+  assert.equal(chainedUpdate.data.status, "Test");
+  assert.equal(chainedUpdate.data.workflow, "draft");
+  assert.ok(chainedUpdate.data.references.includes(publishedUpdate.identifier),
+    "the chained Update must reference its immediate published parent");
+  assert.equal((await request(`/api/alerts/${chainedUpdate.data.id}/submit`, {
+    token: forecaster, method: "POST", body: {}
+  })).status, 200);
+  assert.equal((await request(`/api/alerts/${chainedUpdate.data.id}/approve`, {
+    token: reviewer, method: "POST", body: {}
+  })).status, 200);
+  assert.equal((await request(`/api/alerts/${chainedUpdate.data.id}/publish`, {
+    token: publisher, method: "POST", body: {}
+  })).status, 200);
+  const chainedLineage = await request(`/api/alerts/${chainedUpdate.data.id}/relations`, { token: forecaster });
+  assert.equal(chainedLineage.status, 200);
+  assert.ok(chainedLineage.data.messages.some(message => message.id === actualRow.id),
+    "the second-generation Update must retain the original Alert in its complete lineage");
+  assert.ok(chainedLineage.data.messages.some(message => message.id === publishedUpdate.id),
+    "the second-generation Update must resolve its immediate Update parent");
+  assert.ok(chainedLineage.data.relations.some(edge =>
+    edge.from_id === actualRow.id && edge.to_id === publishedUpdate.id && edge.msg_type === "Update"
+  ), "lineage must retain the original Alert-to-Update edge");
+  assert.ok(chainedLineage.data.relations.some(edge =>
+    edge.from_id === publishedUpdate.id && edge.to_id === chainedUpdate.data.id && edge.msg_type === "Update"
+  ), "lineage must expose the chained Update-to-Update edge");
+  assert.equal(chainedLineage.data.relation_count, 2,
+    "the two-generation chain should contain exactly two validated relationship edges");
+  const originalLineage = await request(`/api/alerts/${actualRow.id}/relations`, { token: forecaster });
+  assert.ok(originalLineage.data.messages.some(message => message.id === chainedUpdate.data.id),
+    "opening the original Alert should discover descendants beyond the first generation");
 
   assert.equal((await request("/api/audit", { token: forecaster })).status, 403,
     "forecasters must not read restricted audit history");

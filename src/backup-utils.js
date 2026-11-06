@@ -202,6 +202,7 @@ export async function verifyRestoredDatabase(source, options = {}) {
       file,
       integrity: validation.integrity,
       audit: validation.audit,
+      alert_state: validation.alert_state,
       counts,
       table_counts: tableCounts,
       table_fingerprints: tableFingerprints
@@ -234,7 +235,11 @@ export async function runIsolatedRestoreDrill(source, options = {}) {
       throw new Error("Restore drill failed: audit-chain or external-checkpoint verification differs after restore");
     }
 
-    if (JSON.stringify(sourceState.alert_state) !== JSON.stringify(restoredState.alert_state)) {\n      throw new Error("Restore drill failed: CAP alert workflow or reference state differs after restore");\n    }\n\n    const checkpoint = restoredState.audit?.checkpoint ?? null;
+    if (JSON.stringify(sourceState.alert_state) !== JSON.stringify(restoredState.alert_state)) {
+      throw new Error("Restore drill failed: CAP alert workflow or reference state differs after restore");
+    }
+
+    const checkpoint = restoredState.audit?.checkpoint ?? null;
     const checkpointConfigured = Boolean(restoredState.audit?.integrity_capabilities?.external_checkpoint_configured);
     report = {
       result: "passed",
@@ -244,6 +249,7 @@ export async function runIsolatedRestoreDrill(source, options = {}) {
       source_checksum: sourceBackup.checksum,
       integrity: restoredState.integrity,
       audit: restoredState.audit,
+      alert_state: restoredState.alert_state,
       audit_checkpoint: {
         configured: checkpointConfigured,
         valid: checkpoint ? checkpoint.valid : null,

@@ -747,16 +747,19 @@ app.get("/api/alerts/:id/relations",auth,(req,res)=>{
    if(parent && !found.has(parent.id)){found.set(parent.id,parent);queue.push(parent);}
   }
   const currentReferencePrefix=[current.sender,current.identifier,""].join(",");
-  const children=db.prepare("SELECT "+columns+" FROM alerts WHERE instr(' '||COALESCE(references_text,'')||' ',?)>0 ORDER BY sent,id LIMIT 101").all(" "+currentReferencePrefix);
-  if(children.length>100) truncated=true;
-  for(const child of children.slice(0,100)) {
+  const childCandidates=db.prepare("SELECT "+columns+" FROM alerts WHERE instr(' '||COALESCE(references_text,'')||' ',?)>0 ORDER BY sent,id").iterate(" "+currentReferencePrefix);
+  let matchedChildren=0;
+  for(const child of childCandidates) {
    const matchesCurrent=String(child.references_text||"").trim().split(/\s+/).some(reference=>{
     const parts=reference.split(",");
     return parts.length===3 && parts[0]===current.sender && parts[1]===current.identifier &&
      Number.isFinite(Date.parse(parts[2])) && Number.isFinite(Date.parse(current.sent)) &&
      Math.floor(Date.parse(parts[2])/1000)===Math.floor(Date.parse(current.sent)/1000);
    });
-   if(matchesCurrent && !found.has(child.id)){found.set(child.id,child);queue.push(child);}
+   if(!matchesCurrent) continue;
+   matchedChildren++;
+   if(matchedChildren>100){truncated=true;break;}
+   if(!found.has(child.id)){found.set(child.id,child);queue.push(child);}
   }
  }
  const messages=[...found.values()].sort((a,b)=>a.sent.localeCompare(b.sent)||a.id-b.id);

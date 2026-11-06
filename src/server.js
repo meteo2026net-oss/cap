@@ -737,7 +737,12 @@ app.get("/api/alerts/:id/relations",auth,(req,res)=>{
   for(const reference of String(current.references_text||"").trim().split(/\s+/).filter(Boolean)){
    const parts=reference.split(",");
    if(parts.length!==3) continue;
-   const parent=db.prepare("SELECT "+columns+" FROM alerts WHERE sender=? AND identifier=? AND (sent=? OR substr(sent,1,19)||char(45)||'00:00'=?)").get(parts[0],parts[1],parts[2],parts[2]);
+   const parentCandidates=db.prepare("SELECT "+columns+" FROM alerts WHERE sender=? AND identifier=?").all(parts[0],parts[1]);
+   const referenceTime=Date.parse(parts[2]);
+   const parent=Number.isFinite(referenceTime) ? parentCandidates.find(candidate=>
+    Number.isFinite(Date.parse(candidate.sent)) &&
+    Math.floor(Date.parse(candidate.sent)/1000)===Math.floor(referenceTime/1000)
+   ) : undefined;
    if(parent && !found.has(parent.id)){found.set(parent.id,parent);queue.push(parent);}
   }
   const currentReferencePrefix=[current.sender,current.identifier,""].join(",");

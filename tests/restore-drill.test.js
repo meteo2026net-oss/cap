@@ -194,18 +194,18 @@ test("restore validation rejects impossible CAP calendar dates and timezone offs
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "cap-invalid-calendar-"));
     t.after(() => fs.rm(root, { recursive: true, force: true }));
     const database = new Database(path.join(root, "source.sqlite"));
-    database.exec(\`
+    database.exec(`
       CREATE TABLE users (id INTEGER PRIMARY KEY, username TEXT NOT NULL);
       CREATE TABLE alerts (
         id INTEGER PRIMARY KEY, identifier TEXT NOT NULL, sender TEXT NOT NULL, sent TEXT NOT NULL,
         status TEXT NOT NULL, msg_type TEXT NOT NULL, references_text TEXT, workflow TEXT NOT NULL
       );
       CREATE TABLE audit_log (id INTEGER PRIMARY KEY, action TEXT NOT NULL, created_at TEXT NOT NULL);
-    \`);
-    database.prepare(\`
+    `);
+    database.prepare(`
       INSERT INTO alerts(identifier,sender,sent,status,msg_type,references_text,workflow)
       VALUES (?,?,?,?,?,?,?)
-    \`).run("CAP-INVALID-" + label, "warnings@example.test", sent, "Actual", msgType, references, "pending");
+    `).run("CAP-INVALID-" + label, "warnings@example.test", sent, "Actual", msgType, references, "pending");
     await assert.rejects(
       createDatabaseBackup(database, path.join(root, "backups")),
       /invalid CAP sent timestamp|malformed CAP reference/

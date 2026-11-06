@@ -155,3 +155,57 @@ test("optional CAP metadata, response types, parameters, resources and area fiel
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("CAP 1.2 XSD accepts escaped multilingual text and combined area/resource structures", { skip: !hasSchema || !hasXmllint }, () => {
+  const xml = buildCapXml({
+    identifier: makeIdentifier(),
+    sender: "alerts@example.test",
+    sent: "2026-11-06T05:00:00.000Z",
+    status: "Exercise",
+    msg_type: "Alert",
+    scope: "Public",
+    info_blocks: [{
+      language: "ar",
+      categories: ["Met", "Safety"],
+      event: "أمطار ورياح & عواصف <تجريبية>",
+      urgency: "Expected",
+      severity: "Severe",
+      certainty: "Likely",
+      headline: "تحذير <تجريبي> & اختبار",
+      description: "نص متعدد اللغات مع رموز XML: < > & \".",
+      areas: [{
+        areaDesc: "القطاع & المنطقة <أ>",
+        polygons: ["51,0 52,0 52,1 51,1 51,0"],
+        circles: ["33.5,36.2 12"],
+        geocodes: [{ valueName: "LOCALITY", value: "D-001" }],
+        altitude: 0,
+        ceiling: 3000
+      }],
+      resources: [
+        {
+          resourceDesc: "خريطة & صورة <أ>",
+          mimeType: "image/png",
+          uri: "https://example.org/map.png",
+          derefUri: "aGVsbG8="
+        },
+        {
+          resourceDesc: "بيانات الطقس",
+          mimeType: "application/json",
+          size: 12,
+          uri: "https://example.org/data.json"
+        }
+      ]
+    }]
+  });
+  assert.match(xml, /&amp;/);
+  assert.match(xml, /&lt;/);
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cap-xsd-escaped-"));
+  try {
+    const xmlPath = path.join(dir, "escaped-multilingual.xml");
+    fs.writeFileSync(xmlPath, xml, "utf8");
+    const result = spawnSync("xmllint", ["--noout", "--schema", schemaPath, xmlPath], { encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr || result.stdout || "multilingual CAP XML failed XSD validation");
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});

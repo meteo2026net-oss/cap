@@ -284,6 +284,10 @@ test("API enforces role separation, public-feed filtering and account deactivati
     token: admin, method: "POST", body: {}
   });
   assert.equal(resetResult.status, 200, "an MFA-authenticated administrator should reset another active user's password");
+  assert.equal(resetResult.headers.get("cache-control"), "no-store",
+    "one-time temporary passwords must not be cached");
+  assert.equal(resetResult.headers.get("pragma"), "no-cache",
+    "password reset responses must carry a legacy no-cache directive");
   assert.equal(resetResult.data.must_change_password, true);
   assert.equal(resetResult.data.sessions_revoked, true);
   assert.ok(resetResult.data.temporary_password.length >= 32);

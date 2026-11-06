@@ -207,8 +207,16 @@ test("API enforces role separation, public-feed filtering and account deactivati
   admin = adminMfaConfirmed.data.token;
   const initialUsers = await request("/api/users", { token: admin });
   assert.equal(initialUsers.status, 200);
+  assert.equal(initialUsers.headers.get("cache-control"), "no-store",
+    "administrator user-directory responses must not be cached");
+  assert.equal(initialUsers.headers.get("pragma"), "no-cache",
+    "administrator user-directory responses must carry a legacy no-cache directive");
   const adminProfile = await request("/api/me", { token: admin });
   assert.equal(adminProfile.status, 200);
+  assert.equal(adminProfile.headers.get("cache-control"), "no-store",
+    "authenticated profile responses must not be cached");
+  assert.equal(adminProfile.headers.get("pragma"), "no-cache",
+    "authenticated profile responses must carry a legacy no-cache directive");
   const adminUserId = adminProfile.data.user.id;
   assert.ok(Number.isSafeInteger(adminUserId));
   assert.ok(initialUsers.data.users.find(user => user.username === "admin")?.last_login_at,

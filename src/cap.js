@@ -131,7 +131,13 @@ function normalizeArea(area) {
   return out;
 }
 function normalizeResource(resource) {
-  if (!resource.resourceDesc?.trim() || !resource.mimeType?.trim()) throw new Error("CAP resources require resourceDesc and mimeType.");
+  if (!resource || typeof resource !== "object" || Array.isArray(resource)) {
+    throw new Error("Each CAP resource must be an object.");
+  }
+  if (typeof resource.resourceDesc !== "string" || !resource.resourceDesc.trim() ||
+      typeof resource.mimeType !== "string" || !resource.mimeType.trim()) {
+    throw new Error("CAP resources require a text resourceDesc and mimeType.");
+  }
   if ([...resource.resourceDesc].length > 256) throw new Error("CAP resource description must not exceed 256 characters.");
   if (!/^[!#$%&'*+.^_\`|~0-9A-Za-z-]+\/[!#$%&'*+.^_\`|~0-9A-Za-z-]+$/.test(resource.mimeType)) {
     throw new Error("CAP resource mimeType must be a valid type/subtype media type.");
@@ -169,6 +175,14 @@ function normalizeResource(resource) {
   return out;
 }
 function normalizeInfo(info) {
+  if (!info || typeof info !== "object" || Array.isArray(info)) {
+    throw new Error("Each CAP info block must be an object.");
+  }
+  for (const [field, value] of [["resources", info.resources], ["parameters", info.parameters], ["areas", info.areas]]) {
+    if (value !== undefined && !Array.isArray(value)) {
+      throw new Error(`CAP info ${field} must be an array.`);
+    }
+  }
   if (!info.event?.trim()) throw new Error("Every CAP info block requires an event.");
   for (const [field, values] of [["urgency", allowed.urgency], ["severity", allowed.severity], ["certainty", allowed.certainty]]) {
     if (!values.includes(info[field] || "Unknown")) throw new Error(`Invalid CAP info ${field}.`);
@@ -222,6 +236,9 @@ export function validateAlert(input) {
   if (/[ ,<>]/.test(input.identifier) || /[ ,<>]/.test(input.sender)) throw new Error("CAP identifier and sender cannot contain spaces, commas or angle brackets.");
   if (["Update","Cancel","Ack","Error"].includes(input.msg_type)) validateReferences(input.references_text);
   capDateTime(input.sent, "sent");
+  if (input.info_blocks !== undefined && !Array.isArray(input.info_blocks)) {
+    throw new Error("CAP info_blocks must be an array.");
+  }
   const blocks = input.info_blocks?.length ? input.info_blocks : (["Cancel","Ack","Error"].includes(input.msg_type) ? [] : [{
     language: input.language, category: input.category, event: input.event, urgency: input.urgency,
     severity: input.severity, certainty: input.certainty, effective: input.effective, onset: input.onset,

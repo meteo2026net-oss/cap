@@ -90,7 +90,7 @@ test("outbox validates payload size and channel",()=>{
  const db=fixture();
  try {
   assert.throws(()=>enqueueDelivery(db,{alertId:1,channel:"unknown",payload:"x"}),/Unsupported delivery channel/);
-  assert.throws(()=>enqueueDelivery(db,{alertId:1,payload:""}),/non-empty string/);
+  assert.throws(()=>enqueueDelivery(db,{alertId:1,payload:""}),/non-empty UTF-8 string up to 2 MB/);
  } finally { db.close(); }
 });
 

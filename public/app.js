@@ -637,6 +637,36 @@ async function loadAlertRelations(id){
    document.body.append(anchor);anchor.click();anchor.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
   });
   exportActions.append(exportGraph,exportCsv,exportReport);graphHeader.append(graphTitle,exportActions);graph.append(graphHeader);
+  const messageById=new Map(data.messages.map(message=>[message.id,message]));
+  const outgoing=new Map(data.messages.map(message=>[message.id,[]]));
+  const incoming=new Map(data.messages.map(message=>[message.id,0]));
+  for(const edge of edges){
+   if(!outgoing.has(edge.from_id)||!incoming.has(edge.to_id))continue;
+   outgoing.get(edge.from_id).push(edge.to_id);
+   incoming.set(edge.to_id,incoming.get(edge.to_id)+1);
+  }
+  const roots=data.messages.filter(message=>(incoming.get(message.id)||0)===0);
+  const depthById=new Map(),depthQueue=roots.map(message=>({id:message.id,depth:0}));
+  for(const root of roots)depthById.set(root.id,0);
+  while(depthQueue.length){
+   const current=depthQueue.shift();
+   for(const childId of outgoing.get(current.id)||[]){
+    const nextDepth=current.depth+1;
+    if(!depthById.has(childId)||nextDepth<depthById.get(childId)){
+     depthById.set(childId,nextDepth);
+     depthQueue.push({id:childId,depth:nextDepth});
+    }
+   }
+  }
+  const leaves=data.messages.filter(message=>(outgoing.get(message.id)||[]).length===0);
+  const branches=data.messages.filter(message=>(outgoing.get(message.id)||[]).length>1);
+  const maxGeneration=Math.max(0,...depthById.values());
+  const unclassified=data.messages.length-depthById.size;
+  const analysis=document.createElement("section");analysis.className="reviewHistory small";
+  const analysisTitle=document.createElement("b");analysisTitle.textContent="ملخص بنية السلسلة";
+  const analysisText=document.createElement("p");
+  analysisText.textContent="الجذور: "+roots.length+" • الأجيال: "+(data.messages.length?maxGeneration+1:0)+" • الرسائل الطرفية: "+leaves.length+" • نقاط التفرع: "+branches.length+(unclassified?" • رسائل ضمن حلقات أو غير قابلة لتحديد جيلها: "+unclassified:"")+(data.truncated?" • النتائج محدودة بأول 100 رسالة":"");
+  analysis.append(analysisTitle,analysisText);graph.append(analysis);
   if(edges.length){
    const edgeList=document.createElement("div");edgeList.className="relationEdges";
    for(const edge of edges){

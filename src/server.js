@@ -570,6 +570,11 @@ function csvCell(value) {
  return '"' + safe.replace(/"/g, '""') + '"';
 }
 
+app.use("/api/alerts",(_req,res,next)=>{
+ res.set("Cache-Control","no-store");
+ res.set("Pragma","no-cache");
+ next();
+});
 app.get("/api/alerts/export.csv",auth,(req,res)=>{
  const workflow=req.query.workflow, severity=req.query.severity, status=req.query.status;
  const search=typeof req.query.q==="string" ? req.query.q.trim().slice(0,160) : "";

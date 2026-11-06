@@ -78,9 +78,11 @@ function verifyExternalCheckpoint(database, checkpointPath, secret, latestId, la
   catch { return { configured: true, valid: false, reason: "checkpoint_unavailable_or_invalid" }; }
   const payload = checkpointPayload(document.latest_id, document.latest_hash);
   if (document.version !== 1 || !Number.isSafeInteger(payload.latest_id) || payload.latest_id < 1 ||
-      typeof payload.latest_hash !== "string" || !/^[a-f0-9]{64}$/.test(payload.latest_hash) ||
-      typeof document.signature !== "string") {
+      typeof payload.latest_hash !== "string" || !/^[a-f0-9]{64}$/.test(payload.latest_hash)) {
     return { configured: true, valid: false, reason: "checkpoint_format_invalid" };
+  }
+  if (typeof document.signature !== "string" || !/^[a-f0-9]{64}$/.test(document.signature)) {
+    return { configured: true, valid: false, reason: "checkpoint_signature_format_invalid" };
   }
   const expected = Buffer.from(checkpointSignature(payload, secret), "hex");
   const actual = Buffer.from(document.signature, "hex");

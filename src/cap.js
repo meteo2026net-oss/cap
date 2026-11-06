@@ -159,10 +159,11 @@ function normalizeResource(resource) {
     out.uri = parsed.toString();
   }
   if (resource.derefUri !== undefined) {
-    if (typeof resource.derefUri !== "string" || !resource.derefUri.trim() ||
-        /[\u0000-\u0008\u000B\u000C\u000E-\u001F]/.test(resource.derefUri) ||
+    if (typeof resource.derefUri !== "string" || !resource.derefUri ||
+        !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(resource.derefUri) ||
+        Buffer.from(resource.derefUri, "base64").toString("base64") !== resource.derefUri ||
         Buffer.byteLength(resource.derefUri, "utf8") > 2_000_000) {
-      throw new Error("CAP resource derefUri must be non-empty text up to 2 MB without control characters.");
+      throw new Error("CAP resource derefUri must be canonical Base64-encoded content up to 2 MB.");
     }
     out.derefUri = resource.derefUri;
   }

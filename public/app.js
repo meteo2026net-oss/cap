@@ -604,7 +604,7 @@ async function loadAlertRelations(id){
     const fromName=from?.headline||from?.event||from?.identifier||("#"+edge.from_id);
     const toName=to?.headline||to?.event||to?.identifier||("#"+edge.to_id);
     const description=document.createElement("span");
-    description.textContent=fromName+" ← "+typeLabel(edge.msg_type)+" ← "+toName;
+    description.textContent=fromName+" → "+typeLabel(edge.msg_type)+" → "+toName;
     row.append(description);
     const jump=document.createElement("button");jump.type="button";jump.className="secondary";jump.textContent="عرض الرسالة";
     jump.addEventListener("click",()=>{

@@ -129,6 +129,62 @@ test("restore drill rejects an external audit checkpoint signed with the wrong s
   );
 });
 
+
+test("restore drill verifies CAP workflow counts and resolves internal message references", async t => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "cap-alert-state-drill-"));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const dbPath = path.join(root, "source.sqlite");
+  const database = new Database(dbPath);
+  database.exec(`
+    CREATE TABLE users (id INTEGER PRIMARY KEY, username TEXT NOT NULL);
+    CREATE TABLE alerts (
+      id INTEGER PRIMARY KEY, identifier TEXT NOT NULL, sender TEXT NOT NULL, sent TEXT NOT NULL,
+      status TEXT NOT NULL, msg_type TEXT NOT NULL, references_text TEXT, workflow TEXT NOT NULL
+    );
+    CREATE TABLE audit_log (id INTEGER PRIMARY KEY, action TEXT NOT NULL, created_at TEXT NOT NULL);
+    INSERT INTO users(username) VALUES ('operator');
+    INSERT INTO alerts(identifier,sender,sent,status,msg_type,references_text,workflow) VALUES
+      ('CAP-ALERT-100','warnings@example.test','2026-11-06T00:00:00-00:00','Actual','Alert',NULL,'published'),
+      ('CAP-UPDATE-101','warnings@example.test','2026-11-06T00:10:00-00:00','Actual','Update',
+       'warnings@example.test,CAP-ALERT-100,2026-11-06T00:00:00-00:00','approved');
+    INSERT INTO audit_log(action,created_at) VALUES ('created','2026-11-06T00:00:00.000Z');
+  `);
+  const backup = await createDatabaseBackup(database, path.join(root, "backups"));
+  database.close();
+
+  const result = await runIsolatedRestoreDrill(backup);
+  assert.equal(result.result, "passed");
+  assert.deepEqual(result.alert_state, {
+    available: true,
+    alert_count: 2,
+    status_counts: { Actual: 2 },
+    message_type_counts: { Alert: 1, Update: 1 },
+    workflow_counts: { published: 1, approved: 1 },
+    references: { total: 1, resolved_internal: 1, unresolved_external: 0 }
+  });
+});
+
+test("backup validation rejects malformed CAP references before a restore drill", async t => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "cap-alert-state-invalid-"));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const database = new Database(path.join(root, "source.sqlite"));
+  database.exec(`
+    CREATE TABLE users (id INTEGER PRIMARY KEY, username TEXT NOT NULL);
+    CREATE TABLE alerts (
+      id INTEGER PRIMARY KEY, identifier TEXT NOT NULL, sender TEXT NOT NULL, sent TEXT NOT NULL,
+      status TEXT NOT NULL, msg_type TEXT NOT NULL, references_text TEXT, workflow TEXT NOT NULL
+    );
+    CREATE TABLE audit_log (id INTEGER PRIMARY KEY, action TEXT NOT NULL, created_at TEXT NOT NULL);
+    INSERT INTO alerts(identifier,sender,sent,status,msg_type,references_text,workflow)
+    VALUES ('CAP-BAD-200','warnings@example.test','2026-11-06T00:00:00-00:00','Actual','Update','broken-reference','pending');
+  `);
+  await assert.rejects(
+    createDatabaseBackup(database, path.join(root, "backups")),
+    /malformed CAP reference/
+  );
+  database.close();
+});
+
 test("isolated restore drill rejects a backup whose checksum was changed", async t => {
   const { backup } = await fixture(t);
   await fs.writeFile(backup, "tampered");

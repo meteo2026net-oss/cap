@@ -1267,6 +1267,50 @@ test("API enforces role separation, public-feed filtering and account deactivati
   assert.ok(originalLineage.data.messages.some(message => message.id === chainedUpdate.data.id),
     "opening the original Alert should discover descendants beyond the first generation");
 
+  const relationOverflowDb = new Database(path.join(cwd, "storage", "cap.sqlite"));
+  try {
+    const rootIdentity = relationOverflowDb.prepare(
+      "SELECT sender,identifier,sent,created_by FROM alerts WHERE id=?"
+    ).get(actualRow.id);
+    const insertSyntheticRelation = relationOverflowDb.prepare(`
+      INSERT INTO alerts
+        (identifier,sender,sent,status,msg_type,scope,references_text,event,category,
+         urgency,severity,certainty,headline,description,area_desc,language,workflow,created_by)
+      VALUES
+        (@identifier,@sender,@sent,'Test','Update','Private',@references,
+         'Synthetic relation test','Met','Unknown','Unknown','Unknown',
+         'Synthetic relation test','Synthetic test data only','Synthetic test area',
+         'en-US','published',@created_by)
+    `);
+    const insertBatch = relationOverflowDb.transaction((kind, references) => {
+      for (let index = 0; index < 101; index++) {
+        insertSyntheticRelation.run({
+          identifier: `relation-${kind}-${index}-${Date.now()}`,
+          sender: rootIdentity.sender,
+          sent: new Date(Date.parse(rootIdentity.sent) + (index + 1) * 1000).toISOString(),
+          references,
+          created_by: rootIdentity.created_by
+        });
+      }
+    });
+    insertBatch("invalid", `${rootIdentity.sender},${rootIdentity.identifier},not-a-valid-time`);
+    const invalidCandidatesLineage = await request(
+      `/api/alerts/${actualRow.id}/relations`, { token: forecaster }
+    );
+    assert.equal(invalidCandidatesLineage.status, 200);
+    assert.equal(invalidCandidatesLineage.data.truncated, false,
+      "more than 100 text candidates with invalid reference timestamps must not falsely mark lineage as truncated");
+    insertBatch("valid", `${rootIdentity.sender},${rootIdentity.identifier},${rootIdentity.sent}`);
+    const overflowLineage = await request(
+      `/api/alerts/${actualRow.id}/relations`, { token: forecaster }
+    );
+    assert.equal(overflowLineage.status, 200);
+    assert.equal(overflowLineage.data.truncated, true,
+      "more than 100 valid child references must mark the lineage as truncated");
+  } finally {
+    relationOverflowDb.close();
+  }
+
   assert.equal((await request("/api/audit", { token: forecaster })).status, 403,
     "forecasters must not read restricted audit history");
   assert.equal((await request("/api/audit", { token: publisher })).status, 403,

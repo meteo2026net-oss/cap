@@ -413,7 +413,7 @@ function dateForLocalInput(value){
  return local.toISOString().slice(0,16);
 }
 function resetAlertEditor(){
- editingAlertId=null;$("#alertForm").reset();renderCapResourceList();setAlertEditorMode(false);
+ editingAlertId=null;editingCapResource=null;$("#addCapResourceBtn").textContent="إضافة المورد إلى JSON";$("#alertForm").reset();renderCapResourceList();setAlertEditorMode(false);
 }
 $("#alertForm").addEventListener("submit",async e=>{
  e.preventDefault();
@@ -440,6 +440,7 @@ function readResourceBlocks(){
  if(!field.value.trim())return [];
  try{const blocks=JSON.parse(field.value);return Array.isArray(blocks)?blocks:[]}catch{return []}
 }
+let editingCapResource=null;
 function renderCapResourceList(){
  const host=$("#capResourceList");
  if(!host)return;
@@ -456,11 +457,12 @@ function renderCapResourceList(){
    const meta=document.createElement("p");
    meta.className="muted small";
    meta.textContent="الكتلة "+(blockIndex+1)+" • "+(resource.mimeType||"نوع غير محدد")+" • "+(resource.uri||"دون رابط");
-   const remove=document.createElement("button");
-   remove.type="button";remove.className="secondary";
-   remove.textContent="حذف هذا المورد";
-   remove.dataset.block=String(blockIndex);remove.dataset.resource=String(resourceIndex);
-   row.append(description,meta,remove);host.append(row);
+   const actions=document.createElement("div");actions.className="row";
+   const edit=document.createElement("button");edit.type="button";edit.className="secondary";edit.textContent="تعديل";
+   edit.dataset.editBlock=String(blockIndex);edit.dataset.editResource=String(resourceIndex);
+   const remove=document.createElement("button");remove.type="button";remove.className="secondary";
+   remove.textContent="حذف هذا المورد";remove.dataset.block=String(blockIndex);remove.dataset.resource=String(resourceIndex);
+   actions.append(edit,remove);row.append(description,meta,actions);host.append(row);
   });
  });
  if(!count){const empty=document.createElement("p");empty.className="muted small";empty.textContent="لا توجد موارد مضافة بعد.";host.append(empty);}
@@ -499,21 +501,48 @@ $("#addCapResourceBtn")?.addEventListener("click",()=>{
  const target=blocks[blockNumber-1];
  if(!target||typeof target!=="object"||Array.isArray(target)){status.textContent="كتلة المعلومات المحددة غير صالحة.";return}
  target.resources=Array.isArray(target.resources)?target.resources:[];
- target.resources.push(resource);
+ if(editingCapResource){
+  const {blockIndex,resourceIndex}=editingCapResource;
+  if(blockIndex<0||resourceIndex<0||!blocks[blockIndex]||!Array.isArray(blocks[blockIndex].resources)||!blocks[blockIndex].resources[resourceIndex]){
+   status.textContent="تعذر العثور على المورد المراد تعديله؛ أعد اختيار المورد من القائمة.";return;
+  }
+  blocks[blockIndex].resources[resourceIndex]=resource;
+ }else target.resources.push(resource);
  field.value=JSON.stringify(blocks,null,2);
+ editingCapResource=null;
+ $("#addCapResourceBtn").textContent="إضافة المورد إلى JSON";
  renderCapResourceList();
- status.textContent="تمت إضافة المورد إلى كتلة المعلومات رقم "+blockNumber+".";
+ status.textContent=editingCapResource?"":(blocks[blockNumber-1].resources.length?"تم حفظ المورد في كتلة المعلومات رقم "+blockNumber+".":"تمت إضافة المورد.");
  $("#resourceDesc").value="";$("#resourceUri").value="";$("#resourceSize").value="";$("#resourceDigest").value="";
 });
 $("#capResourceList")?.addEventListener("click",event=>{
- const button=event.target.closest("button[data-block][data-resource]");
- if(!button)return;
+ const editButton=event.target.closest("button[data-edit-block][data-edit-resource]");
  const field=$("#alertForm").elements.namedItem("info_blocks_json");
  const blocks=readResourceBlocks();
+ if(editButton){
+  const blockIndex=Number(editButton.dataset.editBlock),resourceIndex=Number(editButton.dataset.editResource);
+  const resource=blocks[blockIndex]?.resources?.[resourceIndex];
+  if(!resource)return;
+  editingCapResource={blockIndex,resourceIndex};
+  $("#resourceBlockIndex").value=String(blockIndex+1);
+  $("#resourceDesc").value=resource.resourceDesc||"";
+  $("#resourceMime").value=resource.mimeType||"image/png";
+  $("#resourceUri").value=resource.uri||"";
+  $("#resourceSize").value=resource.size??"";
+  $("#resourceDigest").value=resource.digest||"";
+  $("#addCapResourceBtn").textContent="حفظ تعديل المورد";
+  $("#resourceEditorStatus").textContent="تعديل المورد المحدد في الكتلة "+(blockIndex+1)+".";
+  $("#resourceDesc").focus();return;
+ }
+ const button=event.target.closest("button[data-block][data-resource]");
+ if(!button)return;
  const blockIndex=Number(button.dataset.block),resourceIndex=Number(button.dataset.resource);
  if(!Number.isSafeInteger(blockIndex)||!Number.isSafeInteger(resourceIndex)||!blocks[blockIndex]||!Array.isArray(blocks[blockIndex].resources))return;
  blocks[blockIndex].resources.splice(resourceIndex,1);
  field.value=JSON.stringify(blocks,null,2);
+ if(editingCapResource?.blockIndex===blockIndex&&editingCapResource?.resourceIndex===resourceIndex){
+  editingCapResource=null;$("#addCapResourceBtn").textContent="إضافة المورد إلى JSON";
+ }
  renderCapResourceList();
  $("#resourceEditorStatus").textContent="تم حذف المورد المحدد فقط. راجع البيانات ثم احفظ المسودة.";
 });

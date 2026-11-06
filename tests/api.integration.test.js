@@ -73,6 +73,12 @@ test("API enforces role separation, public-feed filtering and account deactivati
   const readiness = await readinessResponse.json();
   assert.equal(readiness.ok, true);
   assert.deepEqual(readiness.checks, { database: "ok", foreign_keys: "ok" });
+  const unauthenticatedAlerts = await fetch(base + "/api/alerts");
+  assert.equal(unauthenticatedAlerts.status, 401);
+  assert.equal(unauthenticatedAlerts.headers.get("cache-control"), "no-store",
+    "unauthenticated warning API errors must not be cached");
+  assert.equal(unauthenticatedAlerts.headers.get("pragma"), "no-cache",
+    "unauthenticated warning API errors must carry a legacy no-cache directive");
 
   const dashboard = await fetch(base + "/");
   assert.equal(dashboard.status, 200, "dashboard should be served independently of process.cwd()");

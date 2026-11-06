@@ -1,3 +1,9 @@
+
+test("CI requires the official CAP 1.2 schema and xmllint instead of silently skipping conformance tests", { skip: process.env.CI !== "true" }, () => {
+  assert.ok(hasSchema, `Official OASIS CAP 1.2 schema was not found at ${schemaPath}`);
+  assert.ok(hasXmllint, "xmllint is required in CI for CAP 1.2 XSD validation");
+});
+
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -134,7 +140,7 @@ test("optional CAP metadata, response types, parameters, resources and area fiel
         mimeType: "image/png",
         size: 4096,
         uri: "https://example.org/rain.png",
-        derefUri: "embedded-map",
+        derefUri: "ZW1iZWRkZWQtbWFw",
         digest: "qZk+NkcGgWq6PiVxeFDCbJzQ2J0="
       }]
     }]

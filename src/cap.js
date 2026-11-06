@@ -249,6 +249,11 @@ export function validateAlert(input) {
   }]);
   if (input.msg_type === "Alert" && !blocks.length) throw new Error("CAP Alert messages require at least one info block.");
   if (input.msg_type !== "Cancel" && input.msg_type !== "Ack" && input.msg_type !== "Error" && !blocks.length) throw new Error("This CAP message type requires an info block.");
+  for (const block of blocks) {
+    if (!block || typeof block !== "object" || Array.isArray(block)) {
+      throw new Error("Each CAP info block must be an object.");
+    }
+  }
   if (!["Cancel","Ack","Error"].includes(input.msg_type)) {
     for (const block of blocks) if (!(block.areas?.length || block.area)) throw new Error("Each warning info block must identify at least one affected area.");
   }

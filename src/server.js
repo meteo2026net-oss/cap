@@ -1145,6 +1145,8 @@ app.get("/api/audit",auth,roles("admin","reviewer","approver"),(req,res)=>{
  const rows=db.prepare("SELECT l.*,u.username FROM audit_log l LEFT JOIN users u ON u.id=l.user_id "+where+" ORDER BY l.id DESC LIMIT ?").all(...params,limit+1);
  const hasMore=rows.length>limit;
  const entries=rows.slice(0,limit);
+ res.set("Cache-Control","no-store");
+ res.set("Pragma","no-cache");
  res.json({entries,has_more:hasMore,next_before_id:hasMore?entries.at(-1).id:null});
 });
 

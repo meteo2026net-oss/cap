@@ -42,6 +42,80 @@ function timestampSlug(date) {
   return date.toISOString().replace(/[-:]/g, "").replace(/\.(\d{3})Z$/, "$1Z");
 }
 
+
+const CAP_STATUSES = new Set(["Actual", "Exercise", "System", "Test"]);
+const CAP_MESSAGE_TYPES = new Set(["Alert", "Update", "Cancel", "Ack", "Error"]);
+const ALERT_WORKFLOWS = new Set(["draft", "pending", "approved", "published", "cancelled"]);
+
+function inspectAlertState(database) {
+  const columns = new Set(database.prepare("PRAGMA table_info(alerts)").all().map(column => column.name));
+  const required = ["identifier", "sender", "sent", "status", "msg_type", "references_text", "workflow"];
+  const missing = required.filter(column => !columns.has(column));
+  if (missing.length) {
+    return { available: false, reason: "legacy_alert_schema", missing_columns: missing };
+  }
+
+  const alerts = database.prepare(`
+    SELECT identifier, sender, sent, status, msg_type, references_text, workflow
+    FROM alerts ORDER BY id
+  `).all();
+  const identities = new Set(alerts.map(alert => `${alert.sender},${alert.identifier},${alert.sent}`));
+  const statusCounts = {};
+  const messageTypeCounts = {};
+  const workflowCounts = {};
+  let referenceCount = 0;
+  let resolvedInternalReferences = 0;
+  let unresolvedExternalReferences = 0;
+
+  for (const alert of alerts) {
+    if (!alert.identifier?.trim() || !alert.sender?.trim() ||
+        !/^[^\\s,<>]+$/.test(alert.identifier) || !/^[^\\s,<>]+$/.test(alert.sender)) {
+      throw new Error("Restored alert has an invalid CAP sender or identifier");
+    }
+    if (!Number.isFinite(Date.parse(alert.sent)) ||
+        !/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{2}:\\d{2})$/.test(alert.sent)) {
+      throw new Error(`Restored alert ${alert.identifier} has an invalid CAP sent timestamp`);
+    }
+    if (!CAP_STATUSES.has(alert.status)) throw new Error(`Restored alert ${alert.identifier} has an invalid CAP status`);
+    if (!CAP_MESSAGE_TYPES.has(alert.msg_type)) throw new Error(`Restored alert ${alert.identifier} has an invalid CAP message type`);
+    if (!ALERT_WORKFLOWS.has(alert.workflow)) throw new Error(`Restored alert ${alert.identifier} has an invalid workflow state`);
+
+    statusCounts[alert.status] = (statusCounts[alert.status] || 0) + 1;
+    messageTypeCounts[alert.msg_type] = (messageTypeCounts[alert.msg_type] || 0) + 1;
+    workflowCounts[alert.workflow] = (workflowCounts[alert.workflow] || 0) + 1;
+
+    const references = String(alert.references_text || "").trim().split(/\\s+/).filter(Boolean);
+    if (["Update", "Cancel", "Ack", "Error"].includes(alert.msg_type) && !references.length) {
+      throw new Error(`Restored CAP ${alert.msg_type} ${alert.identifier} is missing its references`);
+    }
+    for (const reference of references) {
+      const parts = reference.split(",");
+      if (parts.length !== 3 || parts.some(part => !part.trim()) ||
+          !/^[^\\s<>]+$/.test(parts[0]) || !/^[^\\s<>]+$/.test(parts[1]) ||
+          !/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{2}:\\d{2})$/.test(parts[2]) ||
+          !Number.isFinite(Date.parse(parts[2]))) {
+        throw new Error(`Restored alert ${alert.identifier} contains a malformed CAP reference`);
+      }
+      referenceCount += 1;
+      if (identities.has(reference)) resolvedInternalReferences += 1;
+      else unresolvedExternalReferences += 1;
+    }
+  }
+
+  return {
+    available: true,
+    alert_count: alerts.length,
+    status_counts: statusCounts,
+    message_type_counts: messageTypeCounts,
+    workflow_counts: workflowCounts,
+    references: {
+      total: referenceCount,
+      resolved_internal: resolvedInternalReferences,
+      unresolved_external: unresolvedExternalReferences
+    }
+  };
+}
+
 async function validateDatabaseFile(filePath, auditOptions = {}) {
   const database = new Database(filePath, { readonly: true, fileMustExist: true });
   try {
@@ -61,10 +135,11 @@ async function validateDatabaseFile(filePath, auditOptions = {}) {
       if (!actual.has(name)) throw new Error(`Database is missing required table: ${name}`);
     }
 
+    const alertState = inspectAlertState(database);
     const auditColumns = database.prepare("PRAGMA table_info(audit_log)").all().map(row => row.name);
     const audit = auditColumns.includes("entry_hash") ? verifyAuditChain(database, auditOptions) : null;
     if (audit && !audit.valid) throw new Error("Audit hash chain verification failed: " + (audit.reason || "verification_failed"));
-    return { integrity: "ok", audit };
+    return { integrity: "ok", audit, alert_state: alertState };
   } finally {
     database.close();
   }
@@ -159,7 +234,7 @@ export async function runIsolatedRestoreDrill(source, options = {}) {
       throw new Error("Restore drill failed: audit-chain or external-checkpoint verification differs after restore");
     }
 
-    const checkpoint = restoredState.audit?.checkpoint ?? null;
+    if (JSON.stringify(sourceState.alert_state) !== JSON.stringify(restoredState.alert_state)) {\n      throw new Error("Restore drill failed: CAP alert workflow or reference state differs after restore");\n    }\n\n    const checkpoint = restoredState.audit?.checkpoint ?? null;
     const checkpointConfigured = Boolean(restoredState.audit?.integrity_capabilities?.external_checkpoint_configured);
     report = {
       result: "passed",

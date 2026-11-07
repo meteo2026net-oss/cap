@@ -12,7 +12,7 @@ import { db, ensureAdmin } from "./db.js";
 import { buildCapXml, makeIdentifier, validateAlert } from "./cap.js";
 import { alertsToGeoJSON } from "./geojson.js";
 import { appendAuditLog, verifyAuditChain } from "./audit.js";
-import { enqueueDelivery, claimDelivery, recordDeliveryReceipt, retryDelivery, recoverStaleDeliveries, processDueRetries } from "./delivery.js";
+import { enqueueDelivery, claimDelivery, recordDeliveryReceipt, retryDelivery, recoverStaleDeliveries, processDueRetries, hasNonPublicDeliveryOutbox } from "./delivery.js";
 import { applyOperationalRetentionWithAudit, collectOperationalMetrics } from "./retention.js";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { consumeRecoveryCode, decryptTotpSecret, encryptTotpSecret, generateRecoveryCodes, generateTotpSecret, hashRecoveryCode, verifyTotp } from "./mfa.js";
@@ -1171,8 +1171,7 @@ app.use("/api/delivery",auth,(req,res,next)=>{
   if(row && row.scope!=="Public") return res.status(404).json({error:"Delivery not found"});
  }
  if(req.method==="POST" && ["/api/delivery/process-retries","/api/delivery/recover-stale"].includes(normalizedPath)){
-  const hidden=db.prepare("SELECT 1 FROM delivery_outbox d JOIN alerts a ON a.id=d.alert_id WHERE a.scope<>'Public' LIMIT 1").get();
-  if(hidden) return res.status(403).json({error:"Global delivery maintenance is blocked while non-Public alert recipients are not authorized",code:"SCOPE_AUTHORIZATION_UNCONFIGURED"});
+  if(hasNonPublicDeliveryOutbox(db)) return res.status(403).json({error:"Global delivery maintenance is blocked while non-Public alert recipients are not authorized",code:"SCOPE_AUTHORIZATION_UNCONFIGURED"});
  }
  next();
 });

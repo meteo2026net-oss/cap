@@ -1185,11 +1185,11 @@ app.get("/api/delivery/outbox",auth,roles("admin","publisher"),(req,res)=>{
   FROM delivery_outbox d JOIN alerts a ON a.id=d.alert_id
   WHERE a.scope='Public' AND (? IS NULL OR (?='dead_letter' AND d.dead_letter_at IS NOT NULL) OR (?<>'dead_letter' AND d.status=? AND d.dead_letter_at IS NULL)) ORDER BY d.created_at DESC LIMIT 500`).all(status ?? null,status ?? null,status ?? null,status ?? null);
  const counts=db.prepare(`SELECT
-  COALESCE(SUM(CASE WHEN dead_letter_at IS NOT NULL THEN 1 ELSE 0 END),0) AS dead_letter,
-  COALESCE(SUM(CASE WHEN dead_letter_at IS NULL AND status='queued' THEN 1 ELSE 0 END),0) AS queued,
-  COALESCE(SUM(CASE WHEN dead_letter_at IS NULL AND status='sending' THEN 1 ELSE 0 END),0) AS sending,
-  COALESCE(SUM(CASE WHEN dead_letter_at IS NULL AND status='failed' THEN 1 ELSE 0 END),0) AS failed,
-  COALESCE(SUM(CASE WHEN dead_letter_at IS NULL AND status='delivered' THEN 1 ELSE 0 END),0) AS delivered
+  COALESCE(SUM(CASE WHEN d.dead_letter_at IS NOT NULL THEN 1 ELSE 0 END),0) AS dead_letter,
+  COALESCE(SUM(CASE WHEN d.dead_letter_at IS NULL AND d.status='queued' THEN 1 ELSE 0 END),0) AS queued,
+  COALESCE(SUM(CASE WHEN d.dead_letter_at IS NULL AND d.status='sending' THEN 1 ELSE 0 END),0) AS sending,
+  COALESCE(SUM(CASE WHEN d.dead_letter_at IS NULL AND d.status='failed' THEN 1 ELSE 0 END),0) AS failed,
+  COALESCE(SUM(CASE WHEN d.dead_letter_at IS NULL AND d.status='delivered' THEN 1 ELSE 0 END),0) AS delivered
   FROM delivery_outbox d JOIN alerts a ON a.id=d.alert_id WHERE a.scope='Public'`).get();
  res.json({deliveries:rows,counts,external_adapters_enabled:false});
 });

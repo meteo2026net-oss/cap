@@ -108,7 +108,7 @@ test("parseCapXml rejects malformed, wrong-namespace and unsafe XML documents", 
   assert.throws(() => parseCapXml(wrongNamespace), /CAP 1.2 namespace/i);
   const prefixedNamespace = valid
     .replace('xmlns="urn:oasis:names:tc:emergency:cap:1.2"', 'xmlns:cap="urn:oasis:names:tc:emergency:cap:1.2"')
-    .replace(/<(\\/?)([A-Za-z][\\w.-]*)(?=[\\s/>])/g, (_match, slash, name) => `<${slash}cap:${name}`);
+    .replace(/<(\/?)([A-Za-z][\w.-]*)(?=[\s/>])/g, (_match, slash, name) => `<${slash}cap:${name}`);
   const prefixed = parseCapXml(prefixedNamespace);
   assert.equal(prefixed.identifier, base.identifier, "prefixed CAP 1.2 elements must parse identically");
   const withDtd = '<!DOCTYPE alert [<!ENTITY x "blocked">]>' + valid;

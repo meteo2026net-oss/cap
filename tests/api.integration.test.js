@@ -113,8 +113,13 @@ test("API enforces role separation, public-feed filtering and account deactivati
       headers: { "Content-Type": contentType, "X-Webhook-Timestamp": String(timestamp), "X-Webhook-Signature": signature },
       body
     });
-  const acceptedWebhook = await sendWebhook(webhookBody);
-  assert.equal(acceptedWebhook.status, 202, "valid signed webhook should be accepted into the inbox");
+  const concurrentWebhookResponses = await Promise.all(
+    Array.from({ length: 8 }, () => sendWebhook(webhookBody))
+  );
+  const concurrentWebhookStatuses = concurrentWebhookResponses.map(response => response.status).sort((a, b) => a - b);
+  assert.deepEqual(concurrentWebhookStatuses, [202, 401, 401, 401, 401, 401, 401, 401],
+    "concurrent replay of one signed webhook must atomically accept exactly one request");
+  const acceptedWebhook = concurrentWebhookResponses.find(response => response.status === 202);
   const acceptedWebhookData = await acceptedWebhook.json();
   assert.equal(acceptedWebhookData.accepted, true);
   assert.equal(acceptedWebhookData.status, "pending");

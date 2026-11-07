@@ -26,6 +26,7 @@ These are deployment-time decisions; they are not needed to continue repository 
 - [x] Implement administrator-assisted password reset with a generated temporary password, session revocation, forced change before normal access, audit event, and rate limiting.
 - [ ] Implement secure self-service password recovery with verified delivery, expiring single-use tokens, and abuse controls.
 - [ ] Enforce institutional identity lifecycle: onboarding, approval, suspension, offboarding, and periodic access review.
+- [ ] Define and implement recipient/role-level authorization for Restricted and Private alert reads, exports, CAP XML, and relationship/history endpoints. Current controls exclude non-Public scopes from public JSON/GeoJSON feeds, but authenticated internal read endpoints expose records to any authenticated account; the `addresses` field is not currently mapped to application identities or enforced as an access-control list.
 - [ ] Review role separation and last-administrator safeguards against the institution's approved policy.
 - [ ] Define session lifetime, revocation, secret rotation, and emergency account recovery.
 - [x] Verify retained audit-chain hash links and detect missing IDs between retained hashed entries; automated tests cover modified records, broken links, unhashed tails, and interior sequence gaps.

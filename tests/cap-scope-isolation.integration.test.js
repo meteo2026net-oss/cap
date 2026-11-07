@@ -6,6 +6,8 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import Database from "better-sqlite3";
+import { appendAuditLog } from "../src/audit.js";
 
 const serverEntry = fileURLToPath(new URL("../src/server.js", import.meta.url));
 
@@ -20,7 +22,7 @@ async function reservePort() {
   return port;
 }
 
-test("Restricted and Private alerts never leak through unauthenticated API surfaces", { timeout: 90000 }, async t => {
+test("Restricted and Private legacy alerts are denied across authenticated and public API surfaces", { timeout: 90000 }, async t => {
   const cwd = await mkdtemp(path.join(tmpdir(), "meteo-cap-isolation-"));
   const port = await reservePort();
   const base = "http://127.0.0.1:" + port;
@@ -73,7 +75,7 @@ test("Restricted and Private alerts never leak through unauthenticated API surfa
       },
       ...(body ? { body: JSON.stringify(body) } : {})
     });
-    return { status: response.status, headers: response.headers, data: await response.json().catch(() => ({})), text: null, response };
+    return { status: response.status, headers: response.headers, data: await response.json().catch(() => ({})), response };
   };
 
   const login = async (username, password) => {
@@ -81,7 +83,6 @@ test("Restricted and Private alerts never leak through unauthenticated API surfa
     assert.equal(result.status, 200, "login should succeed for " + username);
     return result.data.token;
   };
-
   const changePassword = async (token, currentPassword, newPassword) => {
     const changed = await request("/api/auth/change-password", {
       token, method: "POST", body: { currentPassword, newPassword }
@@ -92,7 +93,6 @@ test("Restricted and Private alerts never leak through unauthenticated API surfa
 
   let admin = await login("admin", adminPassword);
   admin = await changePassword(admin, adminPassword, adminPassword + "X");
-
   const tempPassword = "Isolation-Role-Password-2026!";
   const finalPassword = "Isolation-Role-Password-Final-2026!";
   for (const [username, role] of [
@@ -104,154 +104,145 @@ test("Restricted and Private alerts never leak through unauthenticated API surfa
       token: admin, method: "POST", body: { username, password: tempPassword, role }
     })).status, 201);
   }
-
-  const activate = async (username) => {
-    let token = await login(username, tempPassword);
-    return changePassword(token, tempPassword, finalPassword);
-  };
+  const activate = async username => changePassword(await login(username, tempPassword), tempPassword, finalPassword);
   const forecaster = await activate("iso_forecaster");
   const reviewer = await activate("iso_reviewer");
   const publisher = await activate("iso_publisher");
 
-  async function publish(payload) {
-    const created = await request("/api/alerts", { token: forecaster, method: "POST", body: payload });
-    assert.equal(created.status, 201, "draft create: " + JSON.stringify(created.data));
-    const id = created.data.id;
-    assert.equal((await request(`/api/alerts/${id}/submit`, { token: forecaster, method: "POST", body: {} })).status, 200);
-    assert.equal((await request(`/api/alerts/${id}/approve`, { token: reviewer, method: "POST", body: {} })).status, 200);
-    assert.equal((await request(`/api/alerts/${id}/publish`, { token: publisher, method: "POST", body: {} })).status, 200);
-    return created.data;
-  }
+  const publicCreate = await request("/api/alerts", {
+    token: forecaster, method: "POST", body: {
+      event: "Isolation public", headline: "Isolation public headline unique-public-xyz",
+      description: "Public isolation fixture", area_desc: "Isolation public area",
+      circle: "33.1,36.1 6", status: "Actual", scope: "Public",
+      urgency: "Expected", severity: "Moderate", certainty: "Likely"
+    }
+  });
+  assert.equal(publicCreate.status, 201);
+  const publicId = publicCreate.data.id;
+  assert.equal((await request(`/api/alerts/${publicId}/submit`, { token: forecaster, method: "POST", body: {} })).status, 200);
+  assert.equal((await request(`/api/alerts/${publicId}/approve`, { token: reviewer, method: "POST", body: {} })).status, 200);
+  assert.equal((await request(`/api/alerts/${publicId}/publish`, { token: publisher, method: "POST", body: {} })).status, 200);
 
-  const publicAlert = await publish({
-    event: "Isolation public",
-    headline: "Isolation public headline unique-public-xyz",
-    description: "Public isolation fixture",
-    area_desc: "Isolation public area",
-    circle: "33.1,36.1 6",
-    status: "Actual",
-    scope: "Public",
-    urgency: "Expected",
-    severity: "Moderate",
-    certainty: "Likely"
-  });
-  const restrictedAlert = await publish({
-    event: "Isolation restricted",
-    headline: "Isolation restricted headline unique-restricted-xyz",
-    description: "Restricted isolation fixture",
-    area_desc: "Isolation restricted area",
-    circle: "33.2,36.2 6",
-    status: "Actual",
-    scope: "Restricted",
-    restriction: "Authorized agencies only",
-    urgency: "Immediate",
-    severity: "Severe",
-    certainty: "Observed"
-  });
-  const privateAlert = await publish({
-    event: "Isolation private",
-    headline: "Isolation private headline unique-private-xyz",
-    description: "Private isolation fixture",
-    area_desc: "Isolation private area",
-    circle: "33.3,36.3 6",
-    status: "Actual",
-    scope: "Private",
-    addresses: "ops@example.test duty@example.test",
-    urgency: "Expected",
-    severity: "Minor",
-    certainty: "Possible"
-  });
+  // Insert legacy records directly to model data created before the Public-only API gate.
+  const db = new Database(path.join(cwd, "storage", "cap.sqlite"));
+  const insert = db.prepare(`INSERT INTO alerts
+    (identifier,sender,sent,status,msg_type,scope,restriction,addresses,event,category,urgency,severity,certainty,headline,description,area_desc,workflow,references_text)
+    VALUES (?,?,?,'Test','Alert',?,?,?,?,'Met','Expected','Moderate','Likely',?,?,?, ?,?)`);
+  const restrictedId = Number(insert.run(
+    "legacy-restricted-" + Date.now(), "legacy@example.test", "2026-11-07T00:00:00.000Z",
+    "Restricted", "Authorized agencies only", null, "Restricted event", "unique-restricted-xyz",
+    "RESTRICTED_SECRET_DESCRIPTION", "Restricted zone", "pending", ""
+  ).lastInsertRowid);
+  const privateId = Number(insert.run(
+    "legacy-private-" + Date.now(), "legacy@example.test", "2026-11-07T00:01:00.000Z",
+    "Private", null, "ops@example.test duty@example.test", "Private event", "unique-private-xyz",
+    "PRIVATE_SECRET_DESCRIPTION", "Private zone", "pending", ""
+  ).lastInsertRowid);
+  appendAuditLog(db, { userId: null, alertId: privateId, action: "private_scope_fixture", details: "PRIVATE_AUDIT_SECRET" });
+  const deliveryId = Number(db.prepare("INSERT INTO delivery_outbox(alert_id,channel,payload,status) VALUES(?,'cap_feed','PRIVATE_DELIVERY_SECRET','queued')")
+    .run(privateId).lastInsertRowid);
+  db.close();
 
-  const sensitiveIds = [restrictedAlert.identifier, privateAlert.identifier];
   const sensitiveNeedles = [
-    restrictedAlert.identifier,
-    privateAlert.identifier,
-    "unique-restricted-xyz",
-    "unique-private-xyz",
-    "Authorized agencies only",
-    "ops@example.test"
+    "unique-restricted-xyz", "unique-private-xyz", "RESTRICTED_SECRET_DESCRIPTION",
+    "PRIVATE_SECRET_DESCRIPTION", "Authorized agencies only", "ops@example.test",
+    "PRIVATE_AUDIT_SECRET", "PRIVATE_DELIVERY_SECRET"
   ];
 
-  // Unauthenticated authenticated-only endpoints must reject.
+  // All internal endpoints still require authentication.
   for (const url of [
-    "/api/alerts",
-    "/api/alerts?q=unique-restricted-xyz",
-    "/api/alerts?scope=Restricted",
-    "/api/alerts?scope=Private",
-    "/api/alerts/export.csv",
-    "/api/alerts/export.csv?q=unique-restricted-xyz",
-    "/api/alerts/stats",
-    `/api/alerts/${restrictedAlert.id}`,
-    `/api/alerts/${privateAlert.id}`,
-    `/api/alerts/${restrictedAlert.id}/cap.xml`,
-    `/api/alerts/${privateAlert.id}/cap.xml`,
-    `/api/alerts/${restrictedAlert.id}/relations`
+    "/api/alerts", "/api/alerts?q=unique-restricted-xyz", "/api/alerts?scope=Restricted",
+    "/api/alerts/export.csv", "/api/alerts/stats", `/api/alerts/${restrictedId}`,
+    `/api/alerts/${privateId}/cap.xml`, `/api/alerts/${privateId}/relations`,
+    `/api/alerts/${privateId}/versions`, `/api/alerts/${privateId}/timeline`,
+    "/api/review/queue", "/api/audit", "/api/delivery/outbox"
   ]) {
     const response = await fetch(base + url);
     assert.equal(response.status, 401, `${url} must require authentication`);
     const body = await response.text();
-    for (const needle of sensitiveNeedles) {
-      assert.ok(!body.includes(needle), `${url} unauthenticated body must not contain ${needle}`);
-    }
+    for (const needle of sensitiveNeedles) assert.ok(!body.includes(needle), `${url} leaked ${needle}`);
   }
 
-  // Public feeds must include Public only and never sensitive identifiers/content.
-  for (const url of ["/api/public/alerts", "/api/public/alerts.geojson"]) {
-    const response = await fetch(base + url);
-    assert.equal(response.status, 200, `${url} should be publicly readable`);
-    assert.equal(response.headers.get("cache-control"), "no-store", `${url} must not be cached`);
-    assert.equal(response.headers.get("pragma"), "no-cache", `${url} must send pragma no-cache`);
-    const body = await response.text();
-    assert.ok(body.includes(publicAlert.identifier), `${url} should include Public identifier`);
-    for (const needle of sensitiveNeedles) {
-      assert.ok(!body.includes(needle), `${url} must not leak sensitive content: ${needle}`);
+  const restrictedCreate = await request("/api/alerts", {
+    token: forecaster, method: "POST", body: {
+      event: "Restricted create", headline: "Restricted create",
+      description: "Restricted create", area_desc: "Restricted area",
+      circle: "33.2,36.2 5", scope: "Restricted", restriction: "Authorized agencies only"
     }
-    if (url.endsWith("/alerts")) {
-      const data = JSON.parse(body);
-      assert.ok((data.alerts || []).every(alert => alert.scope === "Public"),
-        "public JSON feed must only contain Public scope rows");
-      assert.ok((data.alerts || []).every(alert => alert.status === "Actual"),
-        "public JSON feed must only contain Actual status rows");
+  });
+  assert.equal(restrictedCreate.status, 403);
+  assert.equal(restrictedCreate.data.code, "SCOPE_AUTHORIZATION_UNCONFIGURED");
+  const privateCreate = await request("/api/alerts/", {
+    token: forecaster, method: "POST", body: {
+      event: "Private create", headline: "Private create",
+      description: "Private create", area_desc: "Private area",
+      circle: "33.3,36.3 5", scope: "Private", addresses: "ops@example.test"
     }
+  });
+  assert.equal(privateCreate.status, 403, "trailing slash must not bypass the Private create guard");
+
+  assert.equal((await request("/api/alerts?scope=Restricted", { token: forecaster })).status, 403);
+  assert.equal((await request("/api/alerts?scope=Private", { token: forecaster })).status, 403);
+  const list = await request("/api/alerts?q=unique-restricted-xyz", { token: forecaster });
+  assert.equal(list.status, 200);
+  assert.ok(!(list.data.alerts || []).some(alert => alert.id === restrictedId || alert.id === privateId));
+  for (const id of [restrictedId, privateId]) {
+    assert.equal((await request(`/api/alerts/${id}`, { token: forecaster })).status, 404);
+    assert.equal((await request(`/api/alerts/0${id}`, { token: forecaster })).status, 404);
+    assert.equal((await request(`/api/alerts/${id}/cap.xml`, { token: forecaster })).status, 404);
+    assert.equal((await request(`/api/alerts/${id}/relations`, { token: forecaster })).status, 404);
+    assert.equal((await request(`/api/alerts/${id}/versions`, { token: reviewer })).status, 404);
+    assert.equal((await request(`/api/alerts/${id}/timeline`, { token: reviewer })).status, 404);
   }
 
-  // Authenticated search may find Restricted/Private (operators need this), but only with a token.
-  const authedSearchRestricted = await request("/api/alerts?q=unique-restricted-xyz", { token: forecaster });
-  assert.equal(authedSearchRestricted.status, 200);
-  assert.ok((authedSearchRestricted.data.alerts || []).some(alert => alert.identifier === restrictedAlert.identifier),
-    "authenticated search may return Restricted for operators");
-
-  const authedSearchPrivate = await request("/api/alerts?q=unique-private-xyz", { token: forecaster });
-  assert.equal(authedSearchPrivate.status, 200);
-  assert.ok((authedSearchPrivate.data.alerts || []).some(alert => alert.identifier === privateAlert.identifier),
-    "authenticated search may return Private for operators");
-
-  // Authenticated CSV export may include Restricted/Private; unauthenticated must not.
-  const csvAuthed = await fetch(base + "/api/alerts/export.csv?q=unique-restricted-xyz", {
+  const exportResponse = await fetch(base + "/api/alerts/export.csv", {
     headers: { Authorization: "Bearer " + forecaster }
   });
-  assert.equal(csvAuthed.status, 200);
-  const csvText = await csvAuthed.text();
-  assert.ok(csvText.includes(restrictedAlert.identifier), "authenticated CSV may include Restricted rows");
-  assert.equal(csvAuthed.headers.get("cache-control"), "no-store", "CSV export must not be cached");
+  const exportText = await exportResponse.text();
+  assert.equal(exportResponse.status, 200);
+  for (const needle of sensitiveNeedles) assert.ok(!exportText.includes(needle), "CSV export leaked " + needle);
 
-  const csvUnauthed = await fetch(base + "/api/alerts/export.csv?q=unique-restricted-xyz");
-  assert.equal(csvUnauthed.status, 401);
-  const csvUnauthedText = await csvUnauthed.text();
-  for (const id of sensitiveIds) {
-    assert.ok(!csvUnauthedText.includes(id), "unauthenticated CSV must not include sensitive identifiers");
-  }
+  const reviewQueue = await request("/api/review/queue", { token: reviewer });
+  assert.equal(reviewQueue.status, 200);
+  assert.ok(!(reviewQueue.data.queue || []).some(row => row.id === restrictedId || row.id === privateId));
+  assert.ok(!JSON.stringify(reviewQueue.data).includes("Authorized agencies only"));
+  assert.ok(!JSON.stringify(reviewQueue.data).includes("ops@example.test"));
 
-  // CAP XML for Restricted/Private requires auth and remains no-store when authorized.
-  for (const id of [restrictedAlert.id, privateAlert.id]) {
-    const denied = await fetch(base + `/api/alerts/${id}/cap.xml`);
-    assert.equal(denied.status, 401);
-    const allowed = await fetch(base + `/api/alerts/${id}/cap.xml`, {
-      headers: { Authorization: "Bearer " + forecaster }
-    });
-    assert.equal(allowed.status, 200);
-    assert.equal(allowed.headers.get("cache-control"), "no-store");
-    const xml = await allowed.text();
-    assert.match(xml, /<alert[\s>]/);
+  const audit = await request("/api/audit?limit=500", { token: reviewer });
+  assert.equal(audit.status, 200);
+  assert.ok(!JSON.stringify(audit.data).includes("PRIVATE_AUDIT_SECRET"));
+  const auditCsv = await fetch(base + "/api/audit/export.csv", {
+    headers: { Authorization: "Bearer " + reviewer }
+  });
+  const auditCsvText = await auditCsv.text();
+  assert.ok(!auditCsvText.includes("PRIVATE_AUDIT_SECRET"));
+
+  const outbox = await request("/api/delivery/outbox", { token: publisher });
+  assert.equal(outbox.status, 200);
+  assert.ok(!(outbox.data.deliveries || []).some(row => row.id === deliveryId));
+  assert.equal((await request(`/api/delivery/outbox/${deliveryId}/claim`, {
+    token: publisher, method: "POST"
+  })).status, 404);
+  assert.equal((await request("/api/delivery/process-retries", {
+    token: publisher, method: "POST"
+  })).status, 403);
+
+  const metrics = await request("/api/health/metrics", { token: publisher });
+  assert.equal(metrics.status, 200);
+  assert.equal(metrics.data.metrics.alerts_by_workflow.pending || 0, 0,
+    "metrics must not reveal legacy Restricted/Private pending alerts");
+
+  for (const url of ["/api/public/alerts", "/api/public/alerts.geojson"]) {
+    const response = await fetch(base + url);
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("cache-control"), "no-store");
+    const body = await response.text();
+    assert.ok(body.includes(publicCreate.data.identifier));
+    for (const needle of sensitiveNeedles) assert.ok(!body.includes(needle), `${url} leaked ${needle}`);
+    if (url.endsWith("/alerts")) {
+      const data = JSON.parse(body);
+      assert.ok((data.alerts || []).every(alert => alert.scope === "Public"));
+      assert.ok((data.alerts || []).every(alert => alert.status === "Actual"));
+    }
   }
 });

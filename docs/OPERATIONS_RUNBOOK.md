@@ -16,7 +16,7 @@
 - Verify backups: `npm run backup:health`
 
 ## Incidents
-- If retention returns `audit_checkpoint_warning`, the retention transaction and database audit event have committed, but the external checkpoint file was not refreshed. Restore checkpoint write access, then run `npm run audit:checkpoint:refresh` with the original checkpoint path and secret. This command advances only an existing valid HMAC checkpoint whose anchor still exists in a fully verified chain. If the checkpoint is missing, malformed, has an invalid signature, or its anchor is absent, stop and restore trusted off-host checkpoint evidence; do not initialize a replacement over an unknown history.
+- If retention returns `audit_checkpoint_warning`, the retention transaction and database audit event have committed, but the external checkpoint file was not refreshed. Restore checkpoint write access, compare the existing checkpoint with independently protected off-host evidence, and review all audit records appended since that anchor. Only after that manual approval, run `npm run audit:checkpoint:refresh` with the original checkpoint path and secret. The command advances only an existing valid HMAC checkpoint whose anchor still exists in a fully verified chain. A valid local HMAC alone does not prove that the checkpoint is the latest trusted copy. If the checkpoint is missing, malformed, has an invalid signature, its anchor is absent, or off-host evidence does not match, stop and restore a consistent database/checkpoint pair from verified backups; do not initialize a replacement over an unknown history.
 1. Check readiness and metrics (outbox failed/dead-letter counts).
 2. Preserve SQLite file and latest backups.
 3. Restore into an isolated path before replacing active DB.

@@ -140,6 +140,8 @@ const schema = z.object({
  severity:z.enum(["Extreme","Severe","Moderate","Minor","Unknown"]).default("Unknown"),
  certainty:z.enum(["Observed","Likely","Possible","Unlikely","Unknown"]).default("Unknown"),
  scope:z.enum(["Public","Restricted","Private"]).default("Public"),
+ restriction:z.string().max(2000).optional(),
+ addresses:z.string().max(5000).optional(),
  headline:z.string().min(3).max(160).optional(), description:z.string().min(3).max(10000).optional(),
  instruction:z.string().max(10000).optional().default(""), area_desc:z.string().min(2).max(500).optional(),
  polygon:z.string().max(20000).optional().default(""), circle:z.string().max(200).optional().default(""),
@@ -823,10 +825,12 @@ app.post("/api/alerts",auth,roles("admin","forecaster"),(req,res)=>{
   };
   validateAlert(alert);
   const { info_blocks: _infoBlocks, ...alertParams } = alert;
+  alertParams.restriction = data.restriction || null;
+  alertParams.addresses = data.addresses || null;
   const result = db.transaction(()=>{
    const inserted = db.prepare(`INSERT INTO alerts
-    (identifier,sender,sent,status,msg_type,scope,references_text,event,category,response_type,urgency,severity,certainty,effective,onset,expires,headline,description,instruction,area_desc,polygon,circle,language,info_json,workflow,created_by)
-    VALUES (@identifier,@sender,@sent,@status,@msg_type,@scope,@references_text,@event,@category,@response_type,@urgency,@severity,@certainty,@effective,@onset,@expires,@headline,@description,@instruction,@area_desc,@polygon,@circle,@language,@info_json,@workflow,@created_by )`).run(alertParams);
+    (identifier,sender,sent,status,msg_type,scope,restriction,addresses,references_text,event,category,response_type,urgency,severity,certainty,effective,onset,expires,headline,description,instruction,area_desc,polygon,circle,language,info_json,workflow,created_by)
+    VALUES (@identifier,@sender,@sent,@status,@msg_type,@scope,@restriction,@addresses,@references_text,@event,@category,@response_type,@urgency,@severity,@certainty,@effective,@onset,@expires,@headline,@description,@instruction,@area_desc,@polygon,@circle,@language,@info_json,@workflow,@created_by )`).run(alertParams);
    audit(req.user.id,inserted.lastInsertRowid,"created","Draft created");
    recordAlertVersion(inserted.lastInsertRowid,req.user.id,"created");
    return inserted;
@@ -867,7 +871,7 @@ app.post("/api/alerts/:id/derive",auth,roles("admin","forecaster"),(req,res)=>{
 app.patch("/api/alerts/:id",auth,roles("admin","forecaster"),(req,res)=>{
  let data;
  try{data=schema.partial().parse(req.body);}catch(error){return res.status(400).json({error:error.message});}
- const fields=["event","category","response_type","urgency","severity","certainty","effective","onset","expires","headline","description","instruction","area_desc","polygon","circle","language","scope","status"];
+ const fields=["event","category","response_type","urgency","severity","certainty","effective","onset","expires","headline","description","instruction","area_desc","polygon","circle","language","scope","status","restriction","addresses"];
  const updates=fields.filter(field=>Object.hasOwn(data,field));
  if(Object.hasOwn(data,"info_blocks")) updates.push("info_json");
  if(!updates.length) return res.status(400).json({error:"No editable alert fields supplied"});
@@ -880,6 +884,10 @@ app.patch("/api/alerts/:id",auth,roles("admin","forecaster"),(req,res)=>{
   const values={...data};
   if(Object.hasOwn(data,"info_blocks")) values.info_json=JSON.stringify(data.info_blocks);
   values.id=alert.id;
+  // Re-validate CAP rules (including Restricted/Private scope requirements) before persisting.
+  const current=db.prepare("SELECT * FROM alerts WHERE id=?").get(alert.id);
+  const merged={...current,...values,info_blocks:values.info_json?JSON.parse(values.info_json):(current.info_json?JSON.parse(current.info_json):undefined)};
+  validateAlert(rowToCap(merged));
   const changed=db.prepare("UPDATE alerts SET "+assignments+",updated_at=CURRENT_TIMESTAMP WHERE id=@id AND workflow='draft'").run(values);
   if(changed.changes!==1) return {kind:"conflict"};
   recordAlertVersion(alert.id,req.user.id,"draft_updated");

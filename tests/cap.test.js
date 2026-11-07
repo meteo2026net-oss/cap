@@ -493,3 +493,35 @@ test("rejects malformed CAP info collections and nested area records with clear 
     }), /CAP parameters require object records/);
   }
 });
+
+test("Restricted scope requires restriction text and Private scope requires addresses", () => {
+  assert.throws(
+    () => validateAlert({ ...valid, scope: "Restricted" }),
+    /Restricted scope requires a non-empty restriction/
+  );
+  assert.throws(
+    () => validateAlert({ ...valid, scope: "Restricted", restriction: "   " }),
+    /Restricted scope requires a non-empty restriction/
+  );
+  assert.equal(
+    validateAlert({ ...valid, scope: "Restricted", restriction: "Internal distribution only" }),
+    true
+  );
+  assert.throws(
+    () => validateAlert({ ...valid, scope: "Private" }),
+    /Private scope requires a non-empty addresses/
+  );
+  assert.throws(
+    () => validateAlert({ ...valid, scope: "Private", addresses: "" }),
+    /Private scope requires a non-empty addresses/
+  );
+  assert.equal(
+    validateAlert({ ...valid, scope: "Private", addresses: "ops@example.test duty@example.test" }),
+    true
+  );
+});
+
+test("restriction and addresses must be text when provided", () => {
+  assert.throws(() => validateAlert({ ...valid, restriction: 12 }), /restriction must be text/);
+  assert.throws(() => validateAlert({ ...valid, addresses: ["a"] }), /addresses must be text/);
+});

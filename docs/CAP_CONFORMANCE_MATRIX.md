@@ -18,6 +18,7 @@ This matrix records the automated conformance coverage currently present in this
 | Resources | `tests/cap.test.js`: mandatory resource description and MIME type, size, URI, dereferenced URI and digest serialization | Expanded local coverage |
 | Public feed isolation | `tests/api.integration.test.js`: public feed and GeoJSON filtering, including expired and non-public/test data | Local API coverage |
 | Update/Cancel history | `tests/api.integration.test.js`: derived messages, relations, timeline and delivery outbox linkage | Local workflow coverage |
+| Scope restriction/addresses | `tests/cap.test.js`: Restricted requires restriction text; Private requires addresses; type checks for both fields | Implemented locally |
 
 ## Required follow-up before interoperability acceptance
 

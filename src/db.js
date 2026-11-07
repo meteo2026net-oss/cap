@@ -108,6 +108,8 @@ CREATE INDEX IF NOT EXISTS idx_delivery_alert ON delivery_outbox(alert_id);
 
  const alertColumns = db.prepare("PRAGMA table_info(alerts)").all().map(column => column.name);
  if (!alertColumns.includes("info_json")) db.exec("ALTER TABLE alerts ADD COLUMN info_json TEXT");
+ if (!alertColumns.includes("restriction")) db.exec("ALTER TABLE alerts ADD COLUMN restriction TEXT");
+ if (!alertColumns.includes("addresses")) db.exec("ALTER TABLE alerts ADD COLUMN addresses TEXT");
 
  const userColumns = db.prepare("PRAGMA table_info(users)").all().map(column => column.name);
  if (!userColumns.includes("token_version")) db.exec("ALTER TABLE users ADD COLUMN token_version INTEGER NOT NULL DEFAULT 0");

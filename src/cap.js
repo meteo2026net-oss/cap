@@ -264,6 +264,23 @@ export function validateAlert(input) {
     throw new Error("CAP identifier, sender, sent, status, msgType and scope are required.");
   }
   if (/[ ,<>]/.test(input.identifier) || /[ ,<>]/.test(input.sender)) throw new Error("CAP identifier and sender cannot contain spaces, commas or angle brackets.");
+  // CAP 1.2: Restricted scope requires a restriction description; Private scope requires addresses.
+  if (input.scope === "Restricted") {
+    if (typeof input.restriction !== "string" || !input.restriction.trim()) {
+      throw new Error("CAP Restricted scope requires a non-empty restriction description.");
+    }
+  }
+  if (input.scope === "Private") {
+    if (typeof input.addresses !== "string" || !input.addresses.trim()) {
+      throw new Error("CAP Private scope requires a non-empty addresses value listing intended recipients.");
+    }
+  }
+  if (input.restriction !== undefined && typeof input.restriction !== "string") {
+    throw new Error("CAP restriction must be text.");
+  }
+  if (input.addresses !== undefined && typeof input.addresses !== "string") {
+    throw new Error("CAP addresses must be text.");
+  }
   if (["Update","Cancel","Ack","Error"].includes(input.msg_type)) validateReferences(input.references_text);
   capDateTime(input.sent, "sent");
   if (input.info_blocks !== undefined && !Array.isArray(input.info_blocks)) {

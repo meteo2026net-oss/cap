@@ -89,8 +89,11 @@ test("API enforces role separation, public-feed filtering and account deactivati
   assert.ok(csp.includes("script-src-attr 'none'"), "inline event handler attributes must be blocked");
   for (const directive of ["img-src", "script-src", "style-src"]) {
     const policy = csp.split(";").map(value => value.trim()).find(value => value.startsWith(directive + " "));
-    assert.ok(policy?.includes("https://cdnjs.cloudflare.com"),
-      directive + " must permit the SRI-pinned Leaflet Draw CDN at runtime");
+    const allowedSources = new Set((policy || "").split(/\\s+/).slice(1));
+    assert.equal(allowedSources.has("https://cdnjs.cloudflare.com"), true,
+      directive + " must permit the exact SRI-pinned Leaflet Draw CDN origin");
+    assert.equal(allowedSources.has("https://untrusted.example/https://cdnjs.cloudflare.com"), false,
+      directive + " must not accept a different origin that merely contains the CDN hostname");
   }
   assert.equal(dashboard.headers.get("x-content-type-options"), "nosniff",
     "responses should prevent MIME type sniffing");

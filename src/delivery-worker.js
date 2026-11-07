@@ -1,6 +1,6 @@
 import "dotenv/config";
 import { db } from "./db.js";
-import { processDueRetries, recoverStaleDeliveries } from "./delivery.js";
+import { processDueRetries, recoverStaleDeliveries, hasNonPublicDeliveryOutbox } from "./delivery.js";
 
 const intervalMs = Number(process.env.CAP_DELIVERY_WORKER_INTERVAL_MS || 30000);
 if (!Number.isInteger(intervalMs) || intervalMs < 5000 || intervalMs > 300000) {
@@ -13,6 +13,10 @@ async function tick() {
   if (running || stopped) return;
   running = true;
   try {
+    if (hasNonPublicDeliveryOutbox(db)) {
+      console.warn("Delivery queue maintenance paused: non-Public alert deliveries exist and recipient authorization is not configured.");
+      return;
+    }
     const recovered = recoverStaleDeliveries(db, 10);
     const retries = processDueRetries(db);
     if (recovered.recovered.length || recovered.deadLettered.length || retries.requeued.length || retries.deadLettered.length) {

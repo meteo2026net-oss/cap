@@ -113,6 +113,61 @@ export function initializeAuditCheckpoint(database, { checkpointPath, checkpoint
   return { latest_id: latest.id, latest_hash: baseline.latest_hash };
 }
 
+/**
+ * Recover a stale external checkpoint only when its existing HMAC-authenticated
+ * anchor is still present in a fully verified append-only audit chain.
+ * This intentionally refuses missing, malformed, unsigned, or rolled-back anchors.
+ */
+export function refreshAuditCheckpoint(database, { checkpointPath, checkpointSecret } = {}) {
+  if (!checkpointPath || typeof checkpointSecret !== "string" || Buffer.byteLength(checkpointSecret, "utf8") < 32) {
+    throw new Error("A checkpoint path and secret of at least 32 bytes are required");
+  }
+
+  let document;
+  try {
+    document = JSON.parse(fs.readFileSync(path.resolve(checkpointPath), "utf8"));
+  } catch {
+    throw new Error("Existing audit checkpoint is unavailable or invalid; restore the trusted off-host checkpoint before recovery");
+  }
+
+  const payload = checkpointPayload(document.latest_id, document.latest_hash);
+  if (document.version !== 1 || !Number.isSafeInteger(payload.latest_id) || payload.latest_id < 1 ||
+      typeof payload.latest_hash !== "string" || !/^[a-f0-9]{64}$/.test(payload.latest_hash) ||
+      typeof document.signature !== "string" || !/^[a-f0-9]{64}$/.test(document.signature)) {
+    throw new Error("Existing audit checkpoint format is invalid; refusing to replace the trust anchor");
+  }
+  const expected = Buffer.from(checkpointSignature(payload, checkpointSecret), "hex");
+  const actual = Buffer.from(document.signature, "hex");
+  if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) {
+    throw new Error("Existing audit checkpoint signature is invalid; refusing to replace the trust anchor");
+  }
+
+  const anchor = database.prepare("SELECT entry_hash FROM audit_log WHERE id=?").get(payload.latest_id);
+  if (!anchor || anchor.entry_hash !== payload.latest_hash) {
+    throw new Error("Existing checkpoint anchor is missing or changed; restore from trusted off-host evidence");
+  }
+
+  const chain = verifyAuditChain(database, { checkpointPath: "", checkpointSecret: "" });
+  if (!chain.valid) {
+    throw new Error("Audit chain verification failed; refusing checkpoint recovery: " + (chain.reason || "invalid_chain"));
+  }
+  const latest = database.prepare(
+    "SELECT id,entry_hash FROM audit_log WHERE entry_hash IS NOT NULL ORDER BY id DESC LIMIT 1"
+  ).get();
+  if (!latest || latest.id < payload.latest_id) {
+    throw new Error("Database is older than the trusted checkpoint; refusing checkpoint rollback");
+  }
+  if (latest.id === payload.latest_id && latest.entry_hash !== payload.latest_hash) {
+    throw new Error("Database checkpoint anchor does not match; refusing checkpoint recovery");
+  }
+
+  if (latest.id === payload.latest_id) {
+    return { updated: false, latest_id: latest.id, latest_hash: latest.entry_hash };
+  }
+  writeExternalCheckpoint(checkpointPath, checkpointSecret, latest.id, latest.entry_hash);
+  return { updated: true, previous_id: payload.latest_id, latest_id: latest.id, latest_hash: latest.entry_hash };
+}
+
 export function appendAuditLog(database, { userId = null, alertId = null, action, details = "" }, options = {}) {
   if (typeof action !== "string" || !action.trim() || action.trim().length > 128) {
     throw new TypeError("Audit action must be a non-empty string up to 128 characters");

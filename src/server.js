@@ -633,7 +633,9 @@ app.use("/api/alerts",auth,(req,res,next)=>{
   return next();
  }
  const alertPathParts=pathname.split("/");
- const alertId=Number(alertPathParts[3]);
+ let alertIdSegment=alertPathParts[3]||"";
+ try { alertIdSegment=decodeURIComponent(alertIdSegment); } catch { return res.status(400).json({error:"Invalid alert identifier"}); }
+ const alertId=Number(alertIdSegment);
  const idMatch=pathname.startsWith("/api/alerts/") && Number.isSafeInteger(alertId) && alertId>0 ? [null,alertId] : null;
  if(idMatch){
   const existing=db.prepare("SELECT scope FROM alerts WHERE id=?").get(idMatch[1]);
@@ -1148,7 +1150,9 @@ app.patch("/api/webhooks/inbox/:id/review",auth,roles("admin","reviewer"),(req,r
 app.use("/api/delivery",auth,(req,res,next)=>{
  const pathname=new URL(req.originalUrl,"http://localhost").pathname;
  const deliveryPathParts=pathname.split("/");
- const deliveryId=Number(deliveryPathParts[4]);
+ let deliveryIdSegment=deliveryPathParts[4]||"";
+ try { deliveryIdSegment=decodeURIComponent(deliveryIdSegment); } catch { return res.status(400).json({error:"Invalid delivery identifier"}); }
+ const deliveryId=Number(deliveryIdSegment);
  const idMatch=pathname.startsWith("/api/delivery/outbox/") && Number.isSafeInteger(deliveryId) && deliveryId>0 ? [null,deliveryId] : null;
  if(idMatch){
   const row=db.prepare("SELECT a.scope FROM delivery_outbox d JOIN alerts a ON a.id=d.alert_id WHERE d.id=?").get(idMatch[1]);

@@ -1255,6 +1255,7 @@ test("API enforces role separation, public-feed filtering and account deactivati
     "Public legacy test", "Public legacy headline", "Public legacy description",
     "Public zone", "pending", ""
   ).lastInsertRowid);
+  scopeDb.prepare("UPDATE alerts SET circle='33.5,36.2 10' WHERE id=?").run(publicWithPrivateFieldsId);
   scopeDb.prepare("INSERT INTO alert_versions(alert_id,version_no,change_type,snapshot_json) VALUES(?,1,'created',?)")
     .run(publicWithPrivateFieldsId, JSON.stringify({
       id: publicWithPrivateFieldsId, scope: "Public",

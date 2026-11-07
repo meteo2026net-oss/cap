@@ -22,6 +22,7 @@ This matrix records the automated conformance coverage currently present in this
 | End-to-end CAP lifecycle | `tests/cap-lifecycle.integration.test.js`: Public/Restricted/Private Actual publish, OASIS XSD validation of exported XML, Update/Cancel derivation and publish, relations integrity, SQLite FK/quick_check, and public JSON/GeoJSON isolation of Restricted/Private | Implemented |
 | Independent semantic CAP rules | `tests/cap-semantic.test.js`: required headers, enumerations, date-time/timezone, onset/expiry order, Alert/Update/Cancel/Ack/Error info and reference rules, Restricted/Private scope fields, and rejection before XML emission | Implemented |
 | Validation atomicity | `tests/cap-validation-atomicity.integration.test.js`: failed create/derive/patch CAP validation leaves no partial alert, version, or outbox rows | Implemented |
+| Phase 4 reference/security/reliability | `tests/cap-phase4-security-reliability.integration.test.js`: Update/Cancel references match source sender/identifier/sent; duplicate cancel rejection; role-stage gates; unauthenticated isolation; SQLite backup/restore with quick_check and foreign_key_check; process restart durability | Implemented |
 
 ## Required follow-up before interoperability acceptance
 

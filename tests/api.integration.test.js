@@ -1642,12 +1642,33 @@ test("API enforces role separation, public-feed filtering and account deactivati
   });
   assert.equal(invalidCsvFilter.status, 400, "CSV export must reject invalid filters");
   const testIdentifier = await createAndPublish("Test");
+  const feedControlDb = new Database(path.join(cwd, "storage", "cap.sqlite"));
+  const feedControlIdentifiers = ["synthetic-public-ack-feed-check", "synthetic-public-error-feed-check"];
+  try {
+    const insertNonWarning = feedControlDb.prepare(`
+      INSERT INTO alerts
+        (identifier,sender,sent,status,msg_type,scope,event,category,urgency,severity,certainty,
+         headline,description,area_desc,language,workflow)
+      VALUES
+        (?, 'feed-control@example.test', ?, 'Actual', ?, 'Public', 'Synthetic control',
+         'Met', 'Unknown', 'Unknown', 'Unknown', 'Synthetic control', 'Not a public warning',
+         'Test area', 'en-US', 'published')
+    `);
+    feedControlDb.transaction(() => {
+      insertNonWarning.run(feedControlIdentifiers[0], new Date().toISOString(), "Ack");
+      insertNonWarning.run(feedControlIdentifiers[1], new Date().toISOString(), "Error");
+    })();
+  } finally {
+    feedControlDb.close();
+  }
   const publicFeed = await request("/api/public/alerts");
   assert.equal(publicFeed.status, 200);
   assert.ok(publicFeed.data.alerts.some(alert => alert.identifier === actualIdentifier),
     "published Actual/Public warning should be visible in the public feed");
   assert.ok(!publicFeed.data.alerts.some(alert => alert.identifier === testIdentifier),
     "published Test warning must not appear in the public feed");
+  assert.ok(!publicFeed.data.alerts.some(alert => feedControlIdentifiers.includes(alert.identifier)),
+    "CAP Ack and Error control messages must never appear in the public warning feed");
 
   const expiredIdentifier = await createAndPublish("Actual", "2020-01-01T00:00:00Z");
   const feedAfterExpiry = await request("/api/public/alerts");
@@ -1656,6 +1677,9 @@ test("API enforces role separation, public-feed filtering and account deactivati
   const geoAfterExpiry = await request("/api/public/alerts.geojson");
   assert.ok(!geoAfterExpiry.data.features.some(feature => feature.properties?.identifier === expiredIdentifier),
     "expired Actual/Public warnings must be excluded from the public GeoJSON feed");
+  assert.ok(!geoAfterExpiry.data.features.some(feature =>
+    feedControlIdentifiers.includes(feature.properties?.identifier)
+  ), "CAP Ack and Error control messages must never appear in the public GeoJSON feed");
 
   const deactivated = await request(`/api/users/${disabledId}/status`, {
     token: admin, method: "PATCH", body: { active: false }

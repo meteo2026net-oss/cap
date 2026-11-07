@@ -1,6 +1,8 @@
 # Meteo CAP Warning System
 
-Standalone Arabic-first weather-warning management starter based on the OASIS Common Alerting Protocol (CAP) 1.2.
+Arabic-first CAP 1.2 weather-warning management system for institutional operations centres. It covers the full internal lifecycle from draft authorship through review, approval, internal publication, audit, and controlled delivery outbox handling.
+
+**Not approved for operational public warning issuance.** Use only Test/Exercise data and private deployments until the institutional go-live gates in [Operational readiness](docs/OPERATIONAL_READINESS.md) are completed and independently accepted. See the [CAP 1.2 conformance matrix](docs/CAP_CONFORMANCE_MATRIX.md) for automated coverage boundaries.
 
 ## Run locally
 
@@ -50,10 +52,11 @@ The restore command refuses to overwrite an existing database unless `--force` i
 
 New audit entries are linked with SHA-256 hashes. Administrators, reviewers, and approvers can check the chain through the authenticated `GET /api/audit/verify` endpoint, which also detects missing IDs between retained hashed entries. Existing audit entries from before this migration are preserved and reported separately as legacy unhashed entries. A successful local verification cannot detect removal of the final tail or replacement of the whole database; retain signed checkpoints outside this database. A local hash chain is not a substitute for externally anchored signatures or immutable off-host storage.
 
-## Current starter features
+## Current features
 
-- Arabic RTL dashboard.
+- Arabic RTL operations-center dashboard with focus and interaction polish.
 - SQLite schema and initial administrator bootstrap.
+- Explicit maximum lengths and array bounds on CAP alert input fields (headline, description, geometry, resources, parameters, info blocks) enforced by Zod before CAP validation.
 - JWT login, authenticated password changes, administrator provisioning for institutional roles, and TOTP MFA with configurable enforcement for selected roles through `MFA_REQUIRED_ROLES`, including one-time recovery-code rotation.
 - Login uses a dummy bcrypt comparison for unknown/inactive accounts to reduce username-enumeration timing differences; malformed and oversized credentials are rejected before password verification.
 - Per-user token-version enforcement: password changes revoke all previously issued sessions and return a replacement token for the current session.

@@ -35,6 +35,9 @@ test("phase7: independent receivers accept Public Alert and return Ack reference
 });
 
 test("phase7: receivers reject missing references on Update and invalid Restricted", () => {
+  const originalAlert = receiveCapXmlA(buildCapXml(base));
+  assert.equal(originalAlert.ok, true);
+  const known = [originalAlert.stored];
   const updateXml = buildCapXml({
     identifier: makeIdentifier(),
     sender: base.sender,
@@ -53,8 +56,11 @@ test("phase7: receivers reject missing references on Update and invalid Restrict
     area_desc: base.area_desc,
     circle: base.circle
   });
-  assert.equal(receiveCapXmlA(updateXml).ok, true);
-  assert.equal(receiveCapXmlB(updateXml).ok, true);
+  assert.equal(receiveCapXmlA(updateXml, known).ok, true);
+  assert.equal(receiveCapXmlB(updateXml, known).ok, true);
+  const wrongReference = updateXml.replace(base.identifier, "urn:uuid:missing-target");
+  assert.equal(receiveCapXmlA(wrongReference, known).ok, false);
+  assert.equal(receiveCapXmlB(wrongReference, known).ok, false);
 
   const badUpdate = updateXml.replace(/<references>[\s\S]*?<\/references>/, "");
   assert.equal(receiveCapXmlA(badUpdate).ok, false);
@@ -68,6 +74,14 @@ test("phase7: receivers reject missing references on Update and invalid Restrict
   }).replace(/<restriction>[\s\S]*?<\/restriction>/, "");
   assert.equal(receiveCapXmlA(restrictedBad).ok, false);
   assert.equal(receiveCapXmlB(restrictedBad).ok, false);
+});
+
+test("phase7: receivers reject DTD/entity declarations and malformed XML", () => {
+  const hostile = `<!DOCTYPE alert [<!ENTITY xxe SYSTEM "file:///etc/passwd">]><alert>&xxe;</alert>`;
+  for (const receive of [receiveCapXmlA, receiveCapXmlB]) {
+    assert.equal(receive(hostile).ok, false);
+    assert.equal(receive("<alert><identifier></alert>").ok, false);
+  }
 });
 
 test("phase7: receivers tolerate compacted XML and preserve Arabic headline via receiver B", () => {

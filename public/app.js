@@ -842,7 +842,8 @@ async function loadAlertRelations(id){
    const card=document.createElement("article");card.className="alertItem";card.dataset.relMessage=String(message.id);
    const title=document.createElement("b");title.textContent=message.headline||message.event||message.identifier;card.append(title);
    const details=document.createElement("div");details.className="alertMeta";
-   for(const value of [typeLabel(message.msg_type),"#"+message.id,message.workflow,message.status,message.sent,message.identifier]){
+   const scopeLabel={Public:"عام",Restricted:"مقيّد",Private:"خاص"}[message.scope]||message.scope||"";
+   for(const value of [typeLabel(message.msg_type),"#"+message.id,message.workflow,message.status,scopeLabel,message.sent,message.identifier].filter(Boolean)){
     const item=document.createElement("span");item.textContent=value;details.append(item);
    }
    card.append(details);

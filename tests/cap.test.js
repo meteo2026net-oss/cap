@@ -533,3 +533,26 @@ test("null restriction and addresses from storage are treated as omitted optiona
     /Restricted scope requires a non-empty restriction/
   );
 });
+
+test("buildCapXml emits restriction for Restricted and addresses for Private", () => {
+  const restrictedXml = buildCapXml({
+    ...valid,
+    scope: "Restricted",
+    restriction: "Internal distribution to authorized agencies only"
+  });
+  assert.match(restrictedXml, /<scope>Restricted<\/scope>/);
+  assert.match(restrictedXml, /<restriction>Internal distribution to authorized agencies only<\/restriction>/);
+
+  const privateXml = buildCapXml({
+    ...valid,
+    scope: "Private",
+    addresses: "ops@example.test duty@example.test"
+  });
+  assert.match(privateXml, /<scope>Private<\/scope>/);
+  assert.match(privateXml, /<addresses>ops@example.test duty@example.test<\/addresses>/);
+
+  const publicXml = buildCapXml(valid);
+  assert.match(publicXml, /<scope>Public<\/scope>/);
+  assert.doesNotMatch(publicXml, /<restriction>/);
+  assert.doesNotMatch(publicXml, /<addresses>/);
+});

@@ -1326,10 +1326,13 @@ test("API enforces role separation, public-feed filtering and account deactivati
   assert.ok(!Object.hasOwn(publicDetailWithSensitiveFields.data.alert, "restriction") &&
     !Object.hasOwn(publicDetailWithSensitiveFields.data.alert, "addresses"),
     "Public alert detail must suppress recipient-only fields even on legacy rows");
-  const publicXmlWithSensitiveFields = await request(`/api/alerts/${publicWithPrivateFieldsId}/cap.xml`, { token: forecaster });
+  const publicXmlWithSensitiveFields = await fetch(base + `/api/alerts/${publicWithPrivateFieldsId}/cap.xml`, {
+    headers: { Authorization: "Bearer " + forecaster }
+  });
+  const publicXmlText = await publicXmlWithSensitiveFields.text();
   assert.equal(publicXmlWithSensitiveFields.status, 200);
-  assert.ok(!publicXmlWithSensitiveFields.data.includes("PUBLIC_SCOPE_RESTRICTION_MARKER") &&
-    !publicXmlWithSensitiveFields.data.includes("PUBLIC_SCOPE_ADDRESSES_MARKER"),
+  assert.ok(!publicXmlText.includes("PUBLIC_SCOPE_RESTRICTION_MARKER") &&
+    !publicXmlText.includes("PUBLIC_SCOPE_ADDRESSES_MARKER"),
     "Public CAP XML must suppress recipient-only fields from legacy rows");
   const publicVersionsWithSensitiveFields = await request(`/api/alerts/${publicWithPrivateFieldsId}/versions`, { token: reviewer });
   assert.equal(publicVersionsWithSensitiveFields.status, 200);

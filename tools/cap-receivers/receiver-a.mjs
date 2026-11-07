@@ -16,6 +16,12 @@ function nodeText(node) {
   return "";
 }
 
+function childNode(parent, localName) {
+  if (!parent || typeof parent !== "object") return undefined;
+  const key = Object.keys(parent).find(name => name === localName || name.endsWith(":" + localName));
+  return key ? parent[key] : undefined;
+}
+
 function parseDocument(xml) {
   if (typeof xml !== "string" || !xml.trim()) throw new Error("CAP XML is required");
   if (Buffer.byteLength(xml, "utf8") > 1_000_000) throw new Error("CAP XML exceeds the 1 MB receiver limit");
@@ -27,9 +33,11 @@ function parseDocument(xml) {
   } catch {
     throw new Error("malformed XML");
   }
-  const alert = document?.alert;
+  const rootKey = Object.keys(document || {}).find(name => name === "alert" || name.endsWith(":alert"));
+  const alert = rootKey ? document[rootKey] : undefined;
   if (!alert || typeof alert !== "object" || Array.isArray(alert)) throw new Error("missing CAP alert root");
-  if (alert["@xmlns"] && alert["@xmlns"] !== CAP_NAMESPACE) throw new Error("unexpected CAP namespace");
+  const namespaces = Object.entries(alert).filter(([name]) => name === "@xmlns" || name.startsWith("@xmlns:")).map(([, value]) => String(value));
+  if (namespaces.length && !namespaces.includes(CAP_NAMESPACE)) throw new Error("unexpected CAP namespace");
   return alert;
 }
 
@@ -57,13 +65,13 @@ export function receiveCapXmlA(xml, { knownMessages = [], database = null } = {}
     return { ok: false, error: error.message, kind: "Error" };
   }
   const stored = {
-    identifier: nodeText(alert.identifier),
-    sender: nodeText(alert.sender),
-    sent: nodeText(alert.sent),
-    msgType: nodeText(alert.msgType),
-    scope: nodeText(alert.scope),
-    status: nodeText(alert.status),
-    references: nodeText(alert.references)
+    identifier: nodeText(childNode(alert, "identifier")),
+    sender: nodeText(childNode(alert, "sender")),
+    sent: nodeText(childNode(alert, "sent")),
+    msgType: nodeText(childNode(alert, "msgType")),
+    scope: nodeText(childNode(alert, "scope")),
+    status: nodeText(childNode(alert, "status")),
+    references: nodeText(childNode(alert, "references"))
   };
   if (Object.values(stored).slice(0, 6).some(value => !value)) {
     return { ok: false, error: "missing required CAP header fields", kind: "Error", stored };
@@ -77,10 +85,10 @@ export function receiveCapXmlA(xml, { knownMessages = [], database = null } = {}
   if (!["Actual", "Exercise", "System", "Test"].includes(stored.status)) {
     return { ok: false, error: "unsupported status", kind: "Error", stored };
   }
-  if (stored.scope === "Restricted" && !nodeText(alert.restriction)) {
+  if (stored.scope === "Restricted" && !nodeText(childNode(alert, "restriction"))) {
     return { ok: false, error: "Restricted requires restriction", kind: "Error", stored };
   }
-  if (stored.scope === "Private" && !nodeText(alert.addresses)) {
+  if (stored.scope === "Private" && !nodeText(childNode(alert, "addresses"))) {
     return { ok: false, error: "Private requires addresses", kind: "Error", stored };
   }
   const validate = history => DERIVED_TYPES.has(stored.msgType) ? verifyReferences(stored.references, history) : { ok: true };

@@ -6,7 +6,7 @@ This matrix records the automated conformance coverage currently present in this
 
 | Area | Current automated evidence | Coverage status |
 |---|---|---|
-| CAP namespace and XML serialization | `tests/cap.test.js`: XML export and namespace assertions; `tests/cap-schema.test.js`: official OASIS CAP 1.2 XSD validation plus negative controls proving the independent `xmllint` validator rejects a missing required sender and an invalid severity enumeration | Implemented |
+| CAP namespace and XML serialization | `tests/cap.test.js`: XML export and namespace assertions; `tests/cap-schema.test.js`: official OASIS CAP 1.2 XSD validation plus negative controls proving the independent `xmllint` validator rejects a missing required sender, missing required event, invalid severity enumeration, and invalid message-type enumeration | Implemented |
 | Message types | `tests/cap-schema.test.js`: Alert, Update, Cancel, Ack, and Error are generated and validated against the XSD | Basic type matrix covered |
 | Alert info blocks | `tests/cap.test.js`: required event/area, category and responseType enumerations, language tags, headline length, expiry ordering, multilingual blocks, optional metadata and parameters | Expanded local coverage |
 | Update references | `tests/cap.test.js`: required references, multiple triplets, timestamp/calendar/offset validation; XSD validates the generated Update | Implemented locally |

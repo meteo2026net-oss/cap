@@ -2,12 +2,12 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import Database from "better-sqlite3";
 import { createHash } from "node:crypto";
-import { enqueueDelivery, claimDelivery, recordDeliveryReceipt, retryDelivery, recoverStaleDeliveries, processDueRetries } from "../src/delivery.js";
+import { enqueueDelivery, claimDelivery, recordDeliveryReceipt, retryDelivery, recoverStaleDeliveries, processDueRetries, hasNonPublicDeliveryOutbox } from "../src/delivery.js";
 
 function fixture() {
  const database=new Database(":memory:");
  database.exec(`
-  CREATE TABLE alerts(id INTEGER PRIMARY KEY, identifier TEXT NOT NULL);
+  CREATE TABLE alerts(id INTEGER PRIMARY KEY, identifier TEXT NOT NULL, scope TEXT NOT NULL DEFAULT 'Public');
   INSERT INTO alerts(id,identifier) VALUES(1,'test-alert-1');
   CREATE TABLE delivery_outbox(
    id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -23,6 +23,19 @@ function fixture() {
  `);
  return database;
 }
+
+test("global delivery maintenance detects non-Public outbox records", () => {
+ const db=fixture();
+ try {
+  assert.equal(hasNonPublicDeliveryOutbox(db), false);
+  db.prepare("INSERT INTO alerts(id,identifier,scope) VALUES(2,'private-alert','Private')").run();
+  enqueueDelivery(db,{alertId:2,payload:"private payload"});
+  assert.equal(hasNonPublicDeliveryOutbox(db), true,
+   "a legacy non-Public outbox row must pause global retry and stale-lease maintenance");
+  db.prepare("DELETE FROM delivery_outbox WHERE alert_id=2").run();
+  assert.equal(hasNonPublicDeliveryOutbox(db), false);
+ } finally { db.close(); }
+});
 
 test("outbox enqueue is idempotent for an alert and channel",()=>{
  const db=fixture();

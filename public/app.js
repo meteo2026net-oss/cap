@@ -423,6 +423,10 @@ $("#alertForm").addEventListener("submit",async e=>{
  if(obj.info_blocks?.length&&(obj.polygon?.trim()||obj.circle?.trim())&&!obj.info_blocks.some(b=>b.area||b.areas?.length)){const area={areaDesc:obj.area_desc};if(obj.polygon?.trim())area.polygon=obj.polygon.trim();if(obj.circle?.trim())area.circle=obj.circle.trim();obj.info_blocks[0].area=area;}
  const hasInfoArea=obj.info_blocks?.some(b=>b.area||b.areas?.length);
  if(!obj.polygon?.trim()&&!obj.circle?.trim()&&!hasInfoArea){alert("أدخل مضلعاً أو دائرة أو منطقة جغرافية ضمن كتل المعلومات.");return}
+ if(obj.scope==="Restricted"&&!(obj.restriction||"").trim()){alert("عند اختيار النطاق مقيّد يجب إدخال قيد التوزيع (restriction).");return}
+ if(obj.scope==="Private"&&!(obj.addresses||"").trim()){alert("عند اختيار النطاق خاص يجب إدخال عناوين المستلمين (addresses).");return}
+ if(!(obj.restriction||"").trim())delete obj.restriction;
+ if(!(obj.addresses||"").trim())delete obj.addresses;
  for(const k of ["effective","onset","expires"])if(obj[k])obj[k]=new Date(obj[k]).toISOString();else obj[k]="";
  try{
   if(editingAlertId){
@@ -558,7 +562,7 @@ async function editDraft(id){
   const alertData=current.alert;
   if(alertData.workflow!=="draft")throw new Error("لا يمكن تعديل تحذير لم يعد مسودة.");
   const form=$("#alertForm");
-  const values={event:alertData.event,headline:alertData.headline,category:alertData.category,urgency:alertData.urgency,severity:alertData.severity,certainty:alertData.certainty,status:alertData.status,scope:alertData.scope,effective:dateForLocalInput(alertData.effective),onset:dateForLocalInput(alertData.onset),expires:dateForLocalInput(alertData.expires),response_type:alertData.response_type,language:alertData.language,area_desc:alertData.area_desc,description:alertData.description,instruction:alertData.instruction,polygon:alertData.polygon,circle:alertData.circle,info_blocks_json:alertData.info_blocks?.length?JSON.stringify(alertData.info_blocks,null,2):""};
+  const values={event:alertData.event,headline:alertData.headline,category:alertData.category,urgency:alertData.urgency,severity:alertData.severity,certainty:alertData.certainty,status:alertData.status,scope:alertData.scope,restriction:alertData.restriction||"",addresses:alertData.addresses||"",effective:dateForLocalInput(alertData.effective),onset:dateForLocalInput(alertData.onset),expires:dateForLocalInput(alertData.expires),response_type:alertData.response_type,language:alertData.language,area_desc:alertData.area_desc,description:alertData.description,instruction:alertData.instruction,polygon:alertData.polygon,circle:alertData.circle,info_blocks_json:alertData.info_blocks?.length?JSON.stringify(alertData.info_blocks,null,2):""};
   for(const [name,value] of Object.entries(values)){const field=form.elements.namedItem(name);if(field)field.value=value??""}
   renderCapResourceList();
   editingAlertId=id;setAlertEditorMode(true);form.scrollIntoView({behavior:"smooth",block:"start"});
@@ -683,7 +687,7 @@ async function loadAlertVersionDiff(id,container){
   const versions=data.versions;
   const heading=document.createElement("p");heading.textContent="النسخة الحالية #"+versions[0].version_no+" مقارنة بالنسخة #"+versions[1].version_no;container.append(heading);
   const current=versions[0].snapshot,previous=versions[1].snapshot;
-  const labels={headline:"العنوان",event:"الحدث",description:"الوصف",instruction:"التعليمات",severity:"الشدة",urgency:"الإلحاح",certainty:"اليقين",status:"حالة CAP",scope:"النطاق",effective:"بداية الفعالية",onset:"بداية الحدث",expires:"انتهاء التحذير",area_desc:"المنطقة",polygon:"المضلع",circle:"الدائرة",language:"اللغة",info_blocks:"معلومات متعددة اللغات"};
+  const labels={headline:"العنوان",event:"الحدث",description:"الوصف",instruction:"التعليمات",severity:"الشدة",urgency:"الإلحاح",certainty:"اليقين",status:"حالة CAP",scope:"النطاق",restriction:"قيد التوزيع",addresses:"عناوين المستلمين",effective:"بداية الفعالية",onset:"بداية الحدث",expires:"انتهاء التحذير",area_desc:"المنطقة",polygon:"المضلع",circle:"الدائرة",language:"اللغة",info_blocks:"معلومات متعددة اللغات"};
   for(const key of data.changed_fields){
    const row=document.createElement("section");row.className="versionChange";
    const label=document.createElement("b");label.textContent=labels[key]||key;row.append(label);

@@ -60,11 +60,11 @@ test("phase7: receivers reject missing references on Update and invalid Restrict
     area_desc: base.area_desc,
     circle: base.circle
   });
-  assert.equal(receiveCapXmlA(updateXml, known).ok, true);
-  assert.equal(receiveCapXmlB(updateXml, known).ok, true);
+  assert.equal(receiveCapXmlA(updateXml, { knownMessages: known }).ok, true);
+  assert.equal(receiveCapXmlB(updateXml, { knownMessages: known }).ok, true);
   const wrongReference = updateXml.replace(base.identifier, "urn:uuid:missing-target");
-  assert.equal(receiveCapXmlA(wrongReference, known).ok, false);
-  assert.equal(receiveCapXmlB(wrongReference, known).ok, false);
+  assert.equal(receiveCapXmlA(wrongReference, { knownMessages: known }).ok, false);
+  assert.equal(receiveCapXmlB(wrongReference, { knownMessages: known }).ok, false);
 
   const badUpdate = updateXml.replace(/<references>[\s\S]*?<\/references>/, "");
   assert.equal(receiveCapXmlA(badUpdate).ok, false);

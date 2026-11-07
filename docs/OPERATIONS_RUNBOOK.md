@@ -11,7 +11,7 @@
 - Metrics: `GET /api/health/metrics` (admin/publisher token)
 
 ## Common actions
-- Apply local retention: `npm run retention:apply`
+- Apply local retention: `npm run retention:apply` (deletion and `retention_applied` audit record are committed in one SQLite transaction; CLI-originated events use a null user ID)
 - Backup: `npm run backup`
 - Verify backups: `npm run backup:health`
 

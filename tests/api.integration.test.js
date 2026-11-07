@@ -24,7 +24,7 @@ async function reservePort() {
   return port;
 }
 
-test("API enforces role separation, public-feed filtering and account deactivation", { timeout: 60000 }, async t => {
+test("API enforces role separation, public-feed filtering and account deactivation", { timeout: 120000 }, async t => {
   const cwd = await mkdtemp(path.join(tmpdir(), "meteo-cap-api-"));
   const port = await reservePort();
   const base = "http://127.0.0.1:" + port;

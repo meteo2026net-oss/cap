@@ -1312,14 +1312,14 @@ test("API enforces role separation, public-feed filtering and account deactivati
   const csvExport = await fetch(base + "/api/alerts/export.csv", {
     headers: { Authorization: "Bearer " + forecaster }
   });
-  const csvText = await csvExport.text();
+  const scopeBoundaryCsvText = await csvExport.text();
   assert.equal(csvExport.status, 200);
-  assert.ok(!csvText.includes("legacy-restricted-") && !csvText.includes("legacy-private-") &&
-    !csvText.includes("RESTRICTED_HEADLINE_MARKER") && !csvText.includes("PRIVATE_HEADLINE_MARKER"),
+  assert.ok(!scopeBoundaryCsvText.includes("legacy-restricted-") && !scopeBoundaryCsvText.includes("legacy-private-") &&
+    !scopeBoundaryCsvText.includes("RESTRICTED_HEADLINE_MARKER") && !scopeBoundaryCsvText.includes("PRIVATE_HEADLINE_MARKER"),
     "CSV export must not contain non-Public alert identifiers or content");
-  assert.ok(!csvText.includes("PUBLIC_SCOPE_RESTRICTION_MARKER") &&
-    !csvText.includes("PUBLIC_SCOPE_ADDRESSES_MARKER") &&
-    !csvText.includes('"restriction"') && !csvText.includes('"addresses"'),
+  assert.ok(!scopeBoundaryCsvText.includes("PUBLIC_SCOPE_RESTRICTION_MARKER") &&
+    !scopeBoundaryCsvText.includes("PUBLIC_SCOPE_ADDRESSES_MARKER") &&
+    !scopeBoundaryCsvText.includes('"restriction"') && !scopeBoundaryCsvText.includes('"addresses"'),
     "Public-scope exports must not expose recipient-only CAP fields");
   const publicDetailWithSensitiveFields = await request(`/api/alerts/${publicWithPrivateFieldsId}`, { token: forecaster });
   assert.equal(publicDetailWithSensitiveFields.status, 200);

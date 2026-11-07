@@ -185,6 +185,71 @@ test("checkpoint refresh CLI requires explicit off-host evidence attestation", (
   }
 });
 
+test("checkpoint recovery refuses a tampered post-anchor audit tail without changing the checkpoint", () => {
+  const db = makeFixture();
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "cap-audit-checkpoint-tail-"));
+  const checkpointPath = path.join(root, "audit-checkpoint.json");
+  const checkpointSecret = "recovery-test-secret-at-least-32-bytes";
+  try {
+    appendAuditLog(db, { action: "baseline" });
+    initializeAuditCheckpoint(db, { checkpointPath, checkpointSecret });
+    appendAuditLog(db, { action: "post_anchor", details: "committed after checkpoint" });
+    const checkpointBefore = fs.readFileSync(checkpointPath);
+    db.exec("DROP TRIGGER audit_log_no_update");
+    db.prepare("UPDATE audit_log SET details='tampered' WHERE action='post_anchor'").run();
+
+    assert.throws(
+      () => refreshAuditCheckpoint(db, { checkpointPath, checkpointSecret, offHostEvidenceReviewed: true }),
+      /Audit chain verification failed: entry_hash_mismatch/
+    );
+    assert.deepEqual(fs.readFileSync(checkpointPath), checkpointBefore);
+  } finally {
+    db.close();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("checkpoint recovery refuses a missing anchor and leaves the checkpoint untouched", () => {
+  const db = makeFixture();
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "cap-audit-checkpoint-anchor-"));
+  const checkpointPath = path.join(root, "audit-checkpoint.json");
+  const checkpointSecret = "recovery-test-secret-at-least-32-bytes";
+  try {
+    appendAuditLog(db, { action: "baseline" });
+    const anchor = initializeAuditCheckpoint(db, { checkpointPath, checkpointSecret });
+    const checkpointBefore = fs.readFileSync(checkpointPath);
+    db.exec("DROP TRIGGER audit_log_no_delete");
+    db.prepare("DELETE FROM audit_log WHERE id=?").run(anchor.latest_id);
+
+    assert.throws(
+      () => refreshAuditCheckpoint(db, { checkpointPath, checkpointSecret, offHostEvidenceReviewed: true }),
+      /anchor is missing or changed/
+    );
+    assert.deepEqual(fs.readFileSync(checkpointPath), checkpointBefore);
+  } finally {
+    db.close();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("checkpoint recovery refuses malformed checkpoint files", () => {
+  const db = makeFixture();
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "cap-audit-checkpoint-malformed-"));
+  const checkpointPath = path.join(root, "audit-checkpoint.json");
+  const checkpointSecret = "recovery-test-secret-at-least-32-bytes";
+  try {
+    fs.writeFileSync(checkpointPath, "{malformed-json");
+    assert.throws(
+      () => refreshAuditCheckpoint(db, { checkpointPath, checkpointSecret, offHostEvidenceReviewed: true }),
+      /Existing audit checkpoint is unavailable or invalid/
+    );
+    assert.equal(fs.readFileSync(checkpointPath, "utf8"), "{malformed-json");
+  } finally {
+    db.close();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("checkpoint recovery refuses a changed or missing trusted anchor", () => {
   const db = makeFixture();
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "cap-audit-checkpoint-reject-"));

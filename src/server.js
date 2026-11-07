@@ -990,6 +990,13 @@ app.post("/api/alerts/:id/publish",auth,roles("admin","publisher"),(req,res)=>{
       Math.floor(referenceTime/1000)!==Math.floor(sourceTime/1000)) return {kind:"invalid_reference"};
    if(cancellationSource.workflow!=="published") return {kind:"source_not_active"};
   }
+  // Validate CAP XML before flipping workflow state so a validation failure rolls back.
+  let xml;
+  try {
+   xml=buildCapXml(rowToCap(a));
+  } catch(error) {
+   return {kind:"invalid_cap",message:error.message};
+  }
   const changed=db.prepare("UPDATE alerts SET workflow='published',status=?,published_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE id=? AND workflow='approved'").run(a.status,a.id);
   if(changed.changes!==1) return {kind:"conflict"};
   const sourceCancelled=a.msg_type==="Cancel" && a.status===cancellationSource?.status && a.status!=="Test";
@@ -997,8 +1004,7 @@ app.post("/api/alerts/:id/publish",auth,roles("admin","publisher"),(req,res)=>{
    const cancelled=db.prepare("UPDATE alerts SET workflow='cancelled',updated_at=CURRENT_TIMESTAMP WHERE id=? AND workflow='published'").run(cancellationSource.id);
    if(cancelled.changes!==1) return {kind:"source_not_active"};
   }
-  const published=db.prepare("SELECT * FROM alerts WHERE id=?").get(a.id);
-  const delivery=enqueueDelivery(db,{alertId:a.id,channel:"cap_feed",payload:buildCapXml(rowToCap(published))});
+  const delivery=enqueueDelivery(db,{alertId:a.id,channel:"cap_feed",payload:xml});
   audit(req.user.id,a.id,"published",a.msg_type==="Cancel"
    ? (sourceCancelled
       ? "Published CAP cancellation; matching-status source warning moved to cancelled; internal CAP feed entry "+delivery.id+" queued"
@@ -1013,6 +1019,7 @@ app.post("/api/alerts/:id/publish",auth,roles("admin","publisher"),(req,res)=>{
  if(result.kind==="source_missing") return res.status(409).json({error:"The referenced source message is not present in the local alert history"});
  if(result.kind==="source_not_active") return res.status(409).json({error:"The referenced source message is no longer active and cannot be updated or cancelled"});
  if(result.kind==="conflict") return res.status(409).json({error:"Approval is required before publishing"});
+ if(result.kind==="invalid_cap") return res.status(400).json({error:result.message||"CAP message failed validation and was not published"});
  const delivery=result.delivery;
  res.json({ok:true,workflow:"published",delivery:{id:delivery.id,status:delivery.status,channel:delivery.channel},note:"Internal publication only. External delivery adapters remain disabled; the outbox entry is queued for controlled processing."});
 });

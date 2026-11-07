@@ -113,6 +113,9 @@ test("phase7: receivers persist identities and deduplicate after restart", async
       db = openReceiverStore(filename);
       const rows = db.prepare("SELECT COUNT(*) AS n FROM receiver_messages").get().n;
       assert.equal(rows, 1);
+      const repeatedAfterRestart = receive(xml, { database: db });
+      assert.equal(repeatedAfterRestart.ok, true, repeatedAfterRestart.error);
+      assert.equal(repeatedAfterRestart.duplicate, true);
       const update = buildCapXml({
         identifier: makeIdentifier(), sender: base.sender, sent: "2026-11-07T14:05:00.000Z",
         status: "Test", msg_type: "Update", scope: "Public",

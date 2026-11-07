@@ -160,8 +160,19 @@ export function appendAuditLog(database, { userId = null, alertId = null, action
   });
 
   const result = append.immediate();
-  if (checkpointPath || checkpointSecret) writeExternalCheckpoint(checkpointPath, checkpointSecret, result.id, result.entry_hash);
+  if (checkpointPath || checkpointSecret) {
+    if (options.deferCheckpoint === true) return { ...result, checkpoint_pending: true };
+    writeExternalCheckpoint(checkpointPath, checkpointSecret, result.id, result.entry_hash);
+  }
   return result;
+}
+
+export function finalizeAuditCheckpoint(result, options = {}) {
+  if (!result?.checkpoint_pending) return { configured: false, updated: false };
+  const checkpointPath = options.checkpointPath ?? process.env.AUDIT_CHECKPOINT_PATH;
+  const checkpointSecret = options.checkpointSecret ?? process.env.AUDIT_CHECKPOINT_SECRET;
+  writeExternalCheckpoint(checkpointPath, checkpointSecret, result.id, result.entry_hash);
+  return { configured: Boolean(checkpointPath || checkpointSecret), updated: true };
 }
 
 export function verifyAuditChain(database, options = {}) {

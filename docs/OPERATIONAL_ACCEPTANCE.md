@@ -13,7 +13,9 @@
 | Role separation (forecaster / reviewer / publisher) | API + phase 4/6 tests | Tested in CI |
 | MFA enroll/login/recovery paths | `tests/mfa.test.js`, API integration | Tested in CI |
 | Audit hash-chain append and verification | audit tests | Tested in CI |
+| Retention + audit atomicity and rollback | `tests/retention-audit-atomicity.test.js`; database rollback on audit failure, post-commit checkpoint warning, checkpoint refresh gated by explicit off-host evidence attestation | Tested in CI; off-host recovery approval remains institutional |
 | Internal delivery outbox enqueue / retry | delivery + phase 5/6 tests | Tested in CI (no external send) |
+| Inbound webhook ingress and manual-review inbox | HMAC-SHA256 over timestamp/raw body, timestamp tolerance, replay rejection, atomic replay+inbox insert, concurrent replay, 64 KB body limit, rate limit, reviewer role gate, competing review decisions, audit rollback | Tested in CI; ingress remains disabled by default and no external send occurs |
 | SQLite backup, restore, quick_check, FK check | backup/restore + phase 4 tests | Tested in CI |
 | Operational metrics endpoint | `GET /api/health/metrics` (admin/publisher) | Tested in CI |
 | Local retention of terminal outbox/webhook rows | `src/retention.js`, retention tests | Tested in CI |

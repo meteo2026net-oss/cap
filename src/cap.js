@@ -44,6 +44,8 @@ function validateReferences(value) {
     const calendar = new Date(0);
     calendar.setUTCFullYear(year, month - 1, day);
     calendar.setUTCHours(hour, minute, second, 0);
+    // The fractional-seconds group is non-capturing in this regex:
+    // year..second are groups 1-6, Z/sign is 7-8, then offset hour/minute are 9-10.
     const offsetHour = timestamp[9] === undefined ? 0 : Number(timestamp[9]);
     const offsetMinute = timestamp[10] === undefined ? 0 : Number(timestamp[10]);
     if (year < 1 || calendar.getUTCFullYear() !== year || calendar.getUTCMonth() !== month - 1 ||
@@ -80,6 +82,15 @@ function capDateTime(value, field) {
   return date.toISOString().replace(/\.\d{3}Z$/, "-00:00");
 }
 function validDate(value, field) { if (value) capDateTime(value, field); }
+
+function normalizeReferences(value) {
+  const references = String(value || "").trim().split(/\s+/).filter(Boolean);
+  validateReferences(value);
+  return references.map(reference => {
+    const [sender, identifier, sent] = reference.split(",");
+    return `${sender},${identifier},${capDateTime(sent, "reference sent")}`;
+  }).join(" ");
+}
 
 function decimalNumber(value) {
   if (typeof value !== "string" || !/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(value.trim())) return NaN;
@@ -344,7 +355,7 @@ export function buildCapXml(a) {
     ...(a.addresses ? { addresses: a.addresses } : {}),
     ...(a.codes?.length ? { code: a.codes } : {}),
     ...(a.note ? { note: a.note } : {}),
-    ...(a.references_text ? { references: a.references_text } : {}),
+    ...(a.references_text ? { references: normalizeReferences(a.references_text) } : {}),
     ...(a.incidents ? { incidents: a.incidents } : {})
   };
   if (!["Cancel","Ack","Error"].includes(a.msg_type)) alert.info = infos.map(normalizeInfo);

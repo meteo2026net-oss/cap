@@ -87,6 +87,14 @@ test("API enforces role separation, public-feed filtering and account deactivati
   assert.ok(csp.includes("object-src"));
   assert.ok(csp.includes("script-src"));
   assert.ok(csp.includes("script-src-attr 'none'"), "inline event handler attributes must be blocked");
+  for (const directive of ["img-src", "script-src", "style-src"]) {
+    const policy = csp.split(";").map(value => value.trim()).find(value => value.startsWith(directive + " "));
+    const allowedSources = new Set((policy || "").split(/\s+/).slice(1));
+    assert.equal(allowedSources.has("https://cdnjs.cloudflare.com"), true,
+      directive + " must permit the exact SRI-pinned Leaflet Draw CDN origin");
+    assert.equal(allowedSources.has("https://untrusted.example/https://cdnjs.cloudflare.com"), false,
+      directive + " must not accept a different origin that merely contains the CDN hostname");
+  }
   assert.equal(dashboard.headers.get("x-content-type-options"), "nosniff",
     "responses should prevent MIME type sniffing");
   assert.ok(dashboard.headers.get("referrer-policy"),
@@ -113,8 +121,13 @@ test("API enforces role separation, public-feed filtering and account deactivati
       headers: { "Content-Type": contentType, "X-Webhook-Timestamp": String(timestamp), "X-Webhook-Signature": signature },
       body
     });
-  const acceptedWebhook = await sendWebhook(webhookBody);
-  assert.equal(acceptedWebhook.status, 202, "valid signed webhook should be accepted into the inbox");
+  const concurrentWebhookResponses = await Promise.all(
+    Array.from({ length: 8 }, () => sendWebhook(webhookBody))
+  );
+  const concurrentWebhookStatuses = concurrentWebhookResponses.map(response => response.status).sort((a, b) => a - b);
+  assert.deepEqual(concurrentWebhookStatuses, [202, 401, 401, 401, 401, 401, 401, 401],
+    "concurrent replay of one signed webhook must atomically accept exactly one request");
+  const acceptedWebhook = concurrentWebhookResponses.find(response => response.status === 202);
   const acceptedWebhookData = await acceptedWebhook.json();
   assert.equal(acceptedWebhookData.accepted, true);
   assert.equal(acceptedWebhookData.status, "pending");
@@ -179,6 +192,18 @@ test("API enforces role separation, public-feed filtering and account deactivati
     return confirmation.data.token;
   };
 
+  const oversizedJsonResponse = await fetch(base + "/api/auth/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ oversized: "x".repeat(1024 * 1024 + 1024) })
+  });
+  assert.equal(oversizedJsonResponse.status, 413,
+    "JSON request bodies above the global 1 MB parser limit must be rejected");
+  assert.match(oversizedJsonResponse.headers.get("content-type") || "", /application\/json/i,
+    "body-parser errors must use the API JSON error format");
+  assert.equal(oversizedJsonResponse.headers.get("cache-control"), "no-store",
+    "oversized authentication requests must not be cached");
+
   const malformedLogin = await request("/api/auth/login", {
     method: "POST", body: { username: { malformed: true }, password: "anything" }
   });
@@ -196,6 +221,14 @@ test("API enforces role separation, public-feed filtering and account deactivati
   let admin = await login("admin", "Integration-Test-Admin-Password-2026");
   assert.equal((await request("/api/users", { token: admin })).status, 403,
     "an administrator without required MFA must not access protected administrator operations");
+  for (const path of ["/api/alerts", "/api/alerts/stats", "/api/alerts/export.csv"]) {
+    const blocked = await request(path, { token: admin });
+    assert.equal(blocked.status, 403,
+      "required-MFA roles must not bypass enrollment through auth-only data route " + path);
+    assert.equal(blocked.data.code, "MFA_REQUIRED");
+  }
+  assert.equal((await request("/api/auth/mfa/status", { token: admin })).status, 200,
+    "MFA setup endpoints must remain available before enrollment");
   const adminMfaStatus = await request("/api/auth/mfa/status", { token: admin });
   assert.equal(adminMfaStatus.data.required, true);
   assert.equal(adminMfaStatus.headers.get("cache-control"), "no-store",

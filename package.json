@@ -9,6 +9,7 @@
     "dev": "node --watch src/server.js",
     "test": "node --test",
     "test:cap-schema": "node --test tests/cap-schema.test.js",
+    "perf:10k": "node tests/perf/run-10k.mjs",
     "backup": "node src/backup.js",
     "restore": "node src/restore.js",
     "setup:local": "node scripts/setup-local.mjs",
@@ -19,6 +20,7 @@
     "restore:verify": "node src/verify-restored-db.js",
     "restore:drill": "node src/restore-drill.js",
     "audit:checkpoint:init": "node scripts/initialize-audit-checkpoint.js",
+    "audit:checkpoint:refresh": "node scripts/refresh-audit-checkpoint.js",
     "retention:apply": "node src/apply-retention.js",
     "ops:metrics": "node -e \"import('./src/db.js').then(async m=>{const {collectOperationalMetrics}=await import('./src/retention.js'); console.log(JSON.stringify(collectOperationalMetrics(m.db),null,2)); m.db.close();})\""
   },

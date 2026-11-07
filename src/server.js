@@ -13,7 +13,7 @@ import { buildCapXml, makeIdentifier, validateAlert } from "./cap.js";
 import { alertsToGeoJSON } from "./geojson.js";
 import { appendAuditLog, verifyAuditChain } from "./audit.js";
 import { enqueueDelivery, claimDelivery, recordDeliveryReceipt, retryDelivery, recoverStaleDeliveries, processDueRetries } from "./delivery.js";
-import { applyOperationalRetention, collectOperationalMetrics } from "./retention.js";
+import { applyOperationalRetentionWithAudit, collectOperationalMetrics } from "./retention.js";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { consumeRecoveryCode, decryptTotpSecret, encryptTotpSecret, generateRecoveryCodes, generateTotpSecret, hashRecoveryCode, verifyTotp } from "./mfa.js";
 import { verifyAndConsumeWebhook } from "./webhook-replay.js";
@@ -54,11 +54,11 @@ app.use(helmet({
    fontSrc: ["'self'", "data:"],
    formAction: ["'self'"],
    frameAncestors: ["'none'"],
-   imgSrc: ["'self'", "data:", "blob:", "https://*.tile.openstreetmap.org", "https://unpkg.com"],
+   imgSrc: ["'self'", "data:", "blob:", "https://*.tile.openstreetmap.org", "https://unpkg.com", "https://cdnjs.cloudflare.com"],
    objectSrc: ["'none'"],
-   scriptSrc: ["'self'", "https://unpkg.com"],
+   scriptSrc: ["'self'", "https://unpkg.com", "https://cdnjs.cloudflare.com"],
    scriptSrcAttr: ["'none'"],
-   styleSrc: ["'self'", "'unsafe-inline'", "https://unpkg.com"]
+   styleSrc: ["'self'", "'unsafe-inline'", "https://unpkg.com", "https://cdnjs.cloudflare.com"]
   }
  }
 }));
@@ -165,11 +165,12 @@ function auth(req,res,next) {
    const user = db.prepare("SELECT id,username,role,active,token_version,mfa_enabled,must_change_password FROM users WHERE id=?").get(req.user.id);
    if (!user || !user.active) return res.status(401).json({error:"Account unavailable"});
    if (req.user.token_version !== user.token_version) return res.status(401).json({error:"Session expired; please sign in again"});
-   if(user.must_change_password===1) {
-    const allowedPaths=new Set(["GET /api/me","POST /api/auth/change-password","GET /api/auth/mfa/status","POST /api/auth/mfa/enroll","POST /api/auth/mfa/confirm"]);
-    if(!allowedPaths.has(req.method+" "+req.path))
-     return res.status(403).json({error:"A temporary password must be changed before using this operation",code:"PASSWORD_CHANGE_REQUIRED"});
-   }
+   const authenticationSetupPaths=new Set(["GET /api/me","POST /api/auth/change-password","GET /api/auth/mfa/status","POST /api/auth/mfa/enroll","POST /api/auth/mfa/confirm"]);
+   const requestPath=req.method+" "+req.path;
+   if(user.must_change_password===1 && !authenticationSetupPaths.has(requestPath))
+    return res.status(403).json({error:"A temporary password must be changed before using this operation",code:"PASSWORD_CHANGE_REQUIRED"});
+   if(mfaRequiredRoles.has(user.role) && user.mfa_enabled!==1 && !authenticationSetupPaths.has(requestPath))
+    return res.status(403).json({error:"MFA enrollment is required for this role before accessing protected operations",code:"MFA_REQUIRED"});
    req.user = user; next();
  } catch { return res.status(401).json({error:"Authentication required"}); }
 }
@@ -252,8 +253,7 @@ app.post("/api/ops/retention/apply",auth,roles("admin"),(req,res)=>{
  try {
   const deliveryRetentionDays=Number(req.body?.delivery_retention_days ?? process.env.CAP_DELIVERY_RETENTION_DAYS ?? 90);
   const webhookRetentionDays=Number(req.body?.webhook_retention_days ?? process.env.CAP_WEBHOOK_RETENTION_DAYS ?? 90);
-  const result=applyOperationalRetention(db,{deliveryRetentionDays,webhookRetentionDays});
-  audit(req.user.id,null,"retention_applied",JSON.stringify(result));
+  const result=applyOperationalRetentionWithAudit(db,{deliveryRetentionDays,webhookRetentionDays,userId:req.user.id});
   res.json(result);
  } catch(error) {
   res.status(400).json({error:error.message||"Retention apply failed"});

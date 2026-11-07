@@ -1249,6 +1249,18 @@ test("API enforces role separation, public-feed filtering and account deactivati
     "Private child description", "Duty desk", "published",
     `${actualRow.sender},${actualRow.identifier},${actualRow.sent}`
   ).lastInsertRowid);
+  const publicWithPrivateFieldsId = Number(insertLegacyAlert.run(
+    "legacy-public-fields-" + Date.now(), "legacy@example.test", "2026-11-07T00:03:00.000Z",
+    "Public", "PUBLIC_SCOPE_RESTRICTION_MARKER", "PUBLIC_SCOPE_ADDRESSES_MARKER",
+    "Public legacy test", "Public legacy headline", "Public legacy description",
+    "Public zone", "pending", ""
+  ).lastInsertRowid);
+  scopeDb.prepare("INSERT INTO alert_versions(alert_id,version_no,change_type,snapshot_json) VALUES(?,1,'created',?)")
+    .run(publicWithPrivateFieldsId, JSON.stringify({
+      id: publicWithPrivateFieldsId, scope: "Public",
+      restriction: "PUBLIC_SCOPE_RESTRICTION_MARKER",
+      addresses: "PUBLIC_SCOPE_ADDRESSES_MARKER"
+    }));
   appendAuditLog(scopeDb, { userId: null, alertId: legacyPrivateId, action: "private_scope_test", details: "PRIVATE_AUDIT_MARKER" });
   const hiddenDeliveryId = Number(scopeDb.prepare(`INSERT INTO delivery_outbox(alert_id,channel,payload,status)
     VALUES(?,'cap_feed','PRIVATE_DELIVERY_MARKER','queued')`).run(legacyPrivateId).lastInsertRowid);
@@ -1305,6 +1317,25 @@ test("API enforces role separation, public-feed filtering and account deactivati
   assert.ok(!csvText.includes("legacy-restricted-") && !csvText.includes("legacy-private-") &&
     !csvText.includes("RESTRICTED_HEADLINE_MARKER") && !csvText.includes("PRIVATE_HEADLINE_MARKER"),
     "CSV export must not contain non-Public alert identifiers or content");
+  assert.ok(!csvText.includes("PUBLIC_SCOPE_RESTRICTION_MARKER") &&
+    !csvText.includes("PUBLIC_SCOPE_ADDRESSES_MARKER") &&
+    !csvText.includes('"restriction"') && !csvText.includes('"addresses"'),
+    "Public-scope exports must not expose recipient-only CAP fields");
+  const publicDetailWithSensitiveFields = await request(`/api/alerts/${publicWithPrivateFieldsId}`, { token: forecaster });
+  assert.equal(publicDetailWithSensitiveFields.status, 200);
+  assert.ok(!Object.hasOwn(publicDetailWithSensitiveFields.data.alert, "restriction") &&
+    !Object.hasOwn(publicDetailWithSensitiveFields.data.alert, "addresses"),
+    "Public alert detail must suppress recipient-only fields even on legacy rows");
+  const publicXmlWithSensitiveFields = await request(`/api/alerts/${publicWithPrivateFieldsId}/cap.xml`, { token: forecaster });
+  assert.equal(publicXmlWithSensitiveFields.status, 200);
+  assert.ok(!publicXmlWithSensitiveFields.data.includes("PUBLIC_SCOPE_RESTRICTION_MARKER") &&
+    !publicXmlWithSensitiveFields.data.includes("PUBLIC_SCOPE_ADDRESSES_MARKER"),
+    "Public CAP XML must suppress recipient-only fields from legacy rows");
+  const publicVersionsWithSensitiveFields = await request(`/api/alerts/${publicWithPrivateFieldsId}/versions`, { token: reviewer });
+  assert.equal(publicVersionsWithSensitiveFields.status, 200);
+  assert.ok(!JSON.stringify(publicVersionsWithSensitiveFields.data).includes("PUBLIC_SCOPE_RESTRICTION_MARKER") &&
+    !JSON.stringify(publicVersionsWithSensitiveFields.data).includes("PUBLIC_SCOPE_ADDRESSES_MARKER"),
+    "Public version snapshots must suppress historical recipient-only fields");
 
   for (const [id, label] of [[legacyRestrictedId, "Restricted"], [legacyPrivateId, "Private"]]) {
     for (const suffix of ["", "/relations", "/cap.xml"]) {

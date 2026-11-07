@@ -80,6 +80,18 @@ test("phase7: receivers reject missing references on Update and invalid Restrict
   assert.equal(receiveCapXmlB(restrictedBad).ok, false);
 });
 
+test("phase7: receivers accept CAP XML with an explicit namespace prefix", () => {
+  const xml = buildCapXml(base)
+    .replace('<alert xmlns="urn:oasis:names:tc:emergency:cap:1.2"', '<cap:alert xmlns:cap="urn:oasis:names:tc:emergency:cap:1.2"')
+    .replace('</alert>', '</cap:alert>')
+    .replace(/<(\\/?)([A-Za-z][A-Za-z0-9_.-]*)(?=[\\s>])/g, (tag, slash, name) => `<${slash}cap:${name}`);
+  for (const receive of [receiveCapXmlA, receiveCapXmlB]) {
+    const result = receive(xml);
+    assert.equal(result.ok, true, result.error);
+    assert.equal(result.stored.identifier, base.identifier);
+  }
+});
+
 test("phase7: receivers reject DTD/entity declarations and malformed XML", () => {
   const hostile = `<!DOCTYPE alert [<!ENTITY xxe SYSTEM "file:///etc/passwd">]><alert>&xxe;</alert>`;
   for (const receive of [receiveCapXmlA, receiveCapXmlB]) {

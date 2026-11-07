@@ -1299,7 +1299,7 @@ app.get("/api/audit/verify",auth,roles("admin","reviewer","approver"),(_req,res)
 app.get("/api/audit/export.csv",auth,roles("admin","reviewer","approver"),(req,res)=>{
  const action=typeof req.query.action==="string"?req.query.action.trim().slice(0,80):"";
  const search=typeof req.query.q==="string"?req.query.q.trim().slice(0,160):"";
- const clauses=["(l.alert_id IS NULL OR EXISTS (SELECT 1 FROM alerts scoped_alert WHERE scoped_alert.id=l.alert_id AND scoped_alert.scope='Public'))"],params=[];
+ const clauses=["((l.alert_id IS NOT NULL AND EXISTS (SELECT 1 FROM alerts scoped_alert WHERE scoped_alert.id=l.alert_id AND scoped_alert.scope='Public')) OR (l.alert_id IS NULL AND l.action<>'retention_applied'))"],params=[];
  if(action){clauses.push("l.action=?");params.push(action);}
  if(search){clauses.push("(instr(lower(COALESCE(l.action,'')),lower(?))>0 OR instr(lower(COALESCE(l.details,'')),lower(?))>0 OR instr(lower(COALESCE(u.username,'')),lower(?))>0)");params.push(search,search,search);}
  const where=clauses.length?"WHERE "+clauses.join(" AND "):"";
@@ -1325,7 +1325,7 @@ app.get("/api/audit",auth,roles("admin","reviewer","approver"),(req,res)=>{
  }
  const action=typeof req.query.action==="string"?req.query.action.trim().slice(0,80):"";
  const search=typeof req.query.q==="string"?req.query.q.trim().slice(0,160):"";
- const clauses=["(l.alert_id IS NULL OR EXISTS (SELECT 1 FROM alerts scoped_alert WHERE scoped_alert.id=l.alert_id AND scoped_alert.scope='Public'))"],params=[];
+ const clauses=["((l.alert_id IS NOT NULL AND EXISTS (SELECT 1 FROM alerts scoped_alert WHERE scoped_alert.id=l.alert_id AND scoped_alert.scope='Public')) OR (l.alert_id IS NULL AND l.action<>'retention_applied'))"],params=[];
  if(action){clauses.push("l.action=?");params.push(action);}
  if(search){clauses.push("(instr(lower(COALESCE(l.action,char(0))),lower(?))>0 OR instr(lower(COALESCE(l.details,char(0))),lower(?))>0 OR instr(lower(COALESCE(u.username,char(0))),lower(?))>0)");params.push(search,search,search);}
  if(beforeId!==null){clauses.push("l.id<?");params.push(beforeId);}

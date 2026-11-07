@@ -90,7 +90,8 @@ export function receiveCapXmlB(xml, { knownMessages = [], database = null } = {}
     const checked = validate(knownMessages);
     if (!checked.ok) return { ...checked, kind: "Error", stored };
   }
-  const infoNodes = alert.info == null ? [] : Array.isArray(alert.info) ? alert.info : [alert.info];
+  const infoNode = childNode(alert, "info");
+  const infoNodes = infoNode == null ? [] : Array.isArray(infoNode) ? infoNode : [infoNode];
   const headline = infoNodes.map(info => text(childNode(info, "headline"))).find(Boolean) || "";
   return {
     ok: true,

@@ -4,7 +4,7 @@ import Database from "better-sqlite3";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { appendAuditLog, initializeAuditCheckpoint, installAuditLogGuards, refreshAuditCheckpoint, verifyAuditChain } from "../src/audit.js";
 import { applyOperationalRetentionWithAudit } from "../src/retention.js";
 
@@ -153,6 +153,32 @@ test("stale checkpoint can be refreshed only from its authenticated intact ancho
     assert.equal(refreshAuditCheckpoint(db, { checkpointPath, checkpointSecret, offHostEvidenceReviewed: true }).updated, false);
   } finally {
     db.close();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("checkpoint refresh CLI requires explicit off-host evidence attestation", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "cap-audit-checkpoint-cli-"));
+  const env = {
+    ...process.env,
+    DB_PATH: path.join(root, "cap.sqlite"),
+    AUDIT_CHECKPOINT_PATH: path.join(root, "audit-checkpoint.json"),
+    AUDIT_CHECKPOINT_SECRET: "cli-test-secret-at-least-32-bytes"
+  };
+  try {
+    const refused = spawnSync(process.execPath, ["scripts/refresh-audit-checkpoint.js"], {
+      cwd: process.cwd(), env, encoding: "utf8"
+    });
+    assert.equal(refused.status, 1);
+    assert.match(refused.stderr, /confirm-offhost-evidence/);
+
+    const confirmed = spawnSync(process.execPath, [
+      "scripts/refresh-audit-checkpoint.js", "--confirm-offhost-evidence"
+    ], { cwd: process.cwd(), env, encoding: "utf8" });
+    assert.equal(confirmed.status, 1);
+    assert.match(confirmed.stderr, /Existing audit checkpoint is unavailable or invalid/);
+    assert.doesNotMatch(confirmed.stderr, /confirm-offhost-evidence/);
+  } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
 });

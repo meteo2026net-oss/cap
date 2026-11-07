@@ -269,7 +269,7 @@ test("semantic: multiple whitespace-separated references remain ordered and comp
 test("semantic: derived references use the same normalized timestamp as the referenced alert", () => {
   const sourceSent = "2026-11-07T10:00:00+01:00";
   const sourceXml = buildCapXml({ ...baseAlert, sent: sourceSent });
-  const normalizedSent = sourceXml.match(/<sent>([^<]+)<\\/sent>/)?.[1];
+  const normalizedSent = sourceXml.match(/<sent>([^<]+)<\/sent>/)?.[1];
   assert.equal(normalizedSent, "2026-11-07T09:00:00-00:00");
 
   const updateXml = buildCapXml({

@@ -9,7 +9,7 @@
 - Unit: CAP semantics, MFA, audit, delivery, retention, receivers
 - Integration: API workflows, isolation, phases 4–6, lifecycle
 - Performance CI smoke: `tests/perf/cap-performance.test.js` (100/1000 synthetic messages)
-- Extended performance: `tests/perf/run-10k.mjs` (10,000 synthetic messages; local manual run)
+- Extended performance: `tests/perf/run-10k.mjs` (10,000 synthetic messages; automated CI run and local reproducible command)
 
 The 10,000-message harness measures validation, XML build/parse, insert into the actual application `alerts` schema, and scoped SQLite reads. Its dataset is synthetic and it is not a production load test.
 - Security: role gates, cache headers, scope isolation

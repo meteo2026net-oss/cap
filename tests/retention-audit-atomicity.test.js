@@ -171,11 +171,13 @@ test("checkpoint refresh CLI requires explicit off-host evidence attestation", (
     });
     assert.equal(refused.status, 1);
     assert.match(refused.stderr, /confirm-offhost-evidence/);
+    assert.equal(fs.existsSync(env.DB_PATH), false, "refusal must occur before opening or creating the application database");
 
     const confirmed = spawnSync(process.execPath, [
       "scripts/refresh-audit-checkpoint.js", "--confirm-offhost-evidence"
     ], { cwd: process.cwd(), env, encoding: "utf8" });
     assert.equal(confirmed.status, 1);
+    assert.equal(fs.existsSync(env.DB_PATH), true, "confirmed invocation may open the application database");
     assert.match(confirmed.stderr, /Existing audit checkpoint is unavailable or invalid/);
     assert.doesNotMatch(confirmed.stderr, /confirm-offhost-evidence/);
   } finally {

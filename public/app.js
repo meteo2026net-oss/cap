@@ -413,7 +413,7 @@ function dateForLocalInput(value){
  return local.toISOString().slice(0,16);
 }
 function resetAlertEditor(){
- editingAlertId=null;editingCapResource=null;$("#addCapResourceBtn").textContent="إضافة المورد إلى JSON";$("#alertForm").reset();renderCapResourceList();setAlertEditorMode(false);
+ editingAlertId=null;editingCapResource=null;$("#addCapResourceBtn").textContent="إضافة المورد إلى JSON";$("#alertForm").reset();syncScopeDependentFields();renderCapResourceList();setAlertEditorMode(false);
 }
 $("#alertForm").addEventListener("submit",async e=>{
  e.preventDefault();
@@ -556,6 +556,15 @@ $("#capResourceList")?.addEventListener("click",event=>{
 $("#alertForm")?.elements.namedItem("info_blocks_json")?.addEventListener("input",renderCapResourceList);
 renderCapResourceList();
 $("#cancelAlertEditBtn")?.addEventListener("click",resetAlertEditor);
+function syncScopeDependentFields(){
+ const scope=$("#alertForm")?.elements.namedItem("scope")?.value||"Public";
+ const restrictionField=$("#restrictionField");
+ const addressesField=$("#addressesField");
+ if(restrictionField)restrictionField.hidden=scope!=="Restricted";
+ if(addressesField)addressesField.hidden=scope!=="Private";
+}
+$("#alertForm")?.elements.namedItem("scope")?.addEventListener("change",syncScopeDependentFields);
+syncScopeDependentFields();
 async function editDraft(id){
  try{
   const current=await api("/api/alerts/"+id);
@@ -564,6 +573,7 @@ async function editDraft(id){
   const form=$("#alertForm");
   const values={event:alertData.event,headline:alertData.headline,category:alertData.category,urgency:alertData.urgency,severity:alertData.severity,certainty:alertData.certainty,status:alertData.status,scope:alertData.scope,restriction:alertData.restriction||"",addresses:alertData.addresses||"",effective:dateForLocalInput(alertData.effective),onset:dateForLocalInput(alertData.onset),expires:dateForLocalInput(alertData.expires),response_type:alertData.response_type,language:alertData.language,area_desc:alertData.area_desc,description:alertData.description,instruction:alertData.instruction,polygon:alertData.polygon,circle:alertData.circle,info_blocks_json:alertData.info_blocks?.length?JSON.stringify(alertData.info_blocks,null,2):""};
   for(const [name,value] of Object.entries(values)){const field=form.elements.namedItem(name);if(field)field.value=value??""}
+  syncScopeDependentFields();
   renderCapResourceList();
   editingAlertId=id;setAlertEditorMode(true);form.scrollIntoView({behavior:"smooth",block:"start"});
  }catch(error){alert(error.message)}

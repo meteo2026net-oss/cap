@@ -186,7 +186,7 @@ test("API enforces role separation, public-feed filtering and account deactivati
   });
   assert.equal(oversizedJsonResponse.status, 413,
     "JSON request bodies above the global 1 MB parser limit must be rejected");
-  assert.match(oversizedJsonResponse.headers.get("content-type") || "", /application\\/json/i,
+  assert.match(oversizedJsonResponse.headers.get("content-type") || "", /application\/json/i,
     "body-parser errors must use the API JSON error format");
   assert.equal(oversizedJsonResponse.headers.get("cache-control"), "no-store",
     "oversized authentication requests must not be cached");

@@ -10,7 +10,7 @@
 | CAP 1.2 XML generation and OASIS XSD checks | `tests/cap-schema.test.js`, lifecycle tests | Tested in CI |
 | Alert / Update / Cancel / Ack / Error lifecycle | phase 1–5 integration tests | Tested in CI |
 | Restricted / Private exclusion from public feeds | isolation + phase 4/5 tests | Tested in CI; internal recipient-level authorization is not implemented |
-| Public feed message-type allowlist | public JSON/GeoJSON expose Alert, Update, Cancel only; Ack/Error excluded by API integration regression tests | Pending CI on this follow-up |
+| Public feed message-type allowlist | public JSON/GeoJSON expose Alert, Update, Cancel only; Ack/Error excluded by API integration regression tests | Tested in CI on head `046c69ea78435721f211aac88cffed602a799916` (run `42420785229`) |
 | Role separation (forecaster / reviewer / publisher) | API + phase 4/6 tests | Tested in CI |
 | MFA enroll/login/recovery paths | `tests/mfa.test.js`, API integration | Tested in CI |
 | Audit hash-chain append and verification | audit tests | Tested in CI |

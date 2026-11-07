@@ -272,12 +272,14 @@ test("semantic: derived references use the same normalized timestamp as the refe
   const normalizedSent = sourceXml.match(/<sent>([^<]+)<\/sent>/)?.[1];
   assert.equal(normalizedSent, "2026-11-07T09:00:00-00:00");
 
-  const updateXml = buildCapXml({
-    ...baseAlert,
-    identifier: "urn:uuid:derived-update",
-    sent: "2026-11-07T11:00:00Z",
-    msg_type: "Update",
-    references_text: `${baseAlert.sender},${baseAlert.identifier},${sourceSent}`
-  });
-  assert.match(updateXml, new RegExp(`<references>${baseAlert.sender},${baseAlert.identifier},2026-11-07T09:00:00-00:00</references>`));
+  for (const msg_type of ["Update", "Cancel", "Ack", "Error"]) {
+    const derivedXml = buildCapXml({
+      ...baseAlert,
+      identifier: `urn:uuid:derived-${msg_type.toLowerCase()}`,
+      sent: "2026-11-07T11:00:00Z",
+      msg_type,
+      references_text: `${baseAlert.sender},${baseAlert.identifier},${sourceSent}`
+    });
+    assert.match(derivedXml, new RegExp(`<references>${baseAlert.sender},${baseAlert.identifier},2026-11-07T09:00:00-00:00</references>`), msg_type);
+  }
 });

@@ -1295,15 +1295,18 @@ test("API enforces role separation, public-feed filtering and account deactivati
     }
   });
   assert.equal(privateCreate.status, 403, "new Private alerts must fail closed until recipient grants exist");
+  const nonPublicCountBeforeInvalidCreate = scopeDb.prepare("SELECT COUNT(*) AS n FROM alerts WHERE scope<>'Public'").get().n;
   const incompleteRestrictedCreate = await request("/api/alerts", {
     token: forecaster, method: "POST", body: {
-      event: "Incomplete restricted storm", headline: "Must be denied before CAP validation",
+      event: "Incomplete restricted storm", headline: "Must fail CAP validation",
       description: "No recipient description supplied", area_desc: "Ops zone",
       circle: "33.5,36.2 10", scope: "Restricted", status: "Test"
     }
   });
-  assert.equal(incompleteRestrictedCreate.status, 403,
-    "non-Public creation must be denied even when scope-dependent recipient fields are absent");
+  assert.equal(incompleteRestrictedCreate.status, 400,
+    "incomplete Restricted CAP must fail structural validation rather than bypass it");
+  assert.equal(scopeDb.prepare("SELECT COUNT(*) AS n FROM alerts WHERE scope<>'Public'").get().n,
+    nonPublicCountBeforeInvalidCreate, "invalid non-Public CAP must not create a database row");
   const trailingSlashRestrictedCreate = await request("/api/alerts/", {
     token: forecaster, method: "POST", body: {
       event: "Trailing slash restricted", headline: "Must not be created",

@@ -1235,17 +1235,17 @@ test("API enforces role separation, public-feed filtering and account deactivati
     VALUES (?,?,?,'Test','Alert',?,?,?,?,'Met','Expected','Moderate','Likely',?,?,?, ?,?)`);
   const legacyRestrictedId = Number(insertLegacyAlert.run(
     "legacy-restricted-" + Date.now(), "legacy@example.test", "2026-11-07T00:00:00.000Z",
-    "Internal distribution", null, "Restricted storm", "Met", "RESTRICTED_HEADLINE_MARKER",
+    "Restricted", "Internal distribution", null, "Restricted storm", "RESTRICTED_HEADLINE_MARKER",
     "Restricted description", "Ops zone", "draft", ""
   ).lastInsertRowid);
   const legacyPrivateId = Number(insertLegacyAlert.run(
     "legacy-private-" + Date.now(), "legacy@example.test", "2026-11-07T00:01:00.000Z",
-    null, "ops@example.test duty@example.test", "Private storm", "Met", "PRIVATE_HEADLINE_MARKER",
+    "Private", null, "ops@example.test duty@example.test", "Private storm", "PRIVATE_HEADLINE_MARKER",
     "Private description", "Duty desk", "pending", ""
   ).lastInsertRowid);
   const hiddenChildId = Number(insertLegacyAlert.run(
     "legacy-private-child-" + Date.now(), "legacy@example.test", "2026-11-07T00:02:00.000Z",
-    null, "ops@example.test", "Private derived", "Met", "PRIVATE_CHILD_MARKER",
+    "Private", null, "ops@example.test", "Private derived", "PRIVATE_CHILD_MARKER",
     "Private child description", "Duty desk", "published",
     `${actualRow.sender},${actualRow.identifier},${actualRow.sent}`
   ).lastInsertRowid);

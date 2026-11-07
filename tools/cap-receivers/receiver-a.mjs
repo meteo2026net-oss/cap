@@ -37,7 +37,7 @@ function parseDocument(xml) {
   const alert = rootKey ? document[rootKey] : undefined;
   if (!alert || typeof alert !== "object" || Array.isArray(alert)) throw new Error("missing CAP alert root");
   const namespaces = Object.entries(alert).filter(([name]) => name === "@xmlns" || name.startsWith("@xmlns:")).map(([, value]) => String(value));
-  if (namespaces.length && !namespaces.includes(CAP_NAMESPACE)) throw new Error("unexpected CAP namespace");
+  if (!namespaces.includes(CAP_NAMESPACE)) throw new Error("missing or unexpected CAP 1.2 namespace");
   return alert;
 }
 

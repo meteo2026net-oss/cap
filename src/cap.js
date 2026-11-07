@@ -275,10 +275,11 @@ export function validateAlert(input) {
       throw new Error("CAP Private scope requires a non-empty addresses value listing intended recipients.");
     }
   }
-  if (input.restriction !== undefined && typeof input.restriction !== "string") {
+  // SQLite returns NULL as null; treat null like an omitted optional field.
+  if (input.restriction != null && typeof input.restriction !== "string") {
     throw new Error("CAP restriction must be text.");
   }
-  if (input.addresses !== undefined && typeof input.addresses !== "string") {
+  if (input.addresses != null && typeof input.addresses !== "string") {
     throw new Error("CAP addresses must be text.");
   }
   if (["Update","Cancel","Ack","Error"].includes(input.msg_type)) validateReferences(input.references_text);

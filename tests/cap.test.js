@@ -525,3 +525,11 @@ test("restriction and addresses must be text when provided", () => {
   assert.throws(() => validateAlert({ ...valid, restriction: 12 }), /restriction must be text/);
   assert.throws(() => validateAlert({ ...valid, addresses: ["a"] }), /addresses must be text/);
 });
+
+test("null restriction and addresses from storage are treated as omitted optional fields", () => {
+  assert.equal(validateAlert({ ...valid, restriction: null, addresses: null }), true);
+  assert.throws(
+    () => validateAlert({ ...valid, scope: "Restricted", restriction: null }),
+    /Restricted scope requires a non-empty restriction/
+  );
+});

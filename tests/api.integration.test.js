@@ -179,6 +179,18 @@ test("API enforces role separation, public-feed filtering and account deactivati
     return confirmation.data.token;
   };
 
+  const oversizedJsonResponse = await fetch(base + "/api/auth/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ oversized: "x".repeat(1024 * 1024 + 1024) })
+  });
+  assert.equal(oversizedJsonResponse.status, 413,
+    "JSON request bodies above the global 1 MB parser limit must be rejected");
+  assert.match(oversizedJsonResponse.headers.get("content-type") || "", /application\\/json/i,
+    "body-parser errors must use the API JSON error format");
+  assert.equal(oversizedJsonResponse.headers.get("cache-control"), "no-store",
+    "oversized authentication requests must not be cached");
+
   const malformedLogin = await request("/api/auth/login", {
     method: "POST", body: { username: { malformed: true }, password: "anything" }
   });

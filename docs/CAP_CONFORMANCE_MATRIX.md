@@ -27,6 +27,14 @@ This matrix records the automated conformance coverage currently present in this
 - Exchange Alert, Update, Cancel, Ack, and Error test messages with each intended receiving organization/provider.
 - Record receiver name/version, test date, message identifiers, acknowledgements, rejected-message diagnostics, and written acceptance.
 - Confirm operational policy for Test/Exercise messages, correction/cancellation chains, multilingual publication, and geographic coding with the authorized warning authority.
+- Keep outbound delivery adapters disabled until each external channel has a reviewed provider profile, authentication, timeout, retry, idempotency, and receipt policy.
+
+## Current repository maturity (as of 2026-11-07)
+
+- Core CAP 1.2 XML generation, required/optional field validation, and official XSD positive + negative controls are implemented and exercised in CI.
+- Message lifecycle (Alert → Update/Cancel), immutable content snapshots, review notes, timeline, and role-separated workflow transitions are implemented with integration tests.
+- Authentication, MFA, session revocation, audit hash-chain, and sensitive-response cache protection are implemented with automated coverage.
+- Remaining work is primarily institutional (authority, policy, receiver interoperability, production secrets, off-host audit anchoring, and go-live gates) rather than missing core software functions.
 
 ## Evidence boundary
 

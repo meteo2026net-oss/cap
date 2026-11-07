@@ -1,4 +1,8 @@
 import test from "node:test";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { openReceiverStore } from "../tools/cap-receivers/receiver-store.mjs";
 import assert from "node:assert/strict";
 import { buildCapXml, makeIdentifier } from "../src/cap.js";
 import { receiveCapXmlA } from "../tools/cap-receivers/receiver-a.mjs";
@@ -45,7 +49,7 @@ test("phase7: receivers reject missing references on Update and invalid Restrict
     status: "Test",
     msg_type: "Update",
     scope: "Public",
-    references_text: `${base.sender},${base.identifier},2026-11-07T14:00:00-00:00`,
+    references_text: `${base.sender},${base.identifier},${originalAlert.stored.sent}`,
     event: base.event,
     category: "Met",
     urgency: "Expected",
@@ -92,53 +96,54 @@ test("phase7: receivers tolerate compacted XML and preserve Arabic headline via 
   assert.match(b.stored.headline || base.headline, /تحذير|أمطار|تجريبي/);
 });
 
-test("phase7: duplicate delivery to receivers is idempotent at storage key level", () => {
-  const xml = buildCapXml(base);
-  const store = new Map();
-  for (let i = 0; i < 3; i++) {
-    const result = receiveCapXmlA(xml);
-    assert.equal(result.ok, true);
-    const key = `${result.stored.sender}|${result.stored.identifier}|${result.stored.sent}`;
-    if (!store.has(key)) store.set(key, result.stored);
-  }
-  assert.equal(store.size, 1, "duplicate deliveries must collapse to one stored identity");
+test("phase7: receivers persist identities and deduplicate after restart", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "cap-receiver-store-"));
+  try {
+    for (const [name, receive] of [["a", receiveCapXmlA], ["b", receiveCapXmlB]]) {
+      const filename = path.join(root, name + ".sqlite");
+      let db = openReceiverStore(filename);
+      const xml = buildCapXml(base);
+      const first = receive(xml, { database: db });
+      assert.equal(first.ok, true, first.error);
+      assert.equal(first.duplicate, false);
+      const repeated = receive(xml, { database: db });
+      assert.equal(repeated.ok, true, repeated.error);
+      assert.equal(repeated.duplicate, true);
+      db.close();
+      db = openReceiverStore(filename);
+      const rows = db.prepare("SELECT COUNT(*) AS n FROM receiver_messages").get().n;
+      assert.equal(rows, 1);
+      const update = buildCapXml({
+        identifier: makeIdentifier(), sender: base.sender, sent: "2026-11-07T14:05:00.000Z",
+        status: "Test", msg_type: "Update", scope: "Public",
+        references_text: `${base.sender},${base.identifier},${first.stored.sent}`,
+        event: base.event, category: "Met", urgency: "Expected", severity: "Moderate", certainty: "Likely",
+        headline: "restart-safe update", description: "history survives receiver restart",
+        area_desc: base.area_desc, circle: base.circle
+      });
+      assert.equal(receive(update, { database: db }).ok, true);
+      db.close();
+    }
+  } finally { await fs.rm(root, { recursive: true, force: true }); }
 });
 
-test("phase7: Update before locally known Alert is flagged by receiver policy helper", () => {
-  const known = new Set();
-  function acceptWithOrdering(xml) {
-    const result = receiveCapXmlA(xml);
-    if (!result.ok) return result;
-    const { msgType, references, identifier, sender, sent } = result.stored;
-    const key = `${sender}|${identifier}|${sent}`;
-    if (["Update", "Cancel"].includes(msgType)) {
-      const refKey = references.split(",").slice(0, 2).join("|");
-      const found = [...known].some(k => k.startsWith(refKey + "|"));
-      if (!found) return { ok: false, error: "update/cancel before known alert", deferred: true };
-    }
-    known.add(key);
-    return result;
-  }
-  const updateFirst = buildCapXml({
-    identifier: makeIdentifier(),
-    sender: base.sender,
-    sent: "2026-11-07T15:00:00.000Z",
-    status: "Test",
-    msg_type: "Update",
-    scope: "Public",
-    references_text: `${base.sender},${base.identifier},2026-11-07T14:00:00-00:00`,
-    event: "x",
-    category: "Met",
-    urgency: "Expected",
-    severity: "Minor",
-    certainty: "Possible",
-    headline: "early update",
-    description: "before alert known",
-    area_desc: "d",
-    circle: "33,36 5"
-  });
-  const early = acceptWithOrdering(updateFirst);
-  assert.equal(early.ok, false);
-  assert.equal(early.deferred, true);
-  assert.equal(acceptWithOrdering(buildCapXml(base)).ok, true);
+test("phase7: Update before its Alert is rejected by durable receiver history", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "cap-receiver-order-"));
+  const db = openReceiverStore(path.join(root, "receiver.sqlite"));
+  try {
+    const original = receiveCapXmlA(buildCapXml(base));
+    const update = buildCapXml({
+      identifier: makeIdentifier(), sender: base.sender, sent: "2026-11-07T15:00:00.000Z",
+      status: "Test", msg_type: "Update", scope: "Public",
+      references_text: `${base.sender},${base.identifier},${original.stored.sent}`,
+      event: "x", category: "Met", urgency: "Expected", severity: "Minor", certainty: "Possible",
+      headline: "early update", description: "before alert known", area_desc: "d", circle: "33,36 5"
+    });
+    const early = receiveCapXmlA(update, { database: db });
+    assert.equal(early.ok, false);
+    assert.match(early.error, /not present|reference/i);
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM receiver_messages").get().n, 0);
+    assert.equal(receiveCapXmlA(buildCapXml(base), { database: db }).ok, true);
+    assert.equal(receiveCapXmlA(update, { database: db }).ok, true);
+  } finally { db.close(); await fs.rm(root, { recursive: true, force: true }); }
 });

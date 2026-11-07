@@ -1512,7 +1512,7 @@ test("API enforces role separation, public-feed filtering and account deactivati
         (identifier,sender,sent,status,msg_type,scope,references_text,event,category,
          urgency,severity,certainty,headline,description,area_desc,language,workflow,created_by)
       VALUES
-        (@identifier,@sender,@sent,'Test','Update','Private',@references,
+        (@identifier,@sender,@sent,'Test','Update','Public',@references,
          'Synthetic relation test','Met','Unknown','Unknown','Unknown',
          'Synthetic relation test','Synthetic test data only','Synthetic test area',
          'en-US','published',@created_by)

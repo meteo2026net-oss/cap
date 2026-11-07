@@ -27,7 +27,7 @@
 
 ## B. Requires institutional acceptance (not claimed by CI)
 
-**Scope boundary:** public JSON/GeoJSON feeds filter to published `Public` + `Actual` + unexpired alerts. Authenticated internal list/detail/export/CAP XML/relationship endpoints are not currently restricted by `addresses` or a recipient ACL; all authenticated accounts can read records in any CAP scope. Do not interpret public-feed exclusion as recipient-level confidentiality. A deployment must define and implement the required internal access policy before using Restricted/Private data.
+**Recipient model remains outstanding:** non-Public rows are currently denied by a temporary Public-only API policy. This prevents accidental disclosure but does not provide recipient-level entitlements. Existing non-Public records remain stored and inaccessible through the normal API; institutional recipient grants, identity mapping, grant/revoke audit, and independent review are still required before Restricted/Private workflows can be re-enabled.
 
 
 - [ ] Named warning authority and accountable service owner

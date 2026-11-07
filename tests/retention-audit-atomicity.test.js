@@ -1,6 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import Database from "better-sqlite3";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { installAuditLogGuards, verifyAuditChain } from "../src/audit.js";
 import { applyOperationalRetentionWithAudit } from "../src/retention.js";
 
@@ -64,4 +67,31 @@ test("invalid retention parameters produce neither deletion nor audit success", 
     assert.equal(db.prepare("SELECT COUNT(*) AS n FROM webhook_inbox").get().n, 1);
     assert.equal(db.prepare("SELECT COUNT(*) AS n FROM audit_log").get().n, 0);
   } finally { db.close(); }
+});
+
+test("external checkpoint refresh occurs after commit and reports filesystem failure", () => {
+  const db = makeFixture();
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "cap-retention-checkpoint-"));
+  const blocker = path.join(root, "not-a-directory");
+  fs.writeFileSync(blocker, "file");
+  try {
+    const result = applyOperationalRetentionWithAudit(db, {
+      deliveryRetentionDays: 90,
+      webhookRetentionDays: 90,
+      userId: 7,
+      auditOptions: {
+        checkpointPath: path.join(blocker, "checkpoint.json"),
+        checkpointSecret: "x".repeat(32)
+      }
+    });
+    assert.equal(result.ok, true);
+    assert.match(result.audit_checkpoint_warning, /database audit event committed/i);
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM delivery_outbox").get().n, 0);
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM webhook_inbox").get().n, 0);
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE action='retention_applied'").get().n, 1);
+    assert.equal(verifyAuditChain(db).valid, true);
+  } finally {
+    db.close();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });

@@ -14,6 +14,19 @@ This guide describes the current security controls and the precautions required 
 - The audit log uses append-only database guards and a SHA-256 hash chain. The authenticated verification endpoint detects changed entries, broken hash links, unhashed records appended after chain activation, and missing IDs between retained hashed entries. A valid result does not prove that the final entries or the database itself were not removed or replaced; retain signed checkpoints outside this database.
 - SQLite backup and restore helpers validate database integrity, foreign keys, and the audit chain. Restore refuses to proceed while SQLite WAL/SHM sidecars exist.
 
+## CAP scope authorization — temporary fail-closed boundary
+
+The application does not yet have an institution-approved recipient/grant model for CAP Restricted and Private messages. Role names such as administrator, reviewer, approver, publisher, or forecaster are not treated as implicit recipient grants.
+
+Until that model is implemented and approved, the API applies a temporary Public-only policy:
+- Authenticated alert lists, detail reads, CSV exports, statistics, review queues, CAP XML, versions, review history, timelines, and relationship traversal expose Public-scope records only. A direct request for a non-Public record returns the same 404 response as a missing record.
+- Relationship traversal filters both parent and child candidates to Public, preventing a Public root from revealing a Restricted/Private linked message.
+- New Restricted/Private alerts and promotion of a Public draft into either non-Public scope are rejected with SCOPE_AUTHORIZATION_UNCONFIGURED.
+- Generic audit listing/export omit events attached to non-Public alerts. Delivery outbox listing/counts are Public-only; direct operations on non-Public deliveries are hidden, and global retry/recovery maintenance is blocked while any non-Public outbox row exists.
+- Public JSON/GeoJSON feeds retain their separate published + Public + Actual + unexpired + Alert/Update/Cancel filters.
+
+This is deliberately restrictive and may hide existing non-Public records from normal application workflows. Do not use Restricted or Private CAP messages in this deployment. Existing records remain in the database for controlled migration; do not delete or reclassify them to bypass the policy. Re-enable non-Public workflows only after a reviewed recipient-grant schema, trusted identity/organization mapping, deny-by-default enforcement across every read/export/mutation/delivery path, audit of grant/revoke changes, and multi-account IDOR regression tests are implemented and accepted. The addresses field is not an authorization mechanism.
+
 ## Required deployment precautions
 
 1. Keep the service private during development and evaluation. Bind it to localhost by default; do not expose the application port directly to the internet.

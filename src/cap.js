@@ -366,12 +366,35 @@ export function buildCapXml(a) {
  * Parse a CAP 1.2 XML document into the internal alert representation used by validateAlert/buildCapXml.
  * Accepts whitespace and element-order variations produced by xmlbuilder2 and typical receivers.
  */
+function assertCapElementNamespaces(element, inheritedNamespaces = {}) {
+  if (!element || typeof element !== "object" || Array.isArray(element)) return;
+  const namespaces = { ...inheritedNamespaces };
+  for (const [key, value] of Object.entries(element)) {
+    if (key === "@xmlns") namespaces[""] = String(value);
+    else if (key.startsWith("@xmlns:")) namespaces[key.slice(7)] = String(value);
+  }
+  for (const [key, child] of Object.entries(element)) {
+    if (key.startsWith("@") || key === "#") continue;
+    const separator = key.indexOf(":");
+    const prefix = separator < 0 ? "" : key.slice(0, separator);
+    const namespaceUri = namespaces[prefix] || "";
+    if (namespaceUri !== "urn:oasis:names:tc:emergency:cap:1.2") {
+      throw new Error(`CAP XML element '${key}' is not in the OASIS CAP 1.2 namespace`);
+    }
+    for (const childElement of asArray(child)) {
+      if (childElement && typeof childElement === "object") {
+        assertCapElementNamespaces(childElement, namespaces);
+      }
+    }
+  }
+}
+
 function normalizeXmlObject(value) {
   if (Array.isArray(value)) return value.map(normalizeXmlObject);
   if (!value || typeof value !== "object") return value;
   return Object.fromEntries(Object.entries(value).map(([key, child]) => {
-    // Preserve XML attributes/text markers; strip element prefixes so CAP's
-    // default and explicitly prefixed namespace forms share one parser path.
+    // Preserve XML attributes/text markers; strip element prefixes only
+    // after every element has been verified as belonging to CAP 1.2.
     const normalizedKey = key.startsWith("@") || key === "#" ? key : key.split(":").at(-1);
     return [normalizedKey, normalizeXmlObject(child)];
   }));
@@ -392,12 +415,7 @@ export function parseCapXml(xml) {
   if (!rawAlert || typeof rawAlert !== "object" || Array.isArray(rawAlert)) {
     throw new Error("CAP XML must contain a root alert element");
   }
-  const namespaceUris = Object.entries(rawAlert)
-    .filter(([name]) => name === "@xmlns" || name.startsWith("@xmlns:"))
-    .map(([, value]) => String(value));
-  if (!namespaceUris.includes("urn:oasis:names:tc:emergency:cap:1.2")) {
-    throw new Error("CAP XML must use the OASIS CAP 1.2 namespace");
-  }
+  assertCapElementNamespaces({ [rootKey]: rawAlert });
   const alert = normalizeXmlObject(rawAlert);
 
   const infoNodes = asArray(alert.info);

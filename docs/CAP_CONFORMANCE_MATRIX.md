@@ -19,6 +19,7 @@ This matrix records the automated conformance coverage currently present in this
 | Public feed isolation | `tests/api.integration.test.js`: public feed and GeoJSON filtering, including expired and non-public/test data | Local API coverage |
 | Update/Cancel history | `tests/api.integration.test.js`: derived messages, relations, timeline and delivery outbox linkage | Local workflow coverage |
 | Scope restriction/addresses | `tests/cap.test.js`: Restricted requires restriction text; Private requires addresses; type checks for both fields; `tests/cap-schema.test.js`: Restricted and Private messages with required fields validate against the official OASIS XSD; `tests/api.integration.test.js`: API rejection/acceptance and public-feed exclusion | Implemented |
+| End-to-end CAP lifecycle | `tests/cap-lifecycle.integration.test.js`: Public/Restricted/Private Actual publish, OASIS XSD validation of exported XML, Update/Cancel derivation and publish, relations integrity, SQLite FK/quick_check, and public JSON/GeoJSON isolation of Restricted/Private | Implemented |
 
 ## Required follow-up before interoperability acceptance
 

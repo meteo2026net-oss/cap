@@ -623,20 +623,22 @@ app.use("/api/alerts",(_req,res,next)=>{
 });
 app.use("/api/alerts",auth,(req,res,next)=>{
  const pathname=new URL(req.originalUrl,"http://localhost").pathname;
- const collectionRead=req.method==="GET" && ["/api/alerts","/api/alerts/stats","/api/alerts/export.csv"].includes(pathname);
+ let normalizedPath=pathname;
+ while(normalizedPath.length>1 && normalizedPath.endsWith("/")) normalizedPath=normalizedPath.slice(0,-1);
+ const collectionRead=req.method==="GET" && ["/api/alerts","/api/alerts/stats","/api/alerts/export.csv"].includes(normalizedPath);
  if(collectionRead){
   if(["Restricted","Private"].includes(req.query.scope)) return res.status(403).json({error:"Restricted and Private alert access is disabled until recipient authorization is configured",code:"SCOPE_AUTHORIZATION_UNCONFIGURED"});
   return next();
  }
- if(req.method==="POST" && pathname==="/api/alerts"){
+ if(req.method==="POST" && normalizedPath==="/api/alerts"){
   if(["Restricted","Private"].includes(req.body?.scope)) return res.status(403).json({error:"Creating Restricted or Private alerts is disabled until recipient authorization is configured",code:"SCOPE_AUTHORIZATION_UNCONFIGURED"});
   return next();
  }
- const alertPathParts=pathname.split("/");
+ const alertPathParts=normalizedPath.split("/");
  let alertIdSegment=alertPathParts[3]||"";
  try { alertIdSegment=decodeURIComponent(alertIdSegment); } catch { return res.status(400).json({error:"Invalid alert identifier"}); }
  const alertId=Number(alertIdSegment);
- const idMatch=pathname.startsWith("/api/alerts/") && Number.isSafeInteger(alertId) && alertId>0 ? [null,alertId] : null;
+ const idMatch=normalizedPath.startsWith("/api/alerts/") && Number.isSafeInteger(alertId) && alertId>0 ? [null,alertId] : null;
  if(idMatch){
   const existing=db.prepare("SELECT scope FROM alerts WHERE id=?").get(idMatch[1]);
   if(existing && existing.scope!=="Public") return res.status(404).json({error:"Alert not found"});
@@ -1149,16 +1151,18 @@ app.patch("/api/webhooks/inbox/:id/review",auth,roles("admin","reviewer"),(req,r
 
 app.use("/api/delivery",auth,(req,res,next)=>{
  const pathname=new URL(req.originalUrl,"http://localhost").pathname;
- const deliveryPathParts=pathname.split("/");
+ let normalizedPath=pathname;
+ while(normalizedPath.length>1 && normalizedPath.endsWith("/")) normalizedPath=normalizedPath.slice(0,-1);
+ const deliveryPathParts=normalizedPath.split("/");
  let deliveryIdSegment=deliveryPathParts[4]||"";
  try { deliveryIdSegment=decodeURIComponent(deliveryIdSegment); } catch { return res.status(400).json({error:"Invalid delivery identifier"}); }
  const deliveryId=Number(deliveryIdSegment);
- const idMatch=pathname.startsWith("/api/delivery/outbox/") && Number.isSafeInteger(deliveryId) && deliveryId>0 ? [null,deliveryId] : null;
+ const idMatch=normalizedPath.startsWith("/api/delivery/outbox/") && Number.isSafeInteger(deliveryId) && deliveryId>0 ? [null,deliveryId] : null;
  if(idMatch){
   const row=db.prepare("SELECT a.scope FROM delivery_outbox d JOIN alerts a ON a.id=d.alert_id WHERE d.id=?").get(idMatch[1]);
   if(row && row.scope!=="Public") return res.status(404).json({error:"Delivery not found"});
  }
- if(req.method==="POST" && ["/api/delivery/process-retries","/api/delivery/recover-stale"].includes(pathname)){
+ if(req.method==="POST" && ["/api/delivery/process-retries","/api/delivery/recover-stale"].includes(normalizedPath)){
   const hidden=db.prepare("SELECT 1 FROM delivery_outbox d JOIN alerts a ON a.id=d.alert_id WHERE a.scope<>'Public' LIMIT 1").get();
   if(hidden) return res.status(403).json({error:"Global delivery maintenance is blocked while non-Public alert recipients are not authorized",code:"SCOPE_AUTHORIZATION_UNCONFIGURED"});
  }

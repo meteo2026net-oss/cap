@@ -267,3 +267,57 @@ test("independent OASIS XSD validator rejects malformed CAP documents", { skip: 
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("Restricted and Private scope messages with required fields conform to the official XSD", { skip: !hasSchema || !hasXmllint }, () => {
+  const baseInfo = [{
+    language: "en-GB",
+    categories: ["Met"],
+    event: "Heavy rainfall",
+    urgency: "Expected",
+    severity: "Moderate",
+    certainty: "Likely",
+    headline: "Heavy rain warning",
+    description: "Heavy rain is possible.",
+    areas: [{ areaDesc: "Test district", polygon: "51,0 52,0 52,1 51,1 51,0" }]
+  }];
+  const cases = [
+    {
+      label: "Restricted",
+      payload: {
+        identifier: makeIdentifier(),
+        sender: "alerts@example.test",
+        sent: "2026-11-07T05:00:00.000Z",
+        status: "Test",
+        msg_type: "Alert",
+        scope: "Restricted",
+        restriction: "Internal distribution to authorized agencies only",
+        info_blocks: baseInfo
+      }
+    },
+    {
+      label: "Private",
+      payload: {
+        identifier: makeIdentifier(),
+        sender: "alerts@example.test",
+        sent: "2026-11-07T05:00:00.000Z",
+        status: "Test",
+        msg_type: "Alert",
+        scope: "Private",
+        addresses: "ops@example.test duty@example.test",
+        info_blocks: baseInfo
+      }
+    }
+  ];
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cap-xsd-scope-"));
+  try {
+    for (const item of cases) {
+      const xmlPath = path.join(dir, `${item.label}.xml`);
+      fs.writeFileSync(xmlPath, buildCapXml(item.payload), "utf8");
+      const result = spawnSync("xmllint", ["--noout", "--schema", schemaPath, xmlPath], { encoding: "utf8" });
+      assert.equal(result.status, 0,
+        `${item.label} failed CAP 1.2 XSD validation: ${result.stderr || result.stdout}`);
+    }
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});

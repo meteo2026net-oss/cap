@@ -222,6 +222,7 @@ test("independent OASIS XSD validator rejects malformed CAP documents", { skip: 
       language: "en-GB",
       categories: ["Met"],
       event: "Heavy rainfall",
+      response_types: ["Shelter"],
       urgency: "Expected",
       severity: "Moderate",
       certainty: "Likely",
@@ -239,7 +240,9 @@ test("independent OASIS XSD validator rejects malformed CAP documents", { skip: 
     ["duplicate sender element", xml.replace("</sender>", "</sender><sender>duplicate@example.test</sender>")],
     ["missing required area description", xml.replace("<areaDesc>Test district</areaDesc>", "")],
     ["invalid certainty enumeration", xml.replace("<certainty>Likely</certainty>", "<certainty>Guaranteed</certainty>")],
-    ["invalid scope enumeration", xml.replace("<scope>Public</scope>", "<scope>Everyone</scope>")]
+    ["invalid scope enumeration", xml.replace("<scope>Public</scope>", "<scope>Everyone</scope>")],
+    ["invalid category enumeration", xml.replace("<category>Met</category>", "<category>Weather</category>")],
+    ["invalid response type enumeration", xml.replace("<responseType>Shelter</responseType>", "<responseType>Observe</responseType>")]
   ];
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cap-xsd-negative-"));
   try {

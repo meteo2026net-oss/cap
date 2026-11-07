@@ -366,24 +366,26 @@ export function buildCapXml(a) {
  * Parse a CAP 1.2 XML document into the internal alert representation used by validateAlert/buildCapXml.
  * Accepts whitespace and element-order variations produced by xmlbuilder2 and typical receivers.
  */
-function assertCapElementNamespaces(element, inheritedNamespaces = {}) {
+function assertCapElementNamespaces(element, inheritedNamespaces = {}, elementName = null) {
   if (!element || typeof element !== "object" || Array.isArray(element)) return;
   const namespaces = { ...inheritedNamespaces };
   for (const [key, value] of Object.entries(element)) {
     if (key === "@xmlns") namespaces[""] = String(value);
     else if (key.startsWith("@xmlns:")) namespaces[key.slice(7)] = String(value);
   }
-  for (const [key, child] of Object.entries(element)) {
-    if (key.startsWith("@") || key === "#") continue;
-    const separator = key.indexOf(":");
-    const prefix = separator < 0 ? "" : key.slice(0, separator);
+  if (elementName) {
+    const separator = elementName.indexOf(":");
+    const prefix = separator < 0 ? "" : elementName.slice(0, separator);
     const namespaceUri = namespaces[prefix] || "";
     if (namespaceUri !== "urn:oasis:names:tc:emergency:cap:1.2") {
-      throw new Error(`CAP XML element '${key}' is not in the OASIS CAP 1.2 namespace`);
+      throw new Error(`CAP XML element '${elementName}' is not in the OASIS CAP 1.2 namespace`);
     }
+  }
+  for (const [key, child] of Object.entries(element)) {
+    if (key.startsWith("@") || key === "#") continue;
     for (const childElement of asArray(child)) {
       if (childElement && typeof childElement === "object") {
-        assertCapElementNamespaces(childElement, namespaces);
+        assertCapElementNamespaces(childElement, namespaces, key);
       }
     }
   }
@@ -415,7 +417,7 @@ export function parseCapXml(xml) {
   if (!rawAlert || typeof rawAlert !== "object" || Array.isArray(rawAlert)) {
     throw new Error("CAP XML must contain a root alert element");
   }
-  assertCapElementNamespaces({ [rootKey]: rawAlert });
+  assertCapElementNamespaces(rawAlert, {}, rootKey);
   const alert = normalizeXmlObject(rawAlert);
 
   const infoNodes = asArray(alert.info);

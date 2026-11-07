@@ -17,7 +17,18 @@ export function openReceiverStore(filename) {
 
 export function persistReceiverMessage(db, message, validateReferences) {
   return db.transaction(() => {
-    const known = db.prepare("SELECT sender,identifier,sent,msg_type,scope,status FROM receiver_messages").all();
+    const known = [];
+    if (["Update", "Cancel", "Ack", "Error"].includes(message.msgType)) {
+      const findReference = db.prepare(
+        "SELECT sender,identifier,sent,msg_type,scope,status FROM receiver_messages WHERE sender=? AND identifier=? AND sent=?"
+      );
+      for (const reference of String(message.references || "").trim().split(/\\s+/).filter(Boolean)) {
+        const parts = reference.split(",");
+        if (parts.length !== 3 || parts.some(part => !part)) continue;
+        const found = findReference.get(parts[0], parts[1], parts[2]);
+        if (found) known.push(found);
+      }
+    }
     const validation = validateReferences(known);
     if (!validation.ok) return validation;
     const result = db.prepare(`

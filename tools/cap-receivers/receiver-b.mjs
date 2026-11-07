@@ -16,6 +16,11 @@ function text(node) {
   return "";
 }
 
+function childNode(parent, localName) {
+  if (!parent || typeof parent !== "object") return undefined;
+  const key = Object.keys(parent).find(name => name === localName || name.endsWith(":" + localName));
+  return key ? parent[key] : undefined;
+}
 function readAlert(xml) {
   if (typeof xml !== "string" || !xml.trim()) throw new Error("CAP XML is required");
   if (Buffer.byteLength(xml, "utf8") > 1_000_000) throw new Error("CAP XML exceeds the 1 MB receiver limit");
@@ -26,9 +31,11 @@ function readAlert(xml) {
   } catch {
     throw new Error("malformed xml");
   }
-  const alert = root?.alert;
+  const rootKey = Object.keys(root || {}).find(name => name === "alert" || name.endsWith(":alert"));
+  const alert = rootKey ? root[rootKey] : undefined;
   if (!alert || typeof alert !== "object" || Array.isArray(alert)) throw new Error("missing alert");
-  if (alert["@xmlns"] && alert["@xmlns"] !== CAP_NAMESPACE) throw new Error("unexpected CAP namespace");
+  const namespaces = Object.entries(alert).filter(([name]) => name === "@xmlns" || name.startsWith("@xmlns:")).map(([, value]) => String(value));
+  if (namespaces.length && !namespaces.includes(CAP_NAMESPACE)) throw new Error("unexpected CAP namespace");
   return alert;
 }
 
@@ -51,15 +58,15 @@ export function receiveCapXmlB(xml, { knownMessages = [], database = null } = {}
   } catch (error) {
     return { ok: false, error: error.message, kind: "Error" };
   }
-  const identifier = text(alert.identifier);
-  const sender = text(alert.sender);
-  const sent = text(alert.sent);
-  const msgType = text(alert.msgType);
-  const scope = text(alert.scope);
-  const status = text(alert.status);
-  const references = text(alert.references);
-  const restriction = text(alert.restriction);
-  const addresses = text(alert.addresses);
+  const identifier = text(childNode(alert, "identifier"));
+  const sender = text(childNode(alert, "sender"));
+  const sent = text(childNode(alert, "sent"));
+  const msgType = text(childNode(alert, "msgType"));
+  const scope = text(childNode(alert, "scope"));
+  const status = text(childNode(alert, "status"));
+  const references = text(childNode(alert, "references"));
+  const restriction = text(childNode(alert, "restriction"));
+  const addresses = text(childNode(alert, "addresses"));
   if (!identifier || !sender || !sent || !msgType || !scope || !status) {
     return { ok: false, error: "missing required fields", kind: "Error" };
   }
@@ -84,7 +91,7 @@ export function receiveCapXmlB(xml, { knownMessages = [], database = null } = {}
     if (!checked.ok) return { ...checked, kind: "Error", stored };
   }
   const infoNodes = alert.info == null ? [] : Array.isArray(alert.info) ? alert.info : [alert.info];
-  const headline = infoNodes.map(info => text(info?.headline)).find(Boolean) || "";
+  const headline = infoNodes.map(info => text(childNode(info, "headline"))).find(Boolean) || "";
   return {
     ok: true,
     duplicate,

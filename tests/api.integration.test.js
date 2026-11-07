@@ -1295,6 +1295,15 @@ test("API enforces role separation, public-feed filtering and account deactivati
     }
   });
   assert.equal(privateCreate.status, 403, "new Private alerts must fail closed until recipient grants exist");
+  const incompleteRestrictedCreate = await request("/api/alerts", {
+    token: forecaster, method: "POST", body: {
+      event: "Incomplete restricted storm", headline: "Must be denied before CAP validation",
+      description: "No recipient description supplied", area_desc: "Ops zone",
+      circle: "33.5,36.2 10", scope: "Restricted", status: "Test"
+    }
+  });
+  assert.equal(incompleteRestrictedCreate.status, 403,
+    "non-Public creation must be denied even when scope-dependent recipient fields are absent");
   const trailingSlashRestrictedCreate = await request("/api/alerts/", {
     token: forecaster, method: "POST", body: {
       event: "Trailing slash restricted", headline: "Must not be created",
@@ -1378,7 +1387,13 @@ test("API enforces role separation, public-feed filtering and account deactivati
   const blockedScopeChange = await request(`/api/alerts/${actualRow.id}`, {
     token: forecaster, method: "PATCH", body: { scope: "Restricted" }
   });
-  assert.equal(blockedScopeChange.status, 403, "Public drafts cannot be changed to a non-Public scope without recipient authorization");
+  assert.equal(blockedScopeChange.status, 403,
+    "any Public alert scope promotion must be denied before workflow-state checks");
+  const blockedPrivateScopeChange = await request(`/api/alerts/${actualRow.id}`, {
+    token: forecaster, method: "PATCH", body: { scope: "Private" }
+  });
+  assert.equal(blockedPrivateScopeChange.status, 403,
+    "Private scope promotion must be denied even without an addresses field");
 
   const queueWithoutPrivate = await request("/api/review/queue?limit=200", { token: reviewer });
   assert.equal(queueWithoutPrivate.status, 200);

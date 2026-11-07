@@ -9,7 +9,7 @@
 |------|----------|--------|
 | CAP 1.2 XML generation and OASIS XSD checks | `tests/cap-schema.test.js`, lifecycle tests | Tested in CI |
 | Alert / Update / Cancel / Ack / Error lifecycle | phase 1–5 integration tests | Tested in CI |
-| Restricted / Private isolation from public feeds | isolation + phase 4/5 tests | Tested in CI |
+| Restricted / Private exclusion from public feeds | isolation + phase 4/5 tests | Tested in CI; internal recipient-level authorization is not implemented |
 | Role separation (forecaster / reviewer / publisher) | API + phase 4/6 tests | Tested in CI |
 | MFA enroll/login/recovery paths | `tests/mfa.test.js`, API integration | Tested in CI |
 | Audit hash-chain append and verification | audit tests | Tested in CI |
@@ -23,6 +23,9 @@
 | Process restart durability | phase 4 integration test | Tested in CI |
 
 ## B. Requires institutional acceptance (not claimed by CI)
+
+**Scope boundary:** public JSON/GeoJSON feeds filter to published `Public` + `Actual` + unexpired alerts. Authenticated internal list/detail/export/CAP XML/relationship endpoints are not currently restricted by `addresses` or a recipient ACL; all authenticated accounts can read records in any CAP scope. Do not interpret public-feed exclusion as recipient-level confidentiality. A deployment must define and implement the required internal access policy before using Restricted/Private data.
+
 
 - [ ] Named warning authority and accountable service owner
 - [ ] Approved geography, languages, severity policy, and public-feed scope

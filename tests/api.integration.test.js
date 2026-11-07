@@ -1345,15 +1345,15 @@ test("API enforces role separation, public-feed filtering and account deactivati
     token: publisher, method: "POST", body: { staleMinutes: 10 }
   })).status, 403, "global lease recovery must stop while non-Public outbox records exist");
 
-  const auditList = await request("/api/audit?limit=500", { token: reviewer });
-  assert.equal(auditList.status, 200);
-  assert.ok(!JSON.stringify(auditList.data.entries).includes("PRIVATE_AUDIT_MARKER"),
+  const scopeAuditList = await request("/api/audit?limit=500", { token: reviewer });
+  assert.equal(scopeAuditList.status, 200);
+  assert.ok(!JSON.stringify(scopeAuditList.data.entries).includes("PRIVATE_AUDIT_MARKER"),
     "generic audit listing must exclude events attached to non-Public alerts");
-  const auditCsvResponse = await fetch(base + "/api/audit/export.csv", {
+  const scopeAuditCsvResponse = await fetch(base + "/api/audit/export.csv", {
     headers: { Authorization: "Bearer " + reviewer }
   });
-  const auditCsvText = await auditCsvResponse.text();
-  assert.ok(!auditCsvText.includes("PRIVATE_AUDIT_MARKER"),
+  const scopeAuditCsvText = await scopeAuditCsvResponse.text();
+  assert.ok(!scopeAuditCsvText.includes("PRIVATE_AUDIT_MARKER"),
     "generic audit export must exclude events attached to non-Public alerts");
 
   const restrictedPublicFeed = await request("/api/public/alerts");
@@ -1566,9 +1566,9 @@ test("API enforces role separation, public-feed filtering and account deactivati
   const auditCsvBytes = Buffer.from(await auditCsv.arrayBuffer());
   assert.deepEqual([...auditCsvBytes.subarray(0, 3)], [0xef, 0xbb, 0xbf],
     "audit CSV should begin with the UTF-8 BOM bytes");
-  const auditCsvText = auditCsvBytes.toString("utf8");
-  assert.match(auditCsvText, /"entry_hash"/, "audit export should include integrity hash columns");
-  assert.match(auditCsvText, /"login_succeeded"/, "audit export should include recorded actions");
+  const scopeAuditCsvText = auditCsvBytes.toString("utf8");
+  assert.match(scopeAuditCsvText, /"entry_hash"/, "audit export should include integrity hash columns");
+  assert.match(scopeAuditCsvText, /"login_succeeded"/, "audit export should include recorded actions");
   const filteredAuditCsv = await fetch(base + "/api/audit/export.csv?action=login_succeeded", {
     headers: { Authorization: "Bearer " + reviewer }
   });

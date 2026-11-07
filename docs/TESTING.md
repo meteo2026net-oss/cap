@@ -3,7 +3,7 @@
 ## Commands
 - `npm test` — full Node test suite
 - `npm run test:cap-schema` — OASIS XSD tests when xmllint/schema present
-- `npm run perf:10k` — manual 10,000-message benchmark using CAP functions and the application SQLite schema; emits a JSON report
+- `npm run perf:10k` — 10,000-message benchmark using CAP functions and the application SQLite schema; runs in CI and can also be run locally, emitting a JSON report
 
 ## Layers
 - Unit: CAP semantics, MFA, audit, delivery, retention, receivers

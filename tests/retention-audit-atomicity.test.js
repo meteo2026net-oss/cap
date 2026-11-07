@@ -37,13 +37,16 @@ test("retention deletion and hash-chained audit event commit together", () => {
 test("audit persistence failure rolls back all retention deletions", () => {
   const db = makeFixture();
   try {
+    db.exec(`
+      CREATE TRIGGER reject_retention_audit
+      BEFORE INSERT ON audit_log
+      WHEN NEW.action='retention_applied'
+      BEGIN
+        SELECT RAISE(ABORT, 'simulated audit persistence failure');
+      END;
+    `);
     assert.throws(() => applyOperationalRetentionWithAudit(db, {
-      deliveryRetentionDays: 90, webhookRetentionDays: 90, userId: 7,
-      auditWriter(database, entry) {
-        database.prepare("INSERT INTO audit_log(action,details,created_at) VALUES (?,?,?)")
-          .run(entry.action, entry.details, new Date().toISOString());
-        throw new Error("simulated audit persistence failure");
-      }
+      deliveryRetentionDays: 90, webhookRetentionDays: 90, userId: 7
     }), /simulated audit persistence failure/);
     assert.equal(db.prepare("SELECT COUNT(*) AS n FROM delivery_outbox").get().n, 1);
     assert.equal(db.prepare("SELECT COUNT(*) AS n FROM webhook_inbox").get().n, 1);

@@ -237,7 +237,9 @@ test("independent OASIS XSD validator rejects malformed CAP documents", { skip: 
     ["missing required event", xml.replace(/<event>[^<]*<\/event>/, "")],
     ["invalid urgency enumeration", xml.replace("<urgency>Expected</urgency>", "<urgency>Eventually</urgency>")],
     ["duplicate sender element", xml.replace("</sender>", "</sender><sender>duplicate@example.test</sender>")],
-    ["missing required area description", xml.replace("<areaDesc>Test district</areaDesc>", "")]
+    ["missing required area description", xml.replace("<areaDesc>Test district</areaDesc>", "")],
+    ["invalid certainty enumeration", xml.replace("<certainty>Likely</certainty>", "<certainty>Guaranteed</certainty>")],
+    ["invalid scope enumeration", xml.replace("<scope>Public</scope>", "<scope>Everyone</scope>")]
   ];
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cap-xsd-negative-"));
   try {

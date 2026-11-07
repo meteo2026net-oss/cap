@@ -1227,29 +1227,33 @@ test("API enforces role separation, public-feed filtering and account deactivati
     "authenticated CAP XML exports must not be cacheable");
   assert.match(await capXml.text(), /<alert xmlns=/);
 
-  const restrictedMissing = await request("/api/alerts", {
-    token: forecaster, method: "POST", body: {
-      event: "Restricted storm", headline: "Internal storm advisory",
-      description: "Restricted distribution only", area_desc: "Ops zone",
-      circle: "33.5,36.2 10", scope: "Restricted", status: "Test"
-    }
-  });
-  assert.equal(restrictedMissing.status, 400,
-    "Restricted scope without restriction text must be rejected");
-  assert.match(restrictedMissing.data.error || "", /restriction/i);
+  // Simulate legacy non-Public rows already present before the fail-closed policy.
+  const scopeDb = new Database(path.join(cwd, "storage", "cap.sqlite"));
+  t.after(() => scopeDb.close());
+  const insertLegacyAlert = scopeDb.prepare(`INSERT INTO alerts
+    (identifier,sender,sent,status,msg_type,scope,restriction,addresses,event,category,urgency,severity,certainty,headline,description,area_desc,workflow,references_text)
+    VALUES (?,?,?,'Test','Alert',?,?,?,?,?,'Expected','Moderate','Likely',?,?,?, ?,?)`);
+  const legacyRestrictedId = Number(insertLegacyAlert.run(
+    "legacy-restricted-" + Date.now(), "legacy@example.test", "2026-11-07T00:00:00.000Z",
+    "Internal distribution", null, "Restricted storm", "Met", "RESTRICTED_HEADLINE_MARKER",
+    "Restricted description", "Ops zone", "draft", ""
+  ).lastInsertRowid);
+  const legacyPrivateId = Number(insertLegacyAlert.run(
+    "legacy-private-" + Date.now(), "legacy@example.test", "2026-11-07T00:01:00.000Z",
+    null, "ops@example.test duty@example.test", "Private storm", "Met", "PRIVATE_HEADLINE_MARKER",
+    "Private description", "Duty desk", "pending", ""
+  ).lastInsertRowid);
+  const hiddenChildId = Number(insertLegacyAlert.run(
+    "legacy-private-child-" + Date.now(), "legacy@example.test", "2026-11-07T00:02:00.000Z",
+    null, "ops@example.test", "Private derived", "Met", "PRIVATE_CHILD_MARKER",
+    "Private child description", "Duty desk", "published",
+    `${actualRow.sender},${actualRow.identifier},${actualRow.sent}`
+  ).lastInsertRowid);
+  appendAuditLog(scopeDb, { userId: null, alertId: legacyPrivateId, action: "private_scope_test", details: "PRIVATE_AUDIT_MARKER" });
+  const hiddenDeliveryId = Number(scopeDb.prepare(`INSERT INTO delivery_outbox(alert_id,channel,payload,status)
+    VALUES(?,'cap_feed','PRIVATE_DELIVERY_MARKER','queued')`).run(legacyPrivateId).lastInsertRowid);
 
-  const privateMissing = await request("/api/alerts", {
-    token: forecaster, method: "POST", body: {
-      event: "Private storm", headline: "Private storm advisory",
-      description: "Private recipients only", area_desc: "Duty desk",
-      circle: "33.5,36.2 10", scope: "Private", status: "Test"
-    }
-  });
-  assert.equal(privateMissing.status, 400,
-    "Private scope without addresses must be rejected");
-  assert.match(privateMissing.data.error || "", /addresses/i);
-
-  const restrictedOk = await request("/api/alerts", {
+  const restrictedCreate = await request("/api/alerts", {
     token: forecaster, method: "POST", body: {
       event: "Restricted storm", headline: "Internal storm advisory",
       description: "Restricted distribution only", area_desc: "Ops zone",
@@ -1257,9 +1261,9 @@ test("API enforces role separation, public-feed filtering and account deactivati
       restriction: "Internal distribution to authorized agencies only", status: "Test"
     }
   });
-  assert.equal(restrictedOk.status, 201, "Restricted scope with restriction text must be accepted");
-
-  const privateOk = await request("/api/alerts", {
+  assert.equal(restrictedCreate.status, 403, "new Restricted alerts must fail closed until recipient grants exist");
+  assert.equal(restrictedCreate.data.code, "SCOPE_AUTHORIZATION_UNCONFIGURED");
+  const privateCreate = await request("/api/alerts", {
     token: forecaster, method: "POST", body: {
       event: "Private storm", headline: "Private storm advisory",
       description: "Private recipients only", area_desc: "Duty desk",
@@ -1267,38 +1271,96 @@ test("API enforces role separation, public-feed filtering and account deactivati
       addresses: "ops@example.test duty@example.test", status: "Test"
     }
   });
-  assert.equal(privateOk.status, 201, "Private scope with addresses must be accepted");
+  assert.equal(privateCreate.status, 403, "new Private alerts must fail closed until recipient grants exist");
+
+  const publicList = await request("/api/alerts?scope=Public", { token: forecaster });
+  assert.equal(publicList.status, 200);
+  assert.ok(publicList.data.alerts.every(alert => alert.scope === "Public"),
+    "internal alert pagination must return Public rows only");
+  assert.ok(!publicList.data.alerts.some(alert => [legacyRestrictedId, legacyPrivateId].includes(alert.id)));
+  assert.equal((await request("/api/alerts?scope=Restricted", { token: forecaster })).status, 403);
+  assert.equal((await request("/api/alerts/export.csv?scope=Private", { token: forecaster })).status, 403);
+  const invalidScopeFilter = await request("/api/alerts?scope=Worldwide", { token: forecaster });
+  assert.equal(invalidScopeFilter.status, 400, "invalid CAP scope filter values must still be rejected");
+  const publicCount = scopeDb.prepare("SELECT COUNT(*) AS count FROM alerts WHERE scope='Public'").get().count;
+  const visibleStats = await request("/api/alerts/stats", { token: forecaster });
+  assert.equal(visibleStats.status, 200);
+  assert.equal(visibleStats.data.stats.total, publicCount,
+    "statistics must not reveal counts of Restricted or Private alerts");
+  const csvExport = await fetch(base + "/api/alerts/export.csv", {
+    headers: { Authorization: "Bearer " + forecaster }
+  });
+  const csvText = await csvExport.text();
+  assert.equal(csvExport.status, 200);
+  assert.ok(!csvText.includes("legacy-restricted-") && !csvText.includes("legacy-private-") &&
+    !csvText.includes("RESTRICTED_HEADLINE_MARKER") && !csvText.includes("PRIVATE_HEADLINE_MARKER"),
+    "CSV export must not contain non-Public alert identifiers or content");
+
+  for (const [id, label] of [[legacyRestrictedId, "Restricted"], [legacyPrivateId, "Private"]]) {
+    for (const suffix of ["", "/relations", "/cap.xml"]) {
+      const response = await request(`/api/alerts/${id}${suffix}`, { token: forecaster });
+      assert.equal(response.status, 404, label + " detail/relations/XML must be indistinguishable from a missing alert");
+    }
+    for (const suffix of ["/review-history", "/versions", "/timeline"]) {
+      const response = await request(`/api/alerts/${id}${suffix}`, { token: reviewer });
+      assert.equal(response.status, 404, label + " review history/version/timeline must be denied");
+    }
+    for (const [suffix, method, token, body] of [
+      ["/submit", "POST", forecaster, {}],
+      ["/derive", "POST", forecaster, { msg_type: "Update" }],
+      ["/return", "POST", reviewer, { reason: "Test reason" }],
+      ["/approve", "POST", reviewer, {}],
+      ["/publish", "POST", publisher, {}],
+      ["/review-notes", "POST", reviewer, { note: "Private review note" }],
+      ["", "PATCH", forecaster, { headline: "Attempted change" }]
+    ]) {
+      const response = await request(`/api/alerts/${id}${suffix}`, { token, method, body });
+      assert.equal(response.status, 404, label + " workflow mutations must not reveal or change the alert");
+    }
+  }
+  const blockedScopeChange = await request(`/api/alerts/${actualRow.id}`, {
+    token: forecaster, method: "PATCH", body: { scope: "Restricted" }
+  });
+  assert.equal(blockedScopeChange.status, 403, "Public drafts cannot be changed to a non-Public scope without recipient authorization");
+
+  const queueWithoutPrivate = await request("/api/review/queue?limit=200", { token: reviewer });
+  assert.equal(queueWithoutPrivate.status, 200);
+  assert.ok(!queueWithoutPrivate.data.queue.some(item => item.id === legacyPrivateId),
+    "review queue must not expose pending Private alerts");
+  const lineageWithoutPrivate = await request(`/api/alerts/${actualRow.id}/relations`, { token: forecaster });
+  assert.equal(lineageWithoutPrivate.status, 200);
+  assert.ok(!lineageWithoutPrivate.data.messages.some(item => item.id === hiddenChildId),
+    "relationship traversal must not cross into a non-Public child message");
+
+  const outboxPublicOnly = await request("/api/delivery/outbox", { token: publisher });
+  assert.equal(outboxPublicOnly.status, 200);
+  assert.ok(!outboxPublicOnly.data.deliveries.some(item => item.id === hiddenDeliveryId),
+    "delivery outbox must not reveal non-Public alert deliveries");
+  assert.equal((await request(`/api/delivery/outbox/${hiddenDeliveryId}/claim`, {
+    token: publisher, method: "POST"
+  })).status, 404);
+  assert.equal((await request("/api/delivery/process-retries", { token: publisher, method: "POST" })).status, 403,
+    "global retry processing must stop while non-Public outbox records exist");
+  assert.equal((await request("/api/delivery/recover-stale", {
+    token: publisher, method: "POST", body: { staleMinutes: 10 }
+  })).status, 403, "global lease recovery must stop while non-Public outbox records exist");
+
+  const auditList = await request("/api/audit?limit=500", { token: reviewer });
+  assert.equal(auditList.status, 200);
+  assert.ok(!JSON.stringify(auditList.data.entries).includes("PRIVATE_AUDIT_MARKER"),
+    "generic audit listing must exclude events attached to non-Public alerts");
+  const auditCsvResponse = await fetch(base + "/api/audit/export.csv", {
+    headers: { Authorization: "Bearer " + reviewer }
+  });
+  const auditCsvText = await auditCsvResponse.text();
+  assert.ok(!auditCsvText.includes("PRIVATE_AUDIT_MARKER"),
+    "generic audit export must exclude events attached to non-Public alerts");
 
   const restrictedPublicFeed = await request("/api/public/alerts");
   assert.equal(restrictedPublicFeed.status, 200);
   assert.ok(!(restrictedPublicFeed.data.alerts || []).some(alert =>
-    alert.identifier === restrictedOk.data.identifier ||
-    alert.identifier === privateOk.data.identifier
-  ), "Restricted and Private drafts must never appear on the public feed");
-
-  const scopeFiltered = await request("/api/alerts?scope=Restricted&workflow=draft", { token: forecaster });
-  assert.equal(scopeFiltered.status, 200, "alert list should accept a CAP scope filter");
-  assert.ok((scopeFiltered.data.alerts || []).length >= 1, "Restricted draft filter should return at least one alert");
-  assert.ok((scopeFiltered.data.alerts || []).every(alert => alert.scope === "Restricted"),
-    "scope=Restricted filter must return only Restricted alerts");
-  assert.ok((scopeFiltered.data.alerts || []).some(alert => alert.id === restrictedOk.data.id),
-    "Restricted filter should include the newly created Restricted draft");
-
-  const invalidScopeFilter = await request("/api/alerts?scope=Worldwide", { token: forecaster });
-  assert.equal(invalidScopeFilter.status, 400, "invalid CAP scope filter values must be rejected");
-
-  const restrictedPatchDenied = await request(`/api/alerts/${restrictedOk.data.id}`, {
-    token: forecaster, method: "PATCH", body: { scope: "Private" }
-  });
-  assert.equal(restrictedPatchDenied.status, 400,
-    "changing a draft to Private without addresses must be rejected");
-  assert.match(restrictedPatchDenied.data.error || "", /addresses/i);
-
-  const privatePatchOk = await request(`/api/alerts/${privateOk.data.id}`, {
-    token: forecaster, method: "PATCH",
-    body: { addresses: "ops@example.test duty@example.test night@example.test", headline: "Private advisory revised" }
-  });
-  assert.equal(privatePatchOk.status, 200, "Private draft address updates should succeed");
+    [legacyRestrictedId, legacyPrivateId, hiddenChildId].includes(alert.id)
+  ), "legacy Restricted and Private alerts must remain excluded from public feeds");
 
   let publishedUpdate = null;
   for (const msg_type of ["Update", "Cancel"]) {

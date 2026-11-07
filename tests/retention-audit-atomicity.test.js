@@ -5,7 +5,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
-import { installAuditLogGuards, verifyAuditChain } from "../src/audit.js";
+import { appendAuditLog, initializeAuditCheckpoint, installAuditLogGuards, refreshAuditCheckpoint, verifyAuditChain } from "../src/audit.js";
 import { applyOperationalRetentionWithAudit } from "../src/retention.js";
 
 function makeFixture() {
@@ -128,6 +128,51 @@ test("retention CLI records its system audit event through the atomic path", () 
       assert.equal(event.user_id, null);
     } finally { db.close(); }
   } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("stale checkpoint can be refreshed only from its authenticated intact anchor", () => {
+  const db = makeFixture();
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "cap-audit-checkpoint-recovery-"));
+  const checkpointPath = path.join(root, "audit-checkpoint.json");
+  const checkpointSecret = "recovery-test-secret-at-least-32-bytes";
+  try {
+    appendAuditLog(db, { action: "baseline", details: "trusted checkpoint anchor" });
+    initializeAuditCheckpoint(db, { checkpointPath, checkpointSecret });
+    const initial = JSON.parse(fs.readFileSync(checkpointPath, "utf8"));
+
+    appendAuditLog(db, { action: "post_commit", details: "simulated committed audit event" });
+    assert.equal(verifyAuditChain(db, { checkpointPath, checkpointSecret }).valid, false);
+
+    const recovered = refreshAuditCheckpoint(db, { checkpointPath, checkpointSecret });
+    assert.equal(recovered.updated, true);
+    assert.ok(recovered.latest_id > initial.latest_id);
+    assert.equal(verifyAuditChain(db, { checkpointPath, checkpointSecret }).valid, true);
+    assert.equal(refreshAuditCheckpoint(db, { checkpointPath, checkpointSecret }).updated, false);
+  } finally {
+    db.close();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("checkpoint recovery refuses a changed or missing trusted anchor", () => {
+  const db = makeFixture();
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "cap-audit-checkpoint-reject-"));
+  const checkpointPath = path.join(root, "audit-checkpoint.json");
+  const checkpointSecret = "recovery-test-secret-at-least-32-bytes";
+  try {
+    appendAuditLog(db, { action: "baseline" });
+    initializeAuditCheckpoint(db, { checkpointPath, checkpointSecret });
+    const checkpoint = JSON.parse(fs.readFileSync(checkpointPath, "utf8"));
+    checkpoint.signature = "0".repeat(64);
+    fs.writeFileSync(checkpointPath, JSON.stringify(checkpoint));
+    assert.throws(
+      () => refreshAuditCheckpoint(db, { checkpointPath, checkpointSecret }),
+      /signature is invalid/
+    );
+  } finally {
+    db.close();
     fs.rmSync(root, { recursive: true, force: true });
   }
 });

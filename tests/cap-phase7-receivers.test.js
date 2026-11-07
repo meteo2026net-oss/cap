@@ -92,6 +92,15 @@ test("phase7: receivers accept CAP XML with an explicit namespace prefix", () =>
   }
 });
 
+test("phase7: receivers reject XML without the CAP 1.2 namespace", () => {
+  const xml = buildCapXml(base).replace(' xmlns="urn:oasis:names:tc:emergency:cap:1.2"', "");
+  for (const receive of [receiveCapXmlA, receiveCapXmlB]) {
+    const result = receive(xml);
+    assert.equal(result.ok, false);
+    assert.match(result.error, /namespace/i);
+  }
+});
+
 test("phase7: receivers reject DTD/entity declarations and malformed XML", () => {
   const hostile = `<!DOCTYPE alert [<!ENTITY xxe SYSTEM "file:///etc/passwd">]><alert>&xxe;</alert>`;
   for (const receive of [receiveCapXmlA, receiveCapXmlB]) {

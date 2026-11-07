@@ -4,6 +4,7 @@
  * Local simulation only; no network listeners or external delivery.
  */
 import { create } from "xmlbuilder2";
+import { persistReceiverMessage } from "./receiver-store.mjs";
 
 const CAP_NAMESPACE = "urn:oasis:names:tc:emergency:cap:1.2";
 const DERIVED_TYPES = new Set(["Update", "Cancel", "Ack", "Error"]);
@@ -48,7 +49,7 @@ function verifyReferences(referencesText, knownMessages) {
   return { ok: true };
 }
 
-export function receiveCapXmlA(xml, knownMessages = []) {
+export function receiveCapXmlA(xml, { knownMessages = [], database = null } = {}) {
   let alert;
   try {
     alert = parseDocument(xml);
@@ -76,18 +77,25 @@ export function receiveCapXmlA(xml, knownMessages = []) {
   if (!["Actual", "Exercise", "System", "Test"].includes(stored.status)) {
     return { ok: false, error: "unsupported status", kind: "Error", stored };
   }
-  if (DERIVED_TYPES.has(stored.msgType)) {
-    const checked = verifyReferences(stored.references, knownMessages);
-    if (!checked.ok) return { ok: false, error: checked.error, kind: "Error", stored };
-  }
   if (stored.scope === "Restricted" && !nodeText(alert.restriction)) {
     return { ok: false, error: "Restricted requires restriction", kind: "Error", stored };
   }
   if (stored.scope === "Private" && !nodeText(alert.addresses)) {
     return { ok: false, error: "Private requires addresses", kind: "Error", stored };
   }
+  const validate = history => DERIVED_TYPES.has(stored.msgType) ? verifyReferences(stored.references, history) : { ok: true };
+  let duplicate = false;
+  if (database) {
+    const persisted = persistReceiverMessage(database, stored, validate);
+    if (!persisted.ok) return { ...persisted, kind: "Error", stored };
+    duplicate = persisted.duplicate;
+  } else {
+    const checked = validate(knownMessages);
+    if (!checked.ok) return { ...checked, kind: "Error", stored };
+  }
   return {
     ok: true,
+    duplicate,
     stored,
     ack: { msgType: "Ack", references: `${stored.sender},${stored.identifier},${stored.sent}`, note: "receiver-a accepted" }
   };

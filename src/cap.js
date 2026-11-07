@@ -366,16 +366,39 @@ export function buildCapXml(a) {
  * Parse a CAP 1.2 XML document into the internal alert representation used by validateAlert/buildCapXml.
  * Accepts whitespace and element-order variations produced by xmlbuilder2 and typical receivers.
  */
+function normalizeXmlObject(value) {
+  if (Array.isArray(value)) return value.map(normalizeXmlObject);
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(Object.entries(value).map(([key, child]) => {
+    // Preserve XML attributes/text markers; strip element prefixes so CAP's
+    // default and explicitly prefixed namespace forms share one parser path.
+    const normalizedKey = key.startsWith("@") || key === "#" ? key : key.split(":").at(-1);
+    return [normalizedKey, normalizeXmlObject(child)];
+  }));
+}
+
 export function parseCapXml(xml) {
   if (typeof xml !== "string" || !xml.trim()) throw new Error("CAP XML is required");
+  if (Buffer.byteLength(xml, "utf8") > 1_000_000) throw new Error("CAP XML exceeds the 1 MB parser limit");
+  if (/<!\\s*(?:DOCTYPE|ENTITY)\\b/i.test(xml)) throw new Error("DTD and entity declarations are not accepted");
   let document;
   try {
     document = create(xml).end({ format: "object" });
   } catch {
     throw new Error("CAP XML is not well-formed");
   }
-  const alert = document?.alert;
-  if (!alert || typeof alert !== "object") throw new Error("CAP XML must contain a root alert element");
+  const rootKey = Object.keys(document || {}).find(name => name === "alert" || name.endsWith(":alert"));
+  const rawAlert = rootKey ? document[rootKey] : undefined;
+  if (!rawAlert || typeof rawAlert !== "object" || Array.isArray(rawAlert)) {
+    throw new Error("CAP XML must contain a root alert element");
+  }
+  const namespaceUris = Object.entries(rawAlert)
+    .filter(([name]) => name === "@xmlns" || name.startsWith("@xmlns:"))
+    .map(([, value]) => String(value));
+  if (!namespaceUris.includes("urn:oasis:names:tc:emergency:cap:1.2")) {
+    throw new Error("CAP XML must use the OASIS CAP 1.2 namespace");
+  }
+  const alert = normalizeXmlObject(rawAlert);
 
   const infoNodes = asArray(alert.info);
   const info_blocks = infoNodes.map(info => {

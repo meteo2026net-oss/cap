@@ -1,4 +1,4 @@
-import { appendAuditLog } from "./audit.js";
+import { appendAuditLog, finalizeAuditCheckpoint } from "./audit.js";
 /**
  * Local retention helpers for non-authoritative operational tables.
  * Audit log rows are intentionally NOT deleted: the hash chain requires an
@@ -113,11 +113,31 @@ export function applyOperationalRetentionWithAudit(database, {
   deliveryRetentionDays = Number(process.env.CAP_DELIVERY_RETENTION_DAYS || 90),
   webhookRetentionDays = Number(process.env.CAP_WEBHOOK_RETENTION_DAYS || 90),
   userId = null,
-  auditWriter = appendAuditLog
+  auditWriter = appendAuditLog,
+  auditOptions = {}
 } = {}) {
-  return database.transaction(() => {
-    const result = applyOperationalRetention(database, { deliveryRetentionDays, webhookRetentionDays });
-    auditWriter(database, { userId, alertId: null, action: "retention_applied", details: JSON.stringify(result) });
-    return result;
+  let auditResult;
+  const result = database.transaction(() => {
+    const retentionResult = applyOperationalRetention(database, { deliveryRetentionDays, webhookRetentionDays });
+    auditResult = auditWriter(
+      database,
+      { userId, alertId: null, action: "retention_applied", details: JSON.stringify(retentionResult) },
+      { ...auditOptions, deferCheckpoint: auditWriter === appendAuditLog }
+    );
+    return retentionResult;
   }).immediate();
+
+  // The external checkpoint is a separate filesystem trust anchor. Refresh it
+  // only after the SQLite transaction commits, never while its transaction is open.
+  if (auditWriter === appendAuditLog && auditResult?.checkpoint_pending) {
+    try {
+      finalizeAuditCheckpoint(auditResult, auditOptions);
+    } catch {
+      return {
+        ...result,
+        audit_checkpoint_warning: "Retention and its database audit event committed, but the external audit checkpoint could not be refreshed. Verify the checkpoint before the next audit append."
+      };
+    }
+  }
+  return result;
 }

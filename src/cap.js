@@ -287,7 +287,10 @@ export function validateAlert(input) {
   if (input.info_blocks !== undefined && !Array.isArray(input.info_blocks)) {
     throw new Error("CAP info_blocks must be an array.");
   }
-  const blocks = input.info_blocks?.length ? input.info_blocks : (["Cancel","Ack","Error"].includes(input.msg_type) ? [] : [{
+  // An explicit empty info_blocks array means "no blocks" and must not fall back to top-level fields.
+  const blocks = Array.isArray(input.info_blocks)
+    ? input.info_blocks
+    : (["Cancel","Ack","Error"].includes(input.msg_type) ? [] : [{
     language: input.language, category: input.category, event: input.event, urgency: input.urgency,
     severity: input.severity, certainty: input.certainty, effective: input.effective, onset: input.onset,
     expires: input.expires, headline: input.headline, description: input.description,
@@ -313,7 +316,7 @@ export function makeIdentifier() { return `urn:uuid:${randomUUID()}`; }
 
 export function buildCapXml(a) {
   validateAlert(a);
-  const infos = a.info_blocks?.length ? a.info_blocks : [{
+  const infos = Array.isArray(a.info_blocks) ? a.info_blocks : [{
     language: a.language, category: a.category, event: a.event, urgency: a.urgency,
     severity: a.severity, certainty: a.certainty, effective: a.effective, onset: a.onset,
     expires: a.expires, headline: a.headline, description: a.description,

@@ -233,32 +233,28 @@ test("phase4: reference integrity, role gates, isolation, backup/restore and res
     severity: "Moderate",
     certainty: "Likely"
   });
-  const restrictedSource = await publishAlert(client, tokens, {
-    event: "Phase4 restricted source",
-    headline: "Phase4 restricted source unique-p4-restricted",
-    description: "Restricted source",
-    area_desc: "Phase4 restricted area",
-    circle: "34.0,36.5 5",
-    status: "Actual",
-    scope: "Restricted",
-    restriction: "Authorized agencies only",
-    urgency: "Immediate",
-    severity: "Severe",
-    certainty: "Observed"
-  });
-  const privateSource = await publishAlert(client, tokens, {
-    event: "Phase4 private source",
-    headline: "Phase4 private source unique-p4-private",
-    description: "Private source",
-    area_desc: "Phase4 private area",
-    circle: "33.2,36.1 4",
-    status: "Actual",
-    scope: "Private",
-    addresses: "ops@example.test duty@example.test",
-    urgency: "Expected",
-    severity: "Minor",
-    certainty: "Possible"
-  });
+  for (const payload of [
+    {
+      event: "Phase4 restricted source", headline: "Phase4 restricted source unique-p4-restricted",
+      description: "Restricted source", area_desc: "Phase4 restricted area",
+      circle: "34.0,36.5 5", status: "Actual", scope: "Restricted",
+      restriction: "Authorized agencies only", urgency: "Immediate", severity: "Severe", certainty: "Observed"
+    },
+    {
+      event: "Phase4 private source", headline: "Phase4 private source unique-p4-private",
+      description: "Private source", area_desc: "Phase4 private area",
+      circle: "33.2,36.1 4", status: "Actual", scope: "Private",
+      addresses: "ops@example.test duty@example.test", urgency: "Expected", severity: "Minor", certainty: "Possible"
+    }
+  ]) {
+    const denied = await client.request("/api/alerts", {
+      token: tokens.forecaster, method: "POST", body: payload
+    });
+    assert.equal(denied.status, 403, "non-Public source creation must remain blocked without recipient grants");
+    assert.equal(denied.data.code, "SCOPE_AUTHORIZATION_UNCONFIGURED");
+  }
+  const restrictedSource = { id: 999999991, identifier: "urn:uuid:restricted-not-created" };
+  const privateSource = { id: 999999992, identifier: "urn:uuid:private-not-created" };
 
   // --- Reference integrity for Update/Cancel ---
   const update = await client.request(`/api/alerts/${publicSource.id}/derive`, {
@@ -348,17 +344,14 @@ test("phase4: reference integrity, role gates, isolation, backup/restore and res
     try { return db.prepare("SELECT COUNT(*) AS n FROM alerts").get().n; }
     finally { db.close(); }
   })();
-  assert.equal((await client.request("/api/alerts", {
+  const deniedNonPublicCreate = await client.request("/api/alerts", {
     token: tokens.forecaster, method: "POST", body: {
-      event: "bad",
-      headline: "bad",
-      description: "bad",
-      area_desc: "bad",
-      circle: "33,36 5",
-      scope: "Restricted",
-      status: "Test"
+      event: "bad", headline: "bad", description: "bad",
+      area_desc: "bad", circle: "33,36 5", scope: "Restricted", status: "Test"
     }
-  })).status, 400);
+  });
+  assert.equal(deniedNonPublicCreate.status, 403);
+  assert.equal(deniedNonPublicCreate.data.code, "SCOPE_AUTHORIZATION_UNCONFIGURED");
   const afterBad = (() => {
     const db = new Database(path.join(cwd, "storage", "cap.sqlite"), { readonly: true });
     try { return db.prepare("SELECT COUNT(*) AS n FROM alerts").get().n; }
@@ -388,8 +381,8 @@ test("phase4: reference integrity, role gates, isolation, backup/restore and res
     assert.equal(fk.length, 0, "restored DB foreign_key_check must pass");
     const identifiers = restored.prepare("SELECT identifier, scope FROM alerts WHERE workflow='published'").all();
     assert.ok(identifiers.some(row => row.identifier === publicSource.identifier && row.scope === "Public"));
-    assert.ok(identifiers.some(row => row.identifier === restrictedSource.identifier && row.scope === "Restricted"));
-    assert.ok(identifiers.some(row => row.identifier === privateSource.identifier && row.scope === "Private"));
+    assert.ok(!identifiers.some(row => row.scope === "Restricted" || row.scope === "Private"),
+      "API-created database rows must remain Public until recipient authorization is implemented");
   } finally {
     restored.close();
   }

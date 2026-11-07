@@ -38,10 +38,13 @@ test("isolated restore drill runs the real restore path and compares every table
   liveDb.exec("CREATE TABLE live_sentinel (value TEXT); INSERT INTO live_sentinel VALUES ('must-not-change');");
   liveDb.close();
   const liveBefore = await fs.readFile(livePath);
+  const backupBefore = await fs.readFile(backup);
   const sourceState = await verifyRestoredDatabase(backup);
   const result = await runIsolatedRestoreDrill(backup);
   const liveAfter = await fs.readFile(livePath);
+  const backupAfter = await fs.readFile(backup);
   assert.deepEqual(liveAfter, liveBefore, "the live database must remain byte-for-byte unchanged");
+  assert.deepEqual(backupAfter, backupBefore, "the source backup must remain byte-for-byte unchanged");
   assert.equal(result.result, "passed");
   assert.equal(result.integrity, "ok");
   assert.deepEqual(result.audit_checkpoint, {
@@ -83,9 +86,12 @@ test("isolated restore drill verifies a configured external audit checkpoint", a
   const anchor = initializeAuditCheckpoint(database, { checkpointPath, checkpointSecret });
   database.close();
 
+  const checkpointBefore = await fs.readFile(checkpointPath);
   const result = await runIsolatedRestoreDrill(backup, {
     auditOptions: { checkpointPath, checkpointSecret }
   });
+  const checkpointAfter = await fs.readFile(checkpointPath);
+  assert.deepEqual(checkpointAfter, checkpointBefore, "the external checkpoint must remain byte-for-byte unchanged during an isolated drill");
   assert.equal(result.result, "passed");
   assert.deepEqual(result.audit_checkpoint, {
     configured: true,

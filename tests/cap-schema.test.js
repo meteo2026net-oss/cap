@@ -232,7 +232,12 @@ test("independent OASIS XSD validator rejects malformed CAP documents", { skip: 
     }]
   });
   const invalidDocuments = [
+    ["missing required identifier", xml.replace(/<identifier>[^<]*<\/identifier>/, "")],
     ["missing required sender", xml.replace(/<sender>[^<]*<\/sender>/, "")],
+    ["missing required sent timestamp", xml.replace(/<sent>[^<]*<\/sent>/, "")],
+    ["missing required status", xml.replace(/<status>[^<]*<\/status>/, "")],
+    ["missing required message type", xml.replace(/<msgType>[^<]*<\/msgType>/, "")],
+    ["missing required scope", xml.replace(/<scope>[^<]*<\/scope>/, "")],
     ["invalid severity enumeration", xml.replace("<severity>Moderate</severity>", "<severity>Catastrophic</severity>")],
     ["invalid message type enumeration", xml.replace("<msgType>Alert</msgType>", "<msgType>Broadcast</msgType>")],
     ["missing required event", xml.replace(/<event>[^<]*<\/event>/, "")],

@@ -265,3 +265,19 @@ test("semantic: multiple whitespace-separated references remain ordered and comp
   assert.equal(refs[0].split(",")[1], "urn:uuid:one");
   assert.equal(refs[1].split(",")[1], "urn:uuid:two");
 });
+
+test("semantic: derived references use the same normalized timestamp as the referenced alert", () => {
+  const sourceSent = "2026-11-07T10:00:00+01:00";
+  const sourceXml = buildCapXml({ ...baseAlert, sent: sourceSent });
+  const normalizedSent = sourceXml.match(/<sent>([^<]+)<\\/sent>/)?.[1];
+  assert.equal(normalizedSent, "2026-11-07T09:00:00-00:00");
+
+  const updateXml = buildCapXml({
+    ...baseAlert,
+    identifier: "urn:uuid:derived-update",
+    sent: "2026-11-07T11:00:00Z",
+    msg_type: "Update",
+    references_text: `${baseAlert.sender},${baseAlert.identifier},${sourceSent}`
+  });
+  assert.match(updateXml, new RegExp(`<references>${baseAlert.sender},${baseAlert.identifier},2026-11-07T09:00:00-00:00</references>`));
+});

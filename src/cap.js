@@ -380,7 +380,7 @@ function normalizeXmlObject(value) {
 export function parseCapXml(xml) {
   if (typeof xml !== "string" || !xml.trim()) throw new Error("CAP XML is required");
   if (Buffer.byteLength(xml, "utf8") > 1_000_000) throw new Error("CAP XML exceeds the 1 MB parser limit");
-  if (/<!\\s*(?:DOCTYPE|ENTITY)\\b/i.test(xml)) throw new Error("DTD and entity declarations are not accepted");
+  if (/<!\s*(?:DOCTYPE|ENTITY)\b/i.test(xml)) throw new Error("DTD and entity declarations are not accepted");
   let document;
   try {
     document = create(xml).end({ format: "object" });

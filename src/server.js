@@ -621,6 +621,25 @@ app.use("/api/alerts",(_req,res,next)=>{
  res.set("Pragma","no-cache");
  next();
 });
+app.use("/api/alerts",auth,(req,res,next)=>{
+ const pathname=new URL(req.originalUrl,"http://localhost").pathname;
+ const collectionRead=req.method==="GET" && ["/api/alerts","/api/alerts/stats","/api/alerts/export.csv"].includes(pathname);
+ if(collectionRead){
+  if(req.query.scope!==undefined && req.query.scope!=="Public") return res.status(403).json({error:"Restricted and Private alert access is disabled until recipient authorization is configured",code:"SCOPE_AUTHORIZATION_UNCONFIGURED"});
+  return next();
+ }
+ if(req.method==="POST" && pathname==="/api/alerts"){
+  if(req.body?.scope!==undefined && req.body.scope!=="Public") return res.status(403).json({error:"Creating Restricted or Private alerts is disabled until recipient authorization is configured",code:"SCOPE_AUTHORIZATION_UNCONFIGURED"});
+  return next();
+ }
+ const idMatch=pathname.match(/^\\/api\\/alerts\\/([1-9]\\d*)(?:\\/|$)/);
+ if(idMatch){
+  const existing=db.prepare("SELECT scope FROM alerts WHERE id=?").get(idMatch[1]);
+  if(existing && existing.scope!=="Public") return res.status(404).json({error:"Alert not found"});
+  if(req.method==="PATCH" && req.body?.scope!==undefined && req.body.scope!=="Public") return res.status(403).json({error:"Changing an alert to Restricted or Private is disabled until recipient authorization is configured",code:"SCOPE_AUTHORIZATION_UNCONFIGURED"});
+ }
+ next();
+});
 app.get("/api/alerts/export.csv",auth,(req,res)=>{
  const workflow=req.query.workflow, severity=req.query.severity, status=req.query.status, scope=req.query.scope;
  const search=typeof req.query.q==="string" ? req.query.q.trim().slice(0,160) : "";
@@ -628,7 +647,7 @@ app.get("/api/alerts/export.csv",auth,(req,res)=>{
  if(severity!==undefined && !["Extreme","Severe","Moderate","Minor","Unknown"].includes(severity)) return res.status(400).json({error:"Invalid severity filter"});
  if(status!==undefined && !["Actual","Exercise","System","Test"].includes(status)) return res.status(400).json({error:"Invalid CAP status filter"});
  if(scope!==undefined && !["Public","Restricted","Private"].includes(scope)) return res.status(400).json({error:"Invalid CAP scope filter"});
- const clauses=[],params=[];
+ const clauses=["scope='Public'"],params=[];
  if(workflow!==undefined){clauses.push("workflow=?");params.push(workflow);}
  if(severity!==undefined){clauses.push("severity=?");params.push(severity);}
  if(status!==undefined){clauses.push("status=?");params.push(status);}
@@ -661,7 +680,7 @@ app.get("/api/alerts/stats",auth,(req,res)=>{
   SUM(CASE WHEN status='Test' THEN 1 ELSE 0 END) AS test,
   SUM(CASE WHEN status='Exercise' THEN 1 ELSE 0 END) AS exercise,
   SUM(CASE WHEN status='System' THEN 1 ELSE 0 END) AS system
- FROM alerts`).get();
+ FROM alerts WHERE scope='Public'`).get();
  const normalized=Object.fromEntries(Object.entries(stats).map(([key,value])=>[key,value??0]));
  res.set("Cache-Control","no-store").json({stats:normalized});
 });
@@ -684,7 +703,7 @@ app.get("/api/alerts",auth,(req,res)=>{
  if (severity !== undefined && !["Extreme","Severe","Moderate","Minor","Unknown"].includes(severity)) return res.status(400).json({error:"Invalid severity filter"});
  if (status !== undefined && !["Actual","Exercise","System","Test"].includes(status)) return res.status(400).json({error:"Invalid CAP status filter"});
  if (scope !== undefined && !["Public","Restricted","Private"].includes(scope)) return res.status(400).json({error:"Invalid CAP scope filter"});
- const clauses = [];
+ const clauses = ["scope='Public'"];
  const params = [];
  if (workflow !== undefined) { clauses.push("workflow=?"); params.push(workflow); }
  if (severity !== undefined) { clauses.push("severity=?"); params.push(severity); }
@@ -712,7 +731,7 @@ app.get("/api/review/queue",auth,roles("admin","reviewer","approver"),(req,res)=
  const rows=db.prepare(`SELECT a.id,a.identifier,a.event,a.headline,a.area_desc,a.urgency,a.severity,a.certainty,a.status,a.scope,a.restriction,a.addresses,a.sent,a.expires,a.created_at,a.updated_at,a.created_by,u.username AS creator,
   CAST(MAX(0,(julianday('now')-julianday(a.created_at))*86400) AS INTEGER) AS waiting_seconds
   FROM alerts a LEFT JOIN users u ON u.id=a.created_by
-  WHERE a.workflow='pending'${severityClause}
+  WHERE a.workflow='pending' AND a.scope='Public'${severityClause}
   ORDER BY CASE a.severity WHEN 'Extreme' THEN 0 WHEN 'Severe' THEN 1 WHEN 'Moderate' THEN 2 WHEN 'Minor' THEN 3 ELSE 4 END,
   a.created_at ASC,a.id ASC LIMIT ?`).all(...params,Number(limitRaw));
  res.set("Cache-Control","no-store").json({queue:rows,count:rows.length,limit:Number(limitRaw)});
@@ -809,7 +828,7 @@ app.get("/api/alerts/:id/relations",auth,(req,res)=>{
   for(const reference of String(current.references_text||"").trim().split(/\s+/).filter(Boolean)){
    const parts=reference.split(",");
    if(parts.length!==3) continue;
-   const parentCandidates=db.prepare("SELECT "+columns+" FROM alerts WHERE sender=? AND identifier=?").all(parts[0],parts[1]);
+   const parentCandidates=db.prepare("SELECT "+columns+" FROM alerts WHERE scope='Public' AND sender=? AND identifier=?").all(parts[0],parts[1]);
    const referenceTime=Date.parse(parts[2]);
    const parent=Number.isFinite(referenceTime) ? parentCandidates.find(candidate=>
     Number.isFinite(Date.parse(candidate.sent)) &&
@@ -818,7 +837,7 @@ app.get("/api/alerts/:id/relations",auth,(req,res)=>{
    if(parent && !found.has(parent.id)){found.set(parent.id,parent);queue.push(parent);}
   }
   const currentReferencePrefix=[current.sender,current.identifier,""].join(",");
-  const childCandidates=db.prepare("SELECT "+columns+" FROM alerts WHERE instr(' '||COALESCE(references_text,'')||' ',?)>0 ORDER BY sent,id").iterate(" "+currentReferencePrefix);
+  const childCandidates=db.prepare("SELECT "+columns+" FROM alerts WHERE scope='Public' AND instr(' '||COALESCE(references_text,'')||' ',?)>0 ORDER BY sent,id").iterate(" "+currentReferencePrefix);
   let matchedChildren=0;
   for(const child of childCandidates) {
    const matchesCurrent=String(child.references_text||"").trim().split(/\s+/).some(reference=>{
@@ -1045,7 +1064,7 @@ app.post("/api/alerts/:id/publish",auth,roles("admin","publisher"),(req,res)=>{
    if(references.length!==1) return {kind:"invalid_reference"};
    const parts=references[0].split(",");
    if(parts.length!==3 || parts.some(part=>!part)) return {kind:"invalid_reference"};
-   cancellationSource=db.prepare("SELECT id,workflow,sent FROM alerts WHERE sender=? AND identifier=?").get(parts[0],parts[1]);
+   cancellationSource=db.prepare("SELECT id,workflow,sent FROM alerts WHERE scope='Public' AND sender=? AND identifier=?").get(parts[0],parts[1]);
    if(!cancellationSource) return {kind:"source_missing"};
    const referenceTime=Date.parse(parts[2]);
    const sourceTime=Date.parse(cancellationSource.sent);
@@ -1124,6 +1143,19 @@ app.patch("/api/webhooks/inbox/:id/review",auth,roles("admin","reviewer"),(req,r
  res.json({ok:true,id,status:data.status,reviewed_by:req.user.id,reviewer_username:req.user.username});
 });
 
+app.use("/api/delivery",auth,(req,res,next)=>{
+ const pathname=new URL(req.originalUrl,"http://localhost").pathname;
+ const idMatch=pathname.match(/^\\/api\\/delivery\\/outbox\\/([1-9]\\d*)\\//);
+ if(idMatch){
+  const row=db.prepare("SELECT a.scope FROM delivery_outbox d JOIN alerts a ON a.id=d.alert_id WHERE d.id=?").get(idMatch[1]);
+  if(row && row.scope!=="Public") return res.status(404).json({error:"Delivery not found"});
+ }
+ if(req.method==="POST" && ["/api/delivery/process-retries","/api/delivery/recover-stale"].includes(pathname)){
+  const hidden=db.prepare("SELECT 1 FROM delivery_outbox d JOIN alerts a ON a.id=d.alert_id WHERE a.scope<>'Public' LIMIT 1").get();
+  if(hidden) return res.status(403).json({error:"Global delivery maintenance is blocked while non-Public alert recipients are not authorized",code:"SCOPE_AUTHORIZATION_UNCONFIGURED"});
+ }
+ next();
+});
 app.use("/api/delivery",(_req,res,next)=>{
  res.set("Cache-Control","no-store");
  res.set("Pragma","no-cache");
@@ -1134,14 +1166,14 @@ app.get("/api/delivery/outbox",auth,roles("admin","publisher"),(req,res)=>{
  if(status!==undefined && !["queued","sending","delivered","failed","dead_letter"].includes(status)) return res.status(400).json({error:"Invalid delivery status filter"});
  const rows=db.prepare(`SELECT d.id,d.alert_id,d.channel,CASE WHEN d.dead_letter_at IS NOT NULL THEN 'dead_letter' ELSE d.status END AS status,d.attempts,d.max_attempts,d.next_attempt_at,d.dead_letter_at,d.external_id,d.last_error,d.created_at,d.updated_at,d.last_attempt_at,d.delivered_at,a.identifier,a.headline
   FROM delivery_outbox d JOIN alerts a ON a.id=d.alert_id
-  WHERE (? IS NULL OR (?='dead_letter' AND d.dead_letter_at IS NOT NULL) OR (?<>'dead_letter' AND d.status=? AND d.dead_letter_at IS NULL)) ORDER BY d.created_at DESC LIMIT 500`).all(status ?? null,status ?? null,status ?? null,status ?? null);
+  WHERE a.scope='Public' AND (? IS NULL OR (?='dead_letter' AND d.dead_letter_at IS NOT NULL) OR (?<>'dead_letter' AND d.status=? AND d.dead_letter_at IS NULL)) ORDER BY d.created_at DESC LIMIT 500`).all(status ?? null,status ?? null,status ?? null,status ?? null);
  const counts=db.prepare(`SELECT
   COALESCE(SUM(CASE WHEN dead_letter_at IS NOT NULL THEN 1 ELSE 0 END),0) AS dead_letter,
   COALESCE(SUM(CASE WHEN dead_letter_at IS NULL AND status='queued' THEN 1 ELSE 0 END),0) AS queued,
   COALESCE(SUM(CASE WHEN dead_letter_at IS NULL AND status='sending' THEN 1 ELSE 0 END),0) AS sending,
   COALESCE(SUM(CASE WHEN dead_letter_at IS NULL AND status='failed' THEN 1 ELSE 0 END),0) AS failed,
   COALESCE(SUM(CASE WHEN dead_letter_at IS NULL AND status='delivered' THEN 1 ELSE 0 END),0) AS delivered
-  FROM delivery_outbox`).get();
+  FROM delivery_outbox d JOIN alerts a ON a.id=d.alert_id WHERE a.scope='Public'`).get();
  res.json({deliveries:rows,counts,external_adapters_enabled:false});
 });
 app.post("/api/delivery/process-retries",auth,roles("admin","publisher"),(req,res)=>{
@@ -1243,7 +1275,7 @@ app.get("/api/audit/verify",auth,roles("admin","reviewer","approver"),(_req,res)
 app.get("/api/audit/export.csv",auth,roles("admin","reviewer","approver"),(req,res)=>{
  const action=typeof req.query.action==="string"?req.query.action.trim().slice(0,80):"";
  const search=typeof req.query.q==="string"?req.query.q.trim().slice(0,160):"";
- const clauses=[],params=[];
+ const clauses=["(l.alert_id IS NULL OR EXISTS (SELECT 1 FROM alerts scoped_alert WHERE scoped_alert.id=l.alert_id AND scoped_alert.scope='Public'))"],params=[];
  if(action){clauses.push("l.action=?");params.push(action);}
  if(search){clauses.push("(instr(lower(COALESCE(l.action,'')),lower(?))>0 OR instr(lower(COALESCE(l.details,'')),lower(?))>0 OR instr(lower(COALESCE(u.username,'')),lower(?))>0)");params.push(search,search,search);}
  const where=clauses.length?"WHERE "+clauses.join(" AND "):"";
@@ -1269,7 +1301,7 @@ app.get("/api/audit",auth,roles("admin","reviewer","approver"),(req,res)=>{
  }
  const action=typeof req.query.action==="string"?req.query.action.trim().slice(0,80):"";
  const search=typeof req.query.q==="string"?req.query.q.trim().slice(0,160):"";
- const clauses=[],params=[];
+ const clauses=["(l.alert_id IS NULL OR EXISTS (SELECT 1 FROM alerts scoped_alert WHERE scoped_alert.id=l.alert_id AND scoped_alert.scope='Public'))"],params=[];
  if(action){clauses.push("l.action=?");params.push(action);}
  if(search){clauses.push("(instr(lower(COALESCE(l.action,char(0))),lower(?))>0 OR instr(lower(COALESCE(l.details,char(0))),lower(?))>0 OR instr(lower(COALESCE(u.username,char(0))),lower(?))>0)");params.push(search,search,search);}
  if(beforeId!==null){clauses.push("l.id<?");params.push(beforeId);}

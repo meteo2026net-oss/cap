@@ -13,7 +13,7 @@
 - Extended performance: `tests/perf/run-10k.mjs` (10,000 synthetic messages; automated CI run and local reproducible command)
 
 The 10,000-message harness measures validation, XML build/parse, insert into the actual application `alerts` schema, and scoped SQLite reads. Its dataset is synthetic and it is not a production load test.
-- Security: role gates, middleware-wide `MFA_REQUIRED_ROLES` enforcement (including auth-only data routes), cache headers, scope isolation
+- CAP scope authorization regression: tests/api.integration.test.js seeds legacy Restricted/Private rows and verifies Public-only list/stats/CSV/review queue/audit/delivery responses, direct-ID concealment across detail/XML/history/relations/workflow mutations, no cross-scope relationship traversal, blocked non-Public creation/promotion, and safe handling of non-Public outbox rows. These tests are added on the current PR follow-up; record results only after CI completes.- Security: role gates, middleware-wide `MFA_REQUIRED_ROLES` enforcement (including auth-only data routes), cache headers, scope isolation
 - Browser asset / DOM security: `tests/static-assets-security.test.js` checks SRI, anonymous CORS, no-referrer attributes, CSP permissions for the Leaflet Draw CDN, HTML escaping of dynamic dashboard templates, and the reviewed HTML insertion points.
 
 CI must pass on the same SHA used for acceptance claims.

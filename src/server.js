@@ -633,7 +633,8 @@ app.use("/api/alerts",auth,(req,res,next)=>{
   return next();
  }
  const alertPathParts=pathname.split("/");
- const idMatch=pathname.startsWith("/api/alerts/") && /^[1-9][0-9]*$/.test(alertPathParts[3]) ? [null,alertPathParts[3]] : null;
+ const alertId=Number(alertPathParts[3]);
+ const idMatch=pathname.startsWith("/api/alerts/") && Number.isSafeInteger(alertId) && alertId>0 ? [null,alertId] : null;
  if(idMatch){
   const existing=db.prepare("SELECT scope FROM alerts WHERE id=?").get(idMatch[1]);
   if(existing && existing.scope!=="Public") return res.status(404).json({error:"Alert not found"});
@@ -1147,7 +1148,8 @@ app.patch("/api/webhooks/inbox/:id/review",auth,roles("admin","reviewer"),(req,r
 app.use("/api/delivery",auth,(req,res,next)=>{
  const pathname=new URL(req.originalUrl,"http://localhost").pathname;
  const deliveryPathParts=pathname.split("/");
- const idMatch=pathname.startsWith("/api/delivery/outbox/") && /^[1-9][0-9]*$/.test(deliveryPathParts[4]) ? [null,deliveryPathParts[4]] : null;
+ const deliveryId=Number(deliveryPathParts[4]);
+ const idMatch=pathname.startsWith("/api/delivery/outbox/") && Number.isSafeInteger(deliveryId) && deliveryId>0 ? [null,deliveryId] : null;
  if(idMatch){
   const row=db.prepare("SELECT a.scope FROM delivery_outbox d JOIN alerts a ON a.id=d.alert_id WHERE d.id=?").get(idMatch[1]);
   if(row && row.scope!=="Public") return res.status(404).json({error:"Delivery not found"});

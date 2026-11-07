@@ -1190,7 +1190,58 @@ test("API enforces role separation, public-feed filtering and account deactivati
   });
   assert.equal(capXml.status, 200, "authorized CAP XML export should succeed");
   assert.ok((capXml.headers.get("content-type") || "").includes("application/xml"));
+  assert.equal(capXml.headers.get("cache-control"), "no-store",
+    "authenticated CAP XML exports must not be cacheable");
   assert.match(await capXml.text(), /<alert xmlns=/);
+
+  const restrictedMissing = await request("/api/alerts", {
+    token: forecaster, method: "POST", body: {
+      event: "Restricted storm", headline: "Internal storm advisory",
+      description: "Restricted distribution only", area_desc: "Ops zone",
+      circle: "33.5,36.2 10", scope: "Restricted", status: "Test"
+    }
+  });
+  assert.equal(restrictedMissing.status, 400,
+    "Restricted scope without restriction text must be rejected");
+  assert.match(restrictedMissing.data.error || "", /restriction/i);
+
+  const privateMissing = await request("/api/alerts", {
+    token: forecaster, method: "POST", body: {
+      event: "Private storm", headline: "Private storm advisory",
+      description: "Private recipients only", area_desc: "Duty desk",
+      circle: "33.5,36.2 10", scope: "Private", status: "Test"
+    }
+  });
+  assert.equal(privateMissing.status, 400,
+    "Private scope without addresses must be rejected");
+  assert.match(privateMissing.data.error || "", /addresses/i);
+
+  const restrictedOk = await request("/api/alerts", {
+    token: forecaster, method: "POST", body: {
+      event: "Restricted storm", headline: "Internal storm advisory",
+      description: "Restricted distribution only", area_desc: "Ops zone",
+      circle: "33.5,36.2 10", scope: "Restricted",
+      restriction: "Internal distribution to authorized agencies only", status: "Test"
+    }
+  });
+  assert.equal(restrictedOk.status, 201, "Restricted scope with restriction text must be accepted");
+
+  const privateOk = await request("/api/alerts", {
+    token: forecaster, method: "POST", body: {
+      event: "Private storm", headline: "Private storm advisory",
+      description: "Private recipients only", area_desc: "Duty desk",
+      circle: "33.5,36.2 10", scope: "Private",
+      addresses: "ops@example.test duty@example.test", status: "Test"
+    }
+  });
+  assert.equal(privateOk.status, 201, "Private scope with addresses must be accepted");
+
+  const restrictedPublicFeed = await request("/api/public/alerts");
+  assert.equal(restrictedPublicFeed.status, 200);
+  assert.ok(!(restrictedPublicFeed.data.alerts || []).some(alert =>
+    alert.identifier === restrictedOk.data.identifier ||
+    alert.identifier === privateOk.data.identifier
+  ), "Restricted and Private drafts must never appear on the public feed");
 
   let publishedUpdate = null;
   for (const msg_type of ["Update", "Cancel"]) {

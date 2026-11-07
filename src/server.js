@@ -200,8 +200,8 @@ function rowToCap(r) {
   area_desc:r.area_desc,
   response_type:r.response_type,
   info_blocks:info_json ? JSON.parse(info_json) : undefined,
-  ...(restriction ? {restriction} : {}),
-  ...(addresses ? {addresses} : {})
+  ...(r.scope==="Restricted" && restriction ? {restriction} : {}),
+  ...(r.scope==="Private" && addresses ? {addresses} : {})
  };
 }
 
@@ -660,9 +660,9 @@ app.get("/api/alerts/export.csv",auth,(req,res)=>{
  if(scope!==undefined){clauses.push("scope=?");params.push(scope);}
  if(search){clauses.push("(instr(lower(identifier),lower(?))>0 OR instr(lower(event),lower(?))>0 OR instr(lower(headline),lower(?))>0 OR instr(lower(area_desc),lower(?))>0)");params.push(search,search,search,search);}
  const where=clauses.length ? "WHERE "+clauses.join(" AND ") : "";
- const rows=db.prepare("SELECT identifier,event,headline,area_desc,urgency,severity,certainty,status,scope,restriction,addresses,workflow,msg_type,sent,expires FROM alerts "+where+" ORDER BY sent DESC,id DESC LIMIT 5001").all(...params);
+ const rows=db.prepare("SELECT identifier,event,headline,area_desc,urgency,severity,certainty,status,scope,workflow,msg_type,sent,expires FROM alerts "+where+" ORDER BY sent DESC,id DESC LIMIT 5001").all(...params);
  if(rows.length>5000) return res.status(413).json({error:"Export exceeds 5000 rows; narrow the filters before exporting",maximum_rows:5000});
- const headers=["identifier","event","headline","area_desc","urgency","severity","certainty","status","scope","restriction","addresses","workflow","msg_type","sent","expires"];
+ const headers=["identifier","event","headline","area_desc","urgency","severity","certainty","status","scope","workflow","msg_type","sent","expires"];
  const lines=[headers.map(csvCell).join(","),...rows.map(row=>headers.map(key=>csvCell(row[key])).join(","))];
  res.status(200).set({
   "Content-Type":"text/csv; charset=utf-8",
@@ -734,7 +734,7 @@ app.get("/api/review/queue",auth,roles("admin","reviewer","approver"),(req,res)=
  const params=[];
  const severityClause=severity===undefined?"":" AND a.severity=?";
  if(severity!==undefined)params.push(severity);
- const rows=db.prepare(`SELECT a.id,a.identifier,a.event,a.headline,a.area_desc,a.urgency,a.severity,a.certainty,a.status,a.scope,a.restriction,a.addresses,a.sent,a.expires,a.created_at,a.updated_at,a.created_by,u.username AS creator,
+ const rows=db.prepare(`SELECT a.id,a.identifier,a.event,a.headline,a.area_desc,a.urgency,a.severity,a.certainty,a.status,a.scope,a.sent,a.expires,a.created_at,a.updated_at,a.created_by,u.username AS creator,
   CAST(MAX(0,(julianday('now')-julianday(a.created_at))*86400) AS INTEGER) AS waiting_seconds
   FROM alerts a LEFT JOIN users u ON u.id=a.created_by
   WHERE a.workflow='pending' AND a.scope='Public'${severityClause}
@@ -773,8 +773,13 @@ app.get("/api/alerts/:id/versions",auth,roles("admin","reviewer","approver"),(re
  const rows=db.prepare(`SELECT v.id,v.version_no,v.change_type,v.created_at,u.username AS changed_by,
   v.snapshot_json FROM alert_versions v LEFT JOIN users u ON u.id=v.changed_by
   WHERE v.alert_id=? ORDER BY v.version_no DESC LIMIT 50`).all(alert.id);
- const versions=rows.map(row=>({id:row.id,version_no:row.version_no,change_type:row.change_type,
-  created_at:row.created_at,changed_by:row.changed_by,snapshot:JSON.parse(row.snapshot_json)}));
+ const versions=rows.map(row=>{
+  const snapshot=JSON.parse(row.snapshot_json);
+  delete snapshot.restriction;
+  delete snapshot.addresses;
+  return {id:row.id,version_no:row.version_no,change_type:row.change_type,
+   created_at:row.created_at,changed_by:row.changed_by,snapshot};
+ });
  const current=versions[0]?.snapshot||null;
  const previous=versions[1]?.snapshot||null;
  const changed_fields=current&&previous?Object.keys(current).filter(key=>JSON.stringify(current[key])!==JSON.stringify(previous[key])):[];
@@ -819,7 +824,7 @@ app.get("/api/alerts/:id/timeline",auth,roles("admin","reviewer","approver"),(re
 app.get("/api/alerts/:id",auth,(req,res)=>{
  const row = db.prepare("SELECT * FROM alerts WHERE id=?").get(req.params.id);
  if (!row) return res.status(404).json({error:"Alert not found"});
- const {info_json,...alert}=row;
+ const {info_json,restriction:_restriction,addresses:_addresses,...alert}=row;
  res.json({alert:{...alert,info_blocks:info_json?JSON.parse(info_json):[]}});
 });
 app.get("/api/alerts/:id/relations",auth,(req,res)=>{

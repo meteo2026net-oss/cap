@@ -9,6 +9,7 @@
     "dev": "node --watch src/server.js",
     "test": "node --test",
     "test:cap-schema": "node --test tests/cap-schema.test.js",
+    "perf:10k": "node tests/perf/run-10k.mjs",
     "backup": "node src/backup.js",
     "restore": "node src/restore.js",
     "setup:local": "node scripts/setup-local.mjs",

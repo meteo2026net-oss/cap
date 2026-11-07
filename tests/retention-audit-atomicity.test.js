@@ -145,11 +145,12 @@ test("stale checkpoint can be refreshed only from its authenticated intact ancho
     appendAuditLog(db, { action: "post_commit", details: "simulated committed audit event" });
     assert.equal(verifyAuditChain(db, { checkpointPath, checkpointSecret }).valid, false);
 
-    const recovered = refreshAuditCheckpoint(db, { checkpointPath, checkpointSecret });
+    assert.throws(() => refreshAuditCheckpoint(db, { checkpointPath, checkpointSecret }), /off-host checkpoint evidence/i);
+    const recovered = refreshAuditCheckpoint(db, { checkpointPath, checkpointSecret, offHostEvidenceReviewed: true });
     assert.equal(recovered.updated, true);
     assert.ok(recovered.latest_id > initial.latest_id);
     assert.equal(verifyAuditChain(db, { checkpointPath, checkpointSecret }).valid, true);
-    assert.equal(refreshAuditCheckpoint(db, { checkpointPath, checkpointSecret }).updated, false);
+    assert.equal(refreshAuditCheckpoint(db, { checkpointPath, checkpointSecret, offHostEvidenceReviewed: true }).updated, false);
   } finally {
     db.close();
     fs.rmSync(root, { recursive: true, force: true });
@@ -168,7 +169,7 @@ test("checkpoint recovery refuses a changed or missing trusted anchor", () => {
     checkpoint.signature = "0".repeat(64);
     fs.writeFileSync(checkpointPath, JSON.stringify(checkpoint));
     assert.throws(
-      () => refreshAuditCheckpoint(db, { checkpointPath, checkpointSecret }),
+      () => refreshAuditCheckpoint(db, { checkpointPath, checkpointSecret, offHostEvidenceReviewed: true }),
       /signature is invalid/
     );
   } finally {

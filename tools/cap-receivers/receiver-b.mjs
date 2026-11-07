@@ -4,6 +4,7 @@
  * Local simulation only; no network listeners or external delivery.
  */
 import { create } from "xmlbuilder2";
+import { persistReceiverMessage } from "./receiver-store.mjs";
 
 const CAP_NAMESPACE = "urn:oasis:names:tc:emergency:cap:1.2";
 const DERIVED_TYPES = ["Update", "Cancel", "Ack", "Error"];
@@ -43,7 +44,7 @@ function referencesExist(referenceText, history) {
   });
 }
 
-export function receiveCapXmlB(xml, knownMessages = []) {
+export function receiveCapXmlB(xml, { knownMessages = [], database = null } = {}) {
   let alert;
   try {
     alert = readAlert(xml);
@@ -65,16 +66,14 @@ export function receiveCapXmlB(xml, knownMessages = []) {
   if (!["Alert", ...DERIVED_TYPES].includes(msgType)) return { ok: false, error: "unsupported msgType", kind: "Error" };
   if (!["Public", "Restricted", "Private"].includes(scope)) return { ok: false, error: "unsupported scope", kind: "Error" };
   if (!["Actual", "Exercise", "System", "Test"].includes(status)) return { ok: false, error: "unsupported status", kind: "Error" };
-  if (DERIVED_TYPES.includes(msgType) && !referencesExist(references, knownMessages)) {
-    return { ok: false, error: "reference target missing or does not match sender/identifier/sent", kind: "Error" };
-  }
   if (scope === "Restricted" && !restriction) return { ok: false, error: "restriction required", kind: "Error" };
   if (scope === "Private" && !addresses) return { ok: false, error: "addresses required", kind: "Error" };
   const infoNodes = alert.info == null ? [] : Array.isArray(alert.info) ? alert.info : [alert.info];
   const headline = infoNodes.map(info => text(info?.headline)).find(Boolean) || "";
   return {
     ok: true,
-    stored: { identifier, sender, sent, msgType, scope, status, references, restriction, addresses, headline },
+    duplicate,
+    stored: { ...stored, headline },
     ack: { msgType: "Ack", references: `${sender},${identifier},${sent}`, note: "receiver-b accepted" }
   };
 }

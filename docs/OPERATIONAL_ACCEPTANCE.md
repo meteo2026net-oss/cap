@@ -13,7 +13,7 @@
 | Role separation (forecaster / reviewer / publisher) | API + phase 4/6 tests | Tested in CI |
 | MFA enroll/login/recovery paths | `tests/mfa.test.js`, API integration | Tested in CI |
 | Audit hash-chain append and verification | audit tests | Tested in CI |
-| Retention + audit atomicity and rollback | `tests/retention-audit-atomicity.test.js`; database rollback on audit failure, post-commit checkpoint warning, authenticated checkpoint refresh | Tested in CI; off-host recovery approval remains institutional |
+| Retention + audit atomicity and rollback | `tests/retention-audit-atomicity.test.js`; database rollback on audit failure, post-commit checkpoint warning, checkpoint refresh gated by explicit off-host evidence attestation | Tested in CI; off-host recovery approval remains institutional |
 | Internal delivery outbox enqueue / retry | delivery + phase 5/6 tests | Tested in CI (no external send) |
 | SQLite backup, restore, quick_check, FK check | backup/restore + phase 4 tests | Tested in CI |
 | Operational metrics endpoint | `GET /api/health/metrics` (admin/publisher) | Tested in CI |

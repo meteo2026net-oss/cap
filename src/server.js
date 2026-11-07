@@ -1184,6 +1184,8 @@ app.get("/api/alerts/:id/cap.xml",auth,(req,res)=>{
  } catch(e) { res.status(400).json({error:e.message}); }
 });
 app.get("/api/public/alerts.geojson", (req,res)=>{
+ res.set("Cache-Control","no-store");
+ res.set("Pragma","no-cache");
  try {
   const rows=db.prepare("SELECT identifier,sender,sent,status,msg_type,scope,references_text,event,category,response_type,urgency,severity,certainty,effective,onset,expires,headline,description,instruction,area_desc,polygon,circle,language,info_json FROM alerts WHERE workflow='published' AND scope='Public' AND status='Actual' AND (expires IS NULL OR expires='' OR julianday(expires)>julianday('now')) ORDER BY sent DESC LIMIT 100").all();
   res.type("application/geo+json").json(alertsToGeoJSON(rows));
@@ -1193,6 +1195,8 @@ app.get("/api/public/alerts.geojson", (req,res)=>{
  }
 });
 app.get("/api/public/alerts", (req,res)=>{
+ res.set("Cache-Control","no-store");
+ res.set("Pragma","no-cache");
  const rows=db.prepare("SELECT identifier,sender,sent,status,msg_type,scope,references_text,event,category,response_type,urgency,severity,certainty,effective,onset,expires,headline,description,instruction,area_desc,polygon,circle,language,info_json FROM alerts WHERE workflow='published' AND scope='Public' AND status='Actual' AND (expires IS NULL OR expires='' OR julianday(expires)>julianday('now')) ORDER BY sent DESC LIMIT 100").all();
  res.json({alerts:rows.map(row=>{const {info_json,...alert}=row;return {...alert,info_blocks:info_json?JSON.parse(info_json):[]};})});
 });

@@ -56,7 +56,7 @@ A valid checkpoint detects deletion or rollback of the anchored tail. The checkp
 - [x] Support Update/Cancel reference chains with preserved historical messages, immutable snapshots, and timeline APIs; integration tests cover derivation and relations.
 - [x] Exclude Test/Exercise and non-Public/expired alerts from public JSON and GeoJSON feeds; integration tests assert the isolation rules.
 - [x] Restrict public JSON/GeoJSON feeds to CAP Alert, Update, and Cancel message types; Ack and Error control messages are excluded even if stored with Public/Actual/published fields.
-- [x] Enforce CAP Restricted (restriction text) and Private (addresses) requirements in validation, API, database, RTL form, Update/Cancel derivation, XSD positive controls, and public-feed exclusion tests.
+- [x] Retain CAP Restricted (restriction text) and Private (addresses) structural validation and XSD coverage, while the HTTP API blocks creating or promoting either scope until recipient grants are implemented. Do not interpret the CAP addresses field as an ACL.
 - [ ] Conduct end-to-end interoperability tests with every intended receiving organization/provider using non-operational test endpoints.
 - [ ] Obtain written acceptance from the receiving-system owners and the authorized warning authority.
 

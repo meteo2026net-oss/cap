@@ -54,11 +54,11 @@ app.use(helmet({
    fontSrc: ["'self'", "data:"],
    formAction: ["'self'"],
    frameAncestors: ["'none'"],
-   imgSrc: ["'self'", "data:", "blob:", "https://*.tile.openstreetmap.org", "https://unpkg.com"],
+   imgSrc: ["'self'", "data:", "blob:", "https://*.tile.openstreetmap.org", "https://unpkg.com", "https://cdnjs.cloudflare.com"],
    objectSrc: ["'none'"],
-   scriptSrc: ["'self'", "https://unpkg.com"],
+   scriptSrc: ["'self'", "https://unpkg.com", "https://cdnjs.cloudflare.com"],
    scriptSrcAttr: ["'none'"],
-   styleSrc: ["'self'", "'unsafe-inline'", "https://unpkg.com"]
+   styleSrc: ["'self'", "'unsafe-inline'", "https://unpkg.com", "https://cdnjs.cloudflare.com"]
   }
  }
 }));

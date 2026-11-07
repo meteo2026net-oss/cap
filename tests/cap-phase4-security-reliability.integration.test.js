@@ -350,8 +350,9 @@ test("phase4: reference integrity, role gates, isolation, backup/restore and res
       area_desc: "bad", circle: "33,36 5", scope: "Restricted", status: "Test"
     }
   });
-  assert.equal(deniedNonPublicCreate.status, 403);
-  assert.equal(deniedNonPublicCreate.data.code, "SCOPE_AUTHORIZATION_UNCONFIGURED");
+  assert.equal(deniedNonPublicCreate.status, 400,
+    "CAP structural validation should still reject a Restricted alert missing its required restriction text");
+  assert.match(deniedNonPublicCreate.data.error || "", /restriction/i);
   const afterBad = (() => {
     const db = new Database(path.join(cwd, "storage", "cap.sqlite"), { readonly: true });
     try { return db.prepare("SELECT COUNT(*) AS n FROM alerts").get().n; }

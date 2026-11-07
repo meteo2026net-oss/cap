@@ -112,40 +112,40 @@ app.use(express.json({ limit: "1mb" }));
 app.use(express.static(path.join(appRoot, "public")));
 
 const areaSchema = z.object({
- areaDesc:z.string().min(2), polygon:z.string().optional(), circle:z.string().optional(),
- polygons:z.array(z.string()).optional(), circles:z.array(z.string()).optional(),
- geocodes:z.array(z.object({valueName:z.string().min(1),value:z.string().min(1)})).optional(),
+ areaDesc:z.string().min(2).max(500), polygon:z.string().max(20000).optional(), circle:z.string().max(200).optional(),
+ polygons:z.array(z.string().max(20000)).max(20).optional(), circles:z.array(z.string().max(200)).max(20).optional(),
+ geocodes:z.array(z.object({valueName:z.string().min(1).max(100),value:z.string().min(1).max(200)})).max(50).optional(),
  altitude:z.number().optional(), ceiling:z.number().optional()
 });
 const resourceSchema = z.object({
- resourceDesc:z.string().min(1), mimeType:z.string().min(1), size:z.number().int().nonnegative().optional(),
- uri:z.string().url().optional(), derefUri:z.string().optional(), digest:z.string().optional()
+ resourceDesc:z.string().min(1).max(500), mimeType:z.string().min(1).max(100), size:z.number().int().nonnegative().optional(),
+ uri:z.string().url().max(2000).optional(), derefUri:z.string().max(100000).optional(), digest:z.string().max(200).optional()
 });
 const infoBlockSchema = z.object({
- language:z.string().optional(), category:z.string().optional(), categories:z.array(z.string()).optional(),
- event:z.string().min(2), response_type:z.string().optional(), response_types:z.array(z.string()).optional(),
+ language:z.string().max(20).optional(), category:z.string().max(40).optional(), categories:z.array(z.string().max(40)).max(12).optional(),
+ event:z.string().min(2).max(200), response_type:z.string().max(40).optional(), response_types:z.array(z.string().max(40)).max(12).optional(),
  urgency:z.enum(["Immediate","Expected","Future","Past","Unknown"]).default("Unknown"),
  severity:z.enum(["Extreme","Severe","Moderate","Minor","Unknown"]).default("Unknown"),
  certainty:z.enum(["Observed","Likely","Possible","Unlikely","Unknown"]).default("Unknown"),
- effective:z.string().optional(), onset:z.string().optional(), expires:z.string().optional(),
- senderName:z.string().optional(), headline:z.string().optional(), description:z.string().optional(),
- instruction:z.string().optional(), web:z.string().url().optional(), contact:z.string().optional(),
- area:areaSchema.optional(), areas:z.array(areaSchema).optional(),
- resources:z.array(resourceSchema).optional(),
- parameters:z.array(z.object({valueName:z.string().min(1),value:z.string()})).optional()
+ effective:z.string().max(40).optional(), onset:z.string().max(40).optional(), expires:z.string().max(40).optional(),
+ senderName:z.string().max(200).optional(), headline:z.string().max(160).optional(), description:z.string().max(10000).optional(),
+ instruction:z.string().max(10000).optional(), web:z.string().url().max(2000).optional(), contact:z.string().max(500).optional(),
+ area:areaSchema.optional(), areas:z.array(areaSchema).max(30).optional(),
+ resources:z.array(resourceSchema).max(20).optional(),
+ parameters:z.array(z.object({valueName:z.string().min(1).max(100),value:z.string().max(2000)})).max(50).optional()
 });
 const schema = z.object({
- event:z.string().min(2).optional(), category:z.string().default("Met"),
+ event:z.string().min(2).max(200).optional(), category:z.string().max(40).default("Met"),
  urgency:z.enum(["Immediate","Expected","Future","Past","Unknown"]).default("Unknown"),
  severity:z.enum(["Extreme","Severe","Moderate","Minor","Unknown"]).default("Unknown"),
  certainty:z.enum(["Observed","Likely","Possible","Unlikely","Unknown"]).default("Unknown"),
  scope:z.enum(["Public","Restricted","Private"]).default("Public"),
- headline:z.string().min(3).optional(), description:z.string().min(3).optional(),
- instruction:z.string().optional().default(""), area_desc:z.string().min(2).optional(),
- polygon:z.string().optional().default(""), circle:z.string().optional().default(""),
- effective:z.string().optional().default(""), onset:z.string().optional().default(""),
- expires:z.string().optional().default(""), language:z.string().default("en-US"),
- response_type:z.string().optional().default(""),
+ headline:z.string().min(3).max(160).optional(), description:z.string().min(3).max(10000).optional(),
+ instruction:z.string().max(10000).optional().default(""), area_desc:z.string().min(2).max(500).optional(),
+ polygon:z.string().max(20000).optional().default(""), circle:z.string().max(200).optional().default(""),
+ effective:z.string().max(40).optional().default(""), onset:z.string().max(40).optional().default(""),
+ expires:z.string().max(40).optional().default(""), language:z.string().max(20).default("en-US"),
+ response_type:z.string().max(40).optional().default(""),
  info_blocks:z.array(infoBlockSchema).min(1).max(10).optional(),
  status:z.enum(["Actual","Exercise","System","Test"]).default("Test")
 });

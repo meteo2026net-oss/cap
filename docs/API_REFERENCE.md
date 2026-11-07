@@ -37,7 +37,7 @@ Sensitive responses use `Cache-Control: no-store`. Restricted/Private never appe
 
 Recipient-level grants for Restricted and Private messages are not implemented. Until an institution-approved recipient model is available, authenticated alert APIs are temporarily Public-only:
 - GET /api/alerts, /stats, and /export.csv include Public scope only; explicitly requesting Restricted or Private returns 403 with SCOPE_AUTHORIZATION_UNCONFIGURED.
-- Detail, CAP XML, review history, versions, timeline, and relationship requests for a non-Public alert return 404, including workflow mutation attempts against those IDs.
+- Detail, CAP XML, review history, versions, timeline, and relationship requests for a non-Public alert return 404, including workflow mutation attempts against those IDs. Public detail/XML/CSV/review-queue/version responses suppress restriction and addresses fields, including stale legacy values.
 - The review queue, generic audit listing/export, delivery outbox listing/counts, and relationship traversal exclude non-Public alert data.
 - Creating Restricted/Private alerts or changing an alert into either scope returns 403. Global delivery retry/recovery is blocked while any non-Public outbox row exists; direct non-Public delivery IDs return 404.
 - Public JSON/GeoJSON feeds remain separately restricted to published, Public, Actual, unexpired Alert/Update/Cancel messages.

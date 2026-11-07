@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 
 const html = await readFile(new URL("../public/index.html", import.meta.url), "utf8");
 const server = await readFile(new URL("../src/server.js", import.meta.url), "utf8");
+const dashboard = await readFile(new URL("../public/app.js", import.meta.url), "utf8");
 
 test("all external JavaScript and stylesheet assets use Subresource Integrity", () => {
   const externalTags = [
@@ -33,4 +34,29 @@ test("CSP permits the CDN host used by SRI-pinned Leaflet Draw assets", () => {
     const pattern = new RegExp(directive + ":\\s*\\[[^\\]]*\"https://cdnjs\\.cloudflare\\.com\"");
     assert.match(server, pattern, directive + " must allow the Leaflet Draw CDN host");
   }
+});
+
+
+test("dashboard escapes untrusted values before inserting generated HTML", () => {
+  assert.match(dashboard, /function esc\(s=""\)\{return String\(s\)\.replace\(\/\[&<>"'\]\//,
+    "dashboard HTML escaping must cover ampersand, angle brackets, quotes, and apostrophes");
+
+  for (const field of [
+    "esc(a.id)", "esc(a.headline)", "esc(a.event)", "esc(a.workflow)",
+    "esc(a.severity)", "esc(a.scope)", "esc(a.area_desc)",
+    "esc(resource.resourceDesc)", "esc(resource.mimeType)", "esc(resource.size)",
+    "esc(resource.language)", "esc(url.href)",
+    "esc(row.headline||row.identifier||", "esc(row.last_error)",
+    "esc(row.channel)", "esc(row.attempts)", "esc(row.max_attempts)",
+    "esc(row.id)", "esc(row.received_at)", "esc(row.reviewer_username)",
+    "esc(row.reviewed_at||", "esc(row.review_note)", "esc(row.payload)",
+    "esc(row.source_timestamp*1000)"
+  ]) {
+    assert.ok(dashboard.includes(field), "dynamic HTML output must escape " + field);
+  }
+
+  assert.equal((dashboard.match(/\.innerHTML\s*=/g) || []).length, 3,
+    "review every dashboard HTML insertion point when adding new dynamic templates");
+  assert.match(dashboard, /list\.insertAdjacentHTML\("beforeend",html\)/,
+    "webhook inbox pagination must append only the escaped template");
 });

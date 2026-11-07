@@ -30,7 +30,7 @@ test("Leaflet Draw assets are pinned to the audited 1.0.4 CDN bytes", () => {
 
 test("CSP permits the CDN host used by SRI-pinned Leaflet Draw assets", () => {
   for (const directive of ["imgSrc", "scriptSrc", "styleSrc"]) {
-    const pattern = new RegExp(directive + ":\\s*\\[[^\\]]*[\\"']https://cdnjs\\.cloudflare\\.com[\\"']");
+    const pattern = new RegExp(directive + ":\\s*\\[[^\\]]*\"https://cdnjs\\.cloudflare\\.com\"");
     assert.match(server, pattern, directive + " must allow the Leaflet Draw CDN host");
   }
 });

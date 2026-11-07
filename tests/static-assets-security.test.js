@@ -43,7 +43,7 @@ test("dashboard escapes untrusted values before inserting generated HTML", () =>
 
   for (const field of [
     "esc(a.id)", "esc(a.headline)", "esc(a.event)", "esc(a.workflow)",
-    "esc(a.severity)", "esc(a.scope)", "esc(a.area_desc)",
+    "esc(a.severity)", "esc(scopeLabel)", "esc(a.area_desc)",
     "esc(resource.resourceDesc)", "esc(resource.mimeType)", "esc(resource.size)",
     "esc(resource.language)", "esc(url.href)",
     "esc(row.headline||row.identifier||", "esc(row.last_error)",

@@ -18,8 +18,8 @@ test("production SQLite connection waits for a concurrent writer within its conf
     database.exec("CREATE TABLE contention_probe (id INTEGER PRIMARY KEY, writer TEXT NOT NULL)");
 
     const workerSource = `
-      import { parentPort, workerData } from "node:worker_threads";
-      import Database from "better-sqlite3";
+      const { parentPort, workerData } = require("node:worker_threads");
+      const Database = require("better-sqlite3");
       const db = new Database(workerData.databasePath);
       db.exec("BEGIN IMMEDIATE");
       parentPort.postMessage("lock-acquired");

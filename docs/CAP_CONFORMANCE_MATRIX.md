@@ -20,6 +20,8 @@ This matrix records the automated conformance coverage currently present in this
 | Update/Cancel history | `tests/api.integration.test.js`: derived messages, relations, timeline and delivery outbox linkage | Local workflow coverage |
 | Scope restriction/addresses | `tests/cap.test.js`: Restricted requires restriction text; Private requires addresses; type checks for both fields; `tests/cap-schema.test.js`: Restricted and Private messages with required fields validate against the official OASIS XSD; `tests/api.integration.test.js`: API rejection/acceptance and public-feed exclusion | Implemented |
 | End-to-end CAP lifecycle | `tests/cap-lifecycle.integration.test.js`: Public/Restricted/Private Actual publish, OASIS XSD validation of exported XML, Update/Cancel derivation and publish, relations integrity, SQLite FK/quick_check, and public JSON/GeoJSON isolation of Restricted/Private | Implemented |
+| Independent semantic CAP rules | `tests/cap-semantic.test.js`: required headers, enumerations, date-time/timezone, onset/expiry order, Alert/Update/Cancel/Ack/Error info and reference rules, Restricted/Private scope fields, and rejection before XML emission | Implemented |
+| Validation atomicity | `tests/cap-validation-atomicity.integration.test.js`: failed create/derive/patch CAP validation leaves no partial alert, version, or outbox rows | Implemented |
 
 ## Required follow-up before interoperability acceptance
 

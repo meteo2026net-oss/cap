@@ -63,8 +63,19 @@ test("phase7: receivers reject missing references on Update and invalid Restrict
   assert.equal(receiveCapXmlA(updateXml, { knownMessages: known }).ok, true);
   assert.equal(receiveCapXmlB(updateXml, { knownMessages: known }).ok, true);
   const wrongReference = updateXml.replace(base.identifier, "urn:uuid:missing-target");
-  assert.equal(receiveCapXmlA(wrongReference, { knownMessages: known }).ok, false);
-  assert.equal(receiveCapXmlB(wrongReference, { knownMessages: known }).ok, false);
+  const wrongSender = updateXml.replace(
+    `${base.sender},${base.identifier},${originalAlert.stored.sent}`,
+    `other@example.test,${base.identifier},${originalAlert.stored.sent}`
+  );
+  const wrongSent = updateXml.replace(
+    `${base.sender},${base.identifier},${originalAlert.stored.sent}`,
+    `${base.sender},${base.identifier},2026-11-07T14:01:00.000Z`
+  );
+  for (const receive of [receiveCapXmlA, receiveCapXmlB]) {
+    assert.equal(receive(wrongReference, { knownMessages: known }).ok, false);
+    assert.equal(receive(wrongSender, { knownMessages: known }).ok, false);
+    assert.equal(receive(wrongSent, { knownMessages: known }).ok, false);
+  }
 
   const badUpdate = updateXml.replace(/<references>[\s\S]*?<\/references>/, "");
   assert.equal(receiveCapXmlA(badUpdate).ok, false);
@@ -151,23 +162,28 @@ test("phase7: receivers persist identities and deduplicate after restart", async
   } finally { await fs.rm(root, { recursive: true, force: true }); }
 });
 
-test("phase7: Update before its Alert is rejected by durable receiver history", async () => {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), "cap-receiver-order-"));
-  const db = openReceiverStore(path.join(root, "receiver.sqlite"));
-  try {
-    const original = receiveCapXmlA(buildCapXml(base));
-    const update = buildCapXml({
-      identifier: makeIdentifier(), sender: base.sender, sent: "2026-11-07T15:00:00.000Z",
-      status: "Test", msg_type: "Update", scope: "Public",
-      references_text: `${base.sender},${base.identifier},${original.stored.sent}`,
-      event: "x", category: "Met", urgency: "Expected", severity: "Minor", certainty: "Possible",
-      headline: "early update", description: "before alert known", area_desc: "d", circle: "33,36 5"
-    });
-    const early = receiveCapXmlA(update, { database: db });
-    assert.equal(early.ok, false);
-    assert.match(early.error, /not present|reference/i);
-    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM receiver_messages").get().n, 0);
-    assert.equal(receiveCapXmlA(buildCapXml(base), { database: db }).ok, true);
-    assert.equal(receiveCapXmlA(update, { database: db }).ok, true);
-  } finally { db.close(); await fs.rm(root, { recursive: true, force: true }); }
+test("phase7: both receivers reject Update before its Alert using durable history", async () => {
+  for (const [name, receive] of [["a", receiveCapXmlA], ["b", receiveCapXmlB]]) {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "cap-receiver-order-"));
+    const db = openReceiverStore(path.join(root, name + ".sqlite"));
+    try {
+      const original = receiveCapXmlA(buildCapXml(base));
+      const update = buildCapXml({
+        identifier: makeIdentifier(), sender: base.sender, sent: "2026-11-07T15:00:00.000Z",
+        status: "Test", msg_type: "Update", scope: "Public",
+        references_text: `${base.sender},${base.identifier},${original.stored.sent}`,
+        event: "x", category: "Met", urgency: "Expected", severity: "Minor", certainty: "Possible",
+        headline: "early update", description: "before alert known", area_desc: "d", circle: "33,36 5"
+      });
+      const early = receive(update, { database: db });
+      assert.equal(early.ok, false, `${name}: ${early.error}`);
+      assert.match(early.error, /not present|reference/i);
+      assert.equal(db.prepare("SELECT COUNT(*) AS n FROM receiver_messages").get().n, 0);
+      assert.equal(receive(buildCapXml(base), { database: db }).ok, true);
+      assert.equal(receive(update, { database: db }).ok, true);
+    } finally {
+      db.close();
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  }
 });

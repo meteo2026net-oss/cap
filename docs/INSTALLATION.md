@@ -107,3 +107,43 @@ Keep a separate encrypted copy of backups on another device or off-host storage.
 ## Operational warning
 
 This is a development foundation, not a certified operational public-warning service. No external CAP, email, SMS, push, or government gateway transport is implemented. Keep it private until institutional security, CAP interoperability, HTTPS, monitoring, backup recovery, and approval procedures have been independently reviewed.
+
+## Upgrade and rollback (test deployments)
+
+1. Take a verified SQLite backup before upgrading:
+   ```bash
+   npm run backup
+   npm run backup:health
+   ```
+2. Record the current git commit SHA and Node.js version.
+3. Install dependencies from the lockfile only:
+   ```bash
+   npm ci
+   npm test
+   ```
+4. Start the application and confirm:
+   - `GET /api/health` returns `external_adapters_enabled: false`
+   - `GET /api/health/ready` returns HTTP 200
+5. Rollback if needed:
+   - stop the process
+   - check out the previous known-good commit
+   - run `npm ci`
+   - restore the pre-upgrade backup into a **non-production** path first and verify with `quick_check` / `foreign_key_check` before replacing the active database
+   - start the service and re-check health endpoints
+
+Never enable external delivery adapters as part of an application upgrade. Adapter enablement is an institutional change controlled outside routine code deploys.
+
+## Operational retention (local only)
+
+Terminal internal delivery rows and reviewed webhook inbox rows can be pruned without touching the append-only audit hash chain:
+
+```bash
+npm run retention:apply
+```
+
+Environment knobs:
+
+- `CAP_DELIVERY_RETENTION_DAYS` (default 90)
+- `CAP_WEBHOOK_RETENTION_DAYS` (default 90)
+
+Authenticated administrators may also call `POST /api/ops/retention/apply`. Publishers and administrators may read queue metrics at `GET /api/health/metrics`.

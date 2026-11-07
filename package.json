@@ -18,7 +18,9 @@
     "backup:health": "node src/backup-health.js",
     "restore:verify": "node src/verify-restored-db.js",
     "restore:drill": "node src/restore-drill.js",
-    "audit:checkpoint:init": "node scripts/initialize-audit-checkpoint.js"
+    "audit:checkpoint:init": "node scripts/initialize-audit-checkpoint.js",
+    "retention:apply": "node src/apply-retention.js",
+    "ops:metrics": "node -e \"import('./src/db.js').then(async m=>{const {collectOperationalMetrics}=await import('./src/retention.js'); console.log(JSON.stringify(collectOperationalMetrics(m.db),null,2)); m.db.close();})\""
   },
   "engines": {
     "node": ">=22"

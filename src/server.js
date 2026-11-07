@@ -13,6 +13,7 @@ import { buildCapXml, makeIdentifier, validateAlert } from "./cap.js";
 import { alertsToGeoJSON } from "./geojson.js";
 import { appendAuditLog, verifyAuditChain } from "./audit.js";
 import { enqueueDelivery, claimDelivery, recordDeliveryReceipt, retryDelivery, recoverStaleDeliveries, processDueRetries } from "./delivery.js";
+import { applyOperationalRetention, collectOperationalMetrics } from "./retention.js";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { consumeRecoveryCode, decryptTotpSecret, encryptTotpSecret, generateRecoveryCodes, generateTotpSecret, hashRecoveryCode, verifyTotp } from "./mfa.js";
 import { verifyAndConsumeWebhook } from "./webhook-replay.js";
@@ -234,6 +235,28 @@ app.get("/api/health/ready", (_req,res)=>{
    version:"0.1.0",
    checks:{database:"unavailable"}
   });
+ }
+});
+app.get("/api/health/metrics",auth,roles("admin","publisher"),(req,res)=>{
+ res.set("Cache-Control","no-store");
+ res.set("Pragma","no-cache");
+ try {
+  res.json({ok:true,metrics:collectOperationalMetrics(db)});
+ } catch(error) {
+  console.error("Metrics collection failed:",error);
+  res.status(500).json({error:"Unable to collect operational metrics"});
+ }
+});
+app.post("/api/ops/retention/apply",auth,roles("admin"),(req,res)=>{
+ res.set("Cache-Control","no-store");
+ try {
+  const deliveryRetentionDays=Number(req.body?.delivery_retention_days ?? process.env.CAP_DELIVERY_RETENTION_DAYS ?? 90);
+  const webhookRetentionDays=Number(req.body?.webhook_retention_days ?? process.env.CAP_WEBHOOK_RETENTION_DAYS ?? 90);
+  const result=applyOperationalRetention(db,{deliveryRetentionDays,webhookRetentionDays});
+  audit(req.user.id,null,"retention_applied",JSON.stringify(result));
+  res.json(result);
+ } catch(error) {
+  res.status(400).json({error:error.message||"Retention apply failed"});
  }
 });
 const loginLimiter = rateLimit({windowMs:15*60*1000,limit:10,skipSuccessfulRequests:true,standardHeaders:true,legacyHeaders:false});

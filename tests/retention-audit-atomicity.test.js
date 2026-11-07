@@ -200,7 +200,7 @@ test("checkpoint recovery refuses a tampered post-anchor audit tail without chan
 
     assert.throws(
       () => refreshAuditCheckpoint(db, { checkpointPath, checkpointSecret, offHostEvidenceReviewed: true }),
-      /Audit chain verification failed: entry_hash_mismatch/
+      /Audit chain verification failed; refusing checkpoint recovery: entry_hash_mismatch/
     );
     assert.deepEqual(fs.readFileSync(checkpointPath), checkpointBefore);
   } finally {

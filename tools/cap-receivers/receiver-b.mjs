@@ -1,25 +1,55 @@
 /**
- * Independent CAP receiver B — DOM-like parse via xmlbuilder2 object mode only.
- * Intentionally separate from application validateAlert pipeline.
+ * Independent local CAP receiver B.
+ * Uses xmlbuilder2 object conversion and its own CAP field policy.
+ * Local simulation only; no network listeners or external delivery.
  */
 import { create } from "xmlbuilder2";
 
+const CAP_NAMESPACE = "urn:oasis:names:tc:emergency:cap:1.2";
+const DERIVED_TYPES = ["Update", "Cancel", "Ack", "Error"];
+
 function text(node) {
   if (node == null) return "";
-  if (typeof node === "string" || typeof node === "number") return String(node);
-  if (typeof node === "object" && node["#"] != null) return String(node["#"]);
+  if (typeof node === "string" || typeof node === "number") return String(node).trim();
+  if (typeof node === "object" && node["#"] != null) return String(node["#"]).trim();
   return "";
 }
 
-export function receiveCapXmlB(xml) {
-  let doc;
+function readAlert(xml) {
+  if (typeof xml !== "string" || !xml.trim()) throw new Error("CAP XML is required");
+  if (Buffer.byteLength(xml, "utf8") > 1_000_000) throw new Error("CAP XML exceeds the 1 MB receiver limit");
+  if (/<!\s*(?:DOCTYPE|ENTITY)\b/i.test(xml)) throw new Error("DTD and entity declarations are not accepted");
+  let root;
   try {
-    doc = create(xml).end({ format: "object" });
+    root = create(xml).end({ format: "object" });
   } catch {
-    return { ok: false, error: "malformed xml", kind: "Error" };
+    throw new Error("malformed xml");
   }
-  const alert = doc?.alert;
-  if (!alert) return { ok: false, error: "missing alert", kind: "Error" };
+  const alert = root?.alert;
+  if (!alert || typeof alert !== "object" || Array.isArray(alert)) throw new Error("missing alert");
+  if (alert["@xmlns"] && alert["@xmlns"] !== CAP_NAMESPACE) throw new Error("unexpected CAP namespace");
+  return alert;
+}
+
+function referencesExist(referenceText, history) {
+  const triplets = referenceText.split(/\s+/).filter(Boolean);
+  if (!triplets.length) return false;
+  if (!Array.isArray(history)) return false;
+  return triplets.every(value => {
+    const tuple = value.split(",");
+    if (tuple.length !== 3 || tuple.some(part => !part)) return false;
+    const [sender, identifier, sent] = tuple;
+    return history.some(item => item.sender === sender && item.identifier === identifier && item.sent === sent);
+  });
+}
+
+export function receiveCapXmlB(xml, knownMessages = []) {
+  let alert;
+  try {
+    alert = readAlert(xml);
+  } catch (error) {
+    return { ok: false, error: error.message, kind: "Error" };
+  }
   const identifier = text(alert.identifier);
   const sender = text(alert.sender);
   const sent = text(alert.sent);
@@ -32,17 +62,16 @@ export function receiveCapXmlB(xml) {
   if (!identifier || !sender || !sent || !msgType || !scope || !status) {
     return { ok: false, error: "missing required fields", kind: "Error" };
   }
-  if (["Update", "Cancel", "Ack", "Error"].includes(msgType) && !references) {
-    return { ok: false, error: "references required", kind: "Error" };
+  if (!["Alert", ...DERIVED_TYPES].includes(msgType)) return { ok: false, error: "unsupported msgType", kind: "Error" };
+  if (!["Public", "Restricted", "Private"].includes(scope)) return { ok: false, error: "unsupported scope", kind: "Error" };
+  if (!["Actual", "Exercise", "System", "Test"].includes(status)) return { ok: false, error: "unsupported status", kind: "Error" };
+  if (DERIVED_TYPES.includes(msgType) && !referencesExist(references, knownMessages)) {
+    return { ok: false, error: "reference target missing or does not match sender/identifier/sent", kind: "Error" };
   }
-  if (scope === "Restricted" && !restriction.trim()) {
-    return { ok: false, error: "restriction required", kind: "Error" };
-  }
-  if (scope === "Private" && !addresses.trim()) {
-    return { ok: false, error: "addresses required", kind: "Error" };
-  }
-  // Unicode / Arabic presence is accepted as opaque text.
-  const headline = text(alert.info?.headline) || text(Array.isArray(alert.info) ? alert.info[0]?.headline : "");
+  if (scope === "Restricted" && !restriction) return { ok: false, error: "restriction required", kind: "Error" };
+  if (scope === "Private" && !addresses) return { ok: false, error: "addresses required", kind: "Error" };
+  const infoNodes = alert.info == null ? [] : Array.isArray(alert.info) ? alert.info : [alert.info];
+  const headline = infoNodes.map(info => text(info?.headline)).find(Boolean) || "";
   return {
     ok: true,
     stored: { identifier, sender, sent, msgType, scope, status, references, restriction, addresses, headline },

@@ -1272,6 +1272,16 @@ test("API enforces role separation, public-feed filtering and account deactivati
     }
   });
   assert.equal(privateCreate.status, 403, "new Private alerts must fail closed until recipient grants exist");
+  const trailingSlashRestrictedCreate = await request("/api/alerts/", {
+    token: forecaster, method: "POST", body: {
+      event: "Trailing slash restricted", headline: "Must not be created",
+      description: "Trailing slash path normalization regression", area_desc: "Ops zone",
+      circle: "33.5,36.2 10", scope: "Restricted",
+      restriction: "Internal distribution only", status: "Test"
+    }
+  });
+  assert.equal(trailingSlashRestrictedCreate.status, 403,
+    "optional trailing slash must not bypass the non-Public create guard");
 
   const publicList = await request("/api/alerts?scope=Public", { token: forecaster });
   assert.equal(publicList.status, 200);
@@ -1300,6 +1310,8 @@ test("API enforces role separation, public-feed filtering and account deactivati
     for (const suffix of ["", "/relations", "/cap.xml"]) {
       const response = await request(`/api/alerts/${id}${suffix}`, { token: forecaster });
       assert.equal(response.status, 404, label + " detail/relations/XML must be indistinguishable from a missing alert");
+      const paddedIdResponse = await request(`/api/alerts/0${id}${suffix}`, { token: forecaster });
+      assert.equal(paddedIdResponse.status, 404, label + " numeric ID aliases must not bypass scope authorization");
     }
     for (const suffix of ["/review-history", "/versions", "/timeline"]) {
       const response = await request(`/api/alerts/${id}${suffix}`, { token: reviewer });

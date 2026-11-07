@@ -23,6 +23,8 @@
 | Concurrent draft create/submit stress sample | phase 6 integration test | Tested in CI |
 | Process restart durability | phase 4 integration test | Tested in CI |
 
+**Current CAP scope boundary:** Until recipient-level grants are implemented, the application now fails closed for Restricted and Private scopes. Authenticated lists, detail/XML/history/relations, exports, statistics, review queues, audit listing/export, and delivery views are restricted to Public data; non-Public direct IDs are concealed as 404. New Restricted/Private creation and scope promotion are blocked. Global delivery retry/recovery is blocked while non-Public outbox rows exist. Regression tests for these boundaries have been added; CI evidence for the new head is pending. Existing non-Public rows remain in storage and must not be treated as available or authorized. This temporary Public-only mode is not a completed recipient authorization system.
+
 ## B. Requires institutional acceptance (not claimed by CI)
 
 **Scope boundary:** public JSON/GeoJSON feeds filter to published `Public` + `Actual` + unexpired alerts. Authenticated internal list/detail/export/CAP XML/relationship endpoints are not currently restricted by `addresses` or a recipient ACL; all authenticated accounts can read records in any CAP scope. Do not interpret public-feed exclusion as recipient-level confidentiality. A deployment must define and implement the required internal access policy before using Restricted/Private data.

@@ -68,6 +68,8 @@ CREATE INDEX IF NOT EXISTS idx_alert_workflow ON alerts(workflow);
 CREATE INDEX IF NOT EXISTS idx_alert_sent ON alerts(sent);
 CREATE INDEX IF NOT EXISTS idx_alert_cap_identity ON alerts(sender,identifier,sent);
 CREATE INDEX IF NOT EXISTS idx_alert_msg_type_sent ON alerts(msg_type,sent);
+CREATE INDEX IF NOT EXISTS idx_alert_scope_workflow ON alerts(scope,workflow);
+CREATE INDEX IF NOT EXISTS idx_alert_public_feed ON alerts(workflow,scope,status,expires);
 
 CREATE TABLE IF NOT EXISTS delivery_outbox (
  id INTEGER PRIMARY KEY AUTOINCREMENT,

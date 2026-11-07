@@ -20,3 +20,16 @@ header{padding:12px 0 24px;border-bottom:1px solid #26364b}.brand{justify-conten
 
 #appPanel.password-change-required > :not(.welcome):not(#passwordSettings):not(#mfaSettings){display:none!important}
 #appPanel.password-change-required #passwordSettings{border:2px solid var(--accent,#e0a526)}
+
+/* Focus, disabled and interaction polish for operations-center usability */
+:focus-visible{outline:2px solid #fbbf24;outline-offset:2px}
+button:disabled,input:disabled,select:disabled,textarea:disabled{opacity:.55;cursor:not-allowed;filter:none}
+button.secondary:hover{filter:brightness(1.12)}
+input:focus,select:focus,textarea:focus{border-color:#fbbf24;box-shadow:0 0 0 1px #fbbf2433}
+.alertItem:hover{border-color:#3d5674}
+.pill.green{background:#14532d}
+.pill.blue{background:#1e3a5f}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;font-size:12px;word-break:break-all}
+details summary{cursor:pointer;color:#cbd5e1}
+details[open] summary{margin-bottom:8px}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}

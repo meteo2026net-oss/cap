@@ -35,7 +35,7 @@ function readAlert(xml) {
   const alert = rootKey ? root[rootKey] : undefined;
   if (!alert || typeof alert !== "object" || Array.isArray(alert)) throw new Error("missing alert");
   const namespaces = Object.entries(alert).filter(([name]) => name === "@xmlns" || name.startsWith("@xmlns:")).map(([, value]) => String(value));
-  if (namespaces.length && !namespaces.includes(CAP_NAMESPACE)) throw new Error("unexpected CAP namespace");
+  if (!namespaces.includes(CAP_NAMESPACE)) throw new Error("missing or unexpected CAP 1.2 namespace");
   return alert;
 }
 

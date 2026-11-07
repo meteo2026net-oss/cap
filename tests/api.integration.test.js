@@ -1232,7 +1232,7 @@ test("API enforces role separation, public-feed filtering and account deactivati
   t.after(() => scopeDb.close());
   const insertLegacyAlert = scopeDb.prepare(`INSERT INTO alerts
     (identifier,sender,sent,status,msg_type,scope,restriction,addresses,event,category,urgency,severity,certainty,headline,description,area_desc,workflow,references_text)
-    VALUES (?,?,?,'Test','Alert',?,?,?,?,?,'Expected','Moderate','Likely',?,?,?, ?,?)`);
+    VALUES (?,?,?,'Test','Alert',?,?,?,?,'Met','Expected','Moderate','Likely',?,?,?, ?,?)`);
   const legacyRestrictedId = Number(insertLegacyAlert.run(
     "legacy-restricted-" + Date.now(), "legacy@example.test", "2026-11-07T00:00:00.000Z",
     "Internal distribution", null, "Restricted storm", "Met", "RESTRICTED_HEADLINE_MARKER",

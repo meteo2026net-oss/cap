@@ -367,11 +367,12 @@ export function buildCapXml(a) {
  * Accepts whitespace and element-order variations produced by xmlbuilder2 and typical receivers.
  */
 function assertCapElementNamespaces(element, inheritedNamespaces = {}, elementName = null) {
-  if (!element || typeof element !== "object" || Array.isArray(element)) return;
   const namespaces = { ...inheritedNamespaces };
-  for (const [key, value] of Object.entries(element)) {
-    if (key === "@xmlns") namespaces[""] = String(value);
-    else if (key.startsWith("@xmlns:")) namespaces[key.slice(7)] = String(value);
+  if (element && typeof element === "object" && !Array.isArray(element)) {
+    for (const [key, value] of Object.entries(element)) {
+      if (key === "@xmlns") namespaces[""] = String(value);
+      else if (key.startsWith("@xmlns:")) namespaces[key.slice(7)] = String(value);
+    }
   }
   if (elementName) {
     const separator = elementName.indexOf(":");
@@ -381,12 +382,11 @@ function assertCapElementNamespaces(element, inheritedNamespaces = {}, elementNa
       throw new Error(`CAP XML element '${elementName}' is not in the OASIS CAP 1.2 namespace`);
     }
   }
+  if (!element || typeof element !== "object" || Array.isArray(element)) return;
   for (const [key, child] of Object.entries(element)) {
     if (key.startsWith("@") || key === "#") continue;
     for (const childElement of asArray(child)) {
-      if (childElement && typeof childElement === "object") {
-        assertCapElementNamespaces(childElement, namespaces, key);
-      }
+      assertCapElementNamespaces(childElement, namespaces, key);
     }
   }
 }

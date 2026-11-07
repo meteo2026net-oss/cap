@@ -68,6 +68,21 @@ export function receiveCapXmlB(xml, { knownMessages = [], database = null } = {}
   if (!["Actual", "Exercise", "System", "Test"].includes(status)) return { ok: false, error: "unsupported status", kind: "Error" };
   if (scope === "Restricted" && !restriction) return { ok: false, error: "restriction required", kind: "Error" };
   if (scope === "Private" && !addresses) return { ok: false, error: "addresses required", kind: "Error" };
+  const stored = { identifier, sender, sent, msgType, scope, status, references, restriction, addresses };
+  const validate = history => !DERIVED_TYPES.includes(msgType)
+    ? { ok: true }
+    : referencesExist(references, history)
+      ? { ok: true }
+      : { ok: false, error: "reference target missing or does not match sender/identifier/sent" };
+  let duplicate = false;
+  if (database) {
+    const persisted = persistReceiverMessage(database, stored, validate);
+    if (!persisted.ok) return { ...persisted, kind: "Error", stored };
+    duplicate = persisted.duplicate;
+  } else {
+    const checked = validate(knownMessages);
+    if (!checked.ok) return { ...checked, kind: "Error", stored };
+  }
   const infoNodes = alert.info == null ? [] : Array.isArray(alert.info) ? alert.info : [alert.info];
   const headline = infoNodes.map(info => text(info?.headline)).find(Boolean) || "";
   return {

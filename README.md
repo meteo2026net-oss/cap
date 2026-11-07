@@ -140,3 +140,10 @@ See [docs-architecture.md](docs-architecture.md) for the staged delivery plan.
 
 See [Security operations and deployment boundaries](docs/SECURITY.md) for current safeguards, deployment precautions, and known limitations. This project is a development foundation and is not certified for operational public-warning issuance.
 
+## Operational documentation
+
+- `docs/OPERATIONAL_ACCEPTANCE.md` — tested vs institutional gates
+- `docs/ARCHITECTURE.md` — component map
+- `docs/API_REFERENCE.md` — API summary
+- `docs/INTEROPERABILITY.md` — local receiver testing
+- `docs/TESTING.md` — test commands and layers

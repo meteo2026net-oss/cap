@@ -1373,6 +1373,11 @@ test("API enforces role separation, public-feed filtering and account deactivati
   assert.equal(queueWithoutPrivate.status, 200);
   assert.ok(!queueWithoutPrivate.data.queue.some(item => item.id === legacyPrivateId),
     "review queue must not expose pending Private alerts");
+  const publicQueueEntry = queueWithoutPrivate.data.queue.find(item => item.id === publicWithPrivateFieldsId);
+  assert.ok(publicQueueEntry, "Public pending alerts should remain visible in the review queue");
+  assert.ok(!JSON.stringify(publicQueueEntry).includes("PUBLIC_SCOPE_RESTRICTION_MARKER") &&
+    !JSON.stringify(publicQueueEntry).includes("PUBLIC_SCOPE_ADDRESSES_MARKER"),
+    "review queue must not expose recipient-only fields stored on legacy Public rows");
   const lineageWithoutPrivate = await request(`/api/alerts/${actualRow.id}/relations`, { token: forecaster });
   assert.equal(lineageWithoutPrivate.status, 200);
   assert.ok(!lineageWithoutPrivate.data.messages.some(item => item.id === hiddenChildId),

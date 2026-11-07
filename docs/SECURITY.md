@@ -33,7 +33,7 @@ The current GitHub `main` branch reports branch protection disabled. Before acce
 
 ## Supply-chain and browser-asset considerations
 
-- The dashboard loads Leaflet and Leaflet.draw assets from the third-party `unpkg.com` CDN. Leaflet 1.9.4 CSS and JavaScript include Subresource Integrity metadata, but Leaflet.draw 1.0.4 CSS and JavaScript do not. The Content Security Policy permits these CDN resources. CDN compromise, package replacement, or availability failures can affect the browser dashboard; before operational deployment, prefer reviewed, pinned self-hosted assets or add verified integrity metadata for every external asset.
+- The dashboard loads Leaflet 1.9.4 from `unpkg.com` and Leaflet.draw 1.0.4 from `cdnjs.cloudflare.com`. All four external CSS/JavaScript assets include pinned Subresource Integrity hashes, `crossorigin="anonymous"`, and `referrerpolicy="no-referrer"`; automated static-asset tests guard these attributes and the Leaflet.draw hashes. The Content Security Policy permits these CDN origins. SRI detects unexpected asset-content changes, but CDN availability failures can still affect the browser dashboard; before operational deployment, consider reviewed, pinned self-hosted assets.
 - The repository commits `package-lock.json`; CI uses `npm ci` so dependency resolution is reproducible against the reviewed lockfile. Review dependency updates and vulnerability reports before merging.
 
 ## Important limitations

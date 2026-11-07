@@ -625,11 +625,11 @@ app.use("/api/alerts",auth,(req,res,next)=>{
  const pathname=new URL(req.originalUrl,"http://localhost").pathname;
  const collectionRead=req.method==="GET" && ["/api/alerts","/api/alerts/stats","/api/alerts/export.csv"].includes(pathname);
  if(collectionRead){
-  if(req.query.scope!==undefined && req.query.scope!=="Public") return res.status(403).json({error:"Restricted and Private alert access is disabled until recipient authorization is configured",code:"SCOPE_AUTHORIZATION_UNCONFIGURED"});
+  if(["Restricted","Private"].includes(req.query.scope)) return res.status(403).json({error:"Restricted and Private alert access is disabled until recipient authorization is configured",code:"SCOPE_AUTHORIZATION_UNCONFIGURED"});
   return next();
  }
  if(req.method==="POST" && pathname==="/api/alerts"){
-  if(req.body?.scope!==undefined && req.body.scope!=="Public") return res.status(403).json({error:"Creating Restricted or Private alerts is disabled until recipient authorization is configured",code:"SCOPE_AUTHORIZATION_UNCONFIGURED"});
+  if(["Restricted","Private"].includes(req.body?.scope)) return res.status(403).json({error:"Creating Restricted or Private alerts is disabled until recipient authorization is configured",code:"SCOPE_AUTHORIZATION_UNCONFIGURED"});
   return next();
  }
  const alertPathParts=pathname.split("/");
@@ -637,7 +637,7 @@ app.use("/api/alerts",auth,(req,res,next)=>{
  if(idMatch){
   const existing=db.prepare("SELECT scope FROM alerts WHERE id=?").get(idMatch[1]);
   if(existing && existing.scope!=="Public") return res.status(404).json({error:"Alert not found"});
-  if(req.method==="PATCH" && req.body?.scope!==undefined && req.body.scope!=="Public") return res.status(403).json({error:"Changing an alert to Restricted or Private is disabled until recipient authorization is configured",code:"SCOPE_AUTHORIZATION_UNCONFIGURED"});
+  if(req.method==="PATCH" && ["Restricted","Private"].includes(req.body?.scope)) return res.status(403).json({error:"Changing an alert to Restricted or Private is disabled until recipient authorization is configured",code:"SCOPE_AUTHORIZATION_UNCONFIGURED"});
  }
  next();
 });

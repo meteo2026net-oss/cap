@@ -118,7 +118,10 @@ export function initializeAuditCheckpoint(database, { checkpointPath, checkpoint
  * anchor is still present in a fully verified append-only audit chain.
  * This intentionally refuses missing, malformed, unsigned, or rolled-back anchors.
  */
-export function refreshAuditCheckpoint(database, { checkpointPath, checkpointSecret } = {}) {
+export function refreshAuditCheckpoint(database, { checkpointPath, checkpointSecret, offHostEvidenceReviewed = false } = {}) {
+  if (offHostEvidenceReviewed !== true) {
+    throw new Error("Independent off-host checkpoint evidence must be reviewed before refresh; explicit confirmation is required");
+  }
   if (!checkpointPath || typeof checkpointSecret !== "string" || Buffer.byteLength(checkpointSecret, "utf8") < 32) {
     throw new Error("A checkpoint path and secret of at least 32 bytes are required");
   }

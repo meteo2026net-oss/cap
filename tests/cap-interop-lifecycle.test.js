@@ -106,6 +106,16 @@ test("parseCapXml rejects malformed, wrong-namespace and unsafe XML documents", 
   assert.throws(() => parseCapXml(missingNamespace), /CAP 1.2 namespace/i);
   const wrongNamespace = valid.replace("urn:oasis:names:tc:emergency:cap:1.2", "urn:example:not-cap");
   assert.throws(() => parseCapXml(wrongNamespace), /CAP 1.2 namespace/i);
+  const unrelatedNamespaceDeclaration = valid.replace(
+    'xmlns="urn:oasis:names:tc:emergency:cap:1.2"',
+    'xmlns="urn:example:not-cap" xmlns:unused="urn:oasis:names:tc:emergency:cap:1.2"'
+  );
+  assert.throws(() => parseCapXml(unrelatedNamespaceDeclaration), /CAP 1.2 namespace/i);
+  const foreignNamespaceChild = valid.replace(
+    "<event>Interop rainfall</event>",
+    '<foreign:event xmlns:foreign="urn:example:not-cap">Interop rainfall</foreign:event>'
+  );
+  assert.throws(() => parseCapXml(foreignNamespaceChild), /CAP 1.2 namespace/i);
   const prefixedNamespace = valid
     .replace('xmlns="urn:oasis:names:tc:emergency:cap:1.2"', 'xmlns:cap="urn:oasis:names:tc:emergency:cap:1.2"')
     .replace(/<(\/?)([A-Za-z][\w.-]*)(?=[\s/>])/g, (_match, slash, name) => `<${slash}cap:${name}`);

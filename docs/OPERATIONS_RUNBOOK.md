@@ -16,6 +16,7 @@
 - Verify backups: `npm run backup:health`
 
 ## Incidents
+- If retention returns `audit_checkpoint_warning`, the retention transaction and database audit event have committed, but the external checkpoint file was not refreshed. Restore checkpoint write access and verify the audit chain before any subsequent audit append.
 1. Check readiness and metrics (outbox failed/dead-letter counts).
 2. Preserve SQLite file and latest backups.
 3. Restore into an isolated path before replacing active DB.

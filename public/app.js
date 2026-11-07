@@ -654,7 +654,8 @@ async function loadReviewQueue(){
    const title=document.createElement("b");title.textContent=item.headline;card.append(title);
    const meta=document.createElement("p");meta.className="alertMeta";
    const scopeLabel={Public:"عام",Restricted:"مقيّد",Private:"خاص"}[item.scope]||item.scope||"";
-   meta.textContent=[item.event,item.severity,scopeLabel,"المنشئ: "+(item.creator||"غير معروف"),"مدة الانتظار: "+Math.floor(item.waiting_seconds/3600)+" ساعة"].join(" • ");card.append(meta);
+   const scopeDetail=item.scope==="Restricted"&&item.restriction?("قيد التوزيع: "+item.restriction):item.scope==="Private"&&item.addresses?("المستلمون: "+item.addresses):"";
+   meta.textContent=[item.event,item.severity,scopeLabel,scopeDetail,"المنشئ: "+(item.creator||"غير معروف"),"مدة الانتظار: "+Math.floor(item.waiting_seconds/3600)+" ساعة"].filter(Boolean).join(" • ");card.append(meta);
    const noteLabel=document.createElement("label");noteLabel.className="small";noteLabel.textContent="ملاحظة المراجعة";
    const note=document.createElement("textarea");note.rows=2;note.maxLength=1000;note.placeholder="اكتب ملاحظة واضحة للمراجعة (5 أحرف على الأقل)";noteLabel.append(note);card.append(noteLabel);
    const actions=document.createElement("div");actions.className="actions";

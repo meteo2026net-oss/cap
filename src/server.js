@@ -887,8 +887,25 @@ app.patch("/api/alerts/:id",auth,roles("admin","forecaster"),(req,res)=>{
   values.id=alert.id;
   // Re-validate CAP rules (including Restricted/Private scope requirements) before persisting.
   const current=db.prepare("SELECT * FROM alerts WHERE id=?").get(alert.id);
-  const merged={...current,...values,info_blocks:values.info_json?JSON.parse(values.info_json):(current.info_json?JSON.parse(current.info_json):undefined)};
-  validateAlert(rowToCap(merged));
+  const merged={...current,...values};
+  // Prefer explicit JSON blocks when supplied; otherwise reuse stored blocks.
+  if(Object.hasOwn(values,"info_json")) {
+   merged.info_blocks=values.info_json?JSON.parse(values.info_json):undefined;
+  } else if(current.info_json) {
+   merged.info_blocks=JSON.parse(current.info_json);
+  } else {
+   merged.info_blocks=undefined;
+  }
+  // Normalize SQLite NULL optional fields before CAP validation.
+  if(merged.restriction==null) delete merged.restriction;
+  if(merged.addresses==null) delete merged.addresses;
+  if(merged.polygon==null) merged.polygon="";
+  if(merged.circle==null) merged.circle="";
+  try {
+   validateAlert(rowToCap(merged));
+  } catch(error) {
+   return {kind:"invalid",message:error.message};
+  }
   const changed=db.prepare("UPDATE alerts SET "+assignments+",updated_at=CURRENT_TIMESTAMP WHERE id=@id AND workflow='draft'").run(values);
   if(changed.changes!==1) return {kind:"conflict"};
   recordAlertVersion(alert.id,req.user.id,"draft_updated");
@@ -899,6 +916,7 @@ app.patch("/api/alerts/:id",auth,roles("admin","forecaster"),(req,res)=>{
  if(result.kind==="missing") return res.status(404).json({error:"Alert not found"});
  if(result.kind==="forbidden") return res.status(403).json({error:"Only the draft author or an administrator can edit this warning"});
  if(result.kind==="conflict") return res.status(409).json({error:"Only draft warnings can be edited"});
+ if(result.kind==="invalid") return res.status(400).json({error:result.message});
  res.json({ok:true,workflow:"draft",updated_fields:updates});
 });
 app.post("/api/alerts/:id/submit",auth,roles("admin","forecaster"),(req,res)=>{

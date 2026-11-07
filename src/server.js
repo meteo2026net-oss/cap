@@ -909,10 +909,13 @@ app.post("/api/alerts/:id/derive",auth,roles("admin","forecaster"),(req,res)=>{
 
 app.patch("/api/alerts/:id",auth,roles("admin","forecaster"),(req,res)=>{
  let data;
- try{data=schema.partial().parse(req.body);}catch(error){return res.status(400).json({error:error.message});}
+ try{data=schema.partial().parse(req.body||{});}catch(error){return res.status(400).json({error:error.message});}
+ // Zod defaults must not treat omitted patch keys as explicit updates. Only keys present on
+ // the request body are writable; unknown keys such as references_text cannot modify CAP linkage.
  const fields=["event","category","response_type","urgency","severity","certainty","effective","onset","expires","headline","description","instruction","area_desc","polygon","circle","language","scope","status","restriction","addresses"];
- const updates=fields.filter(field=>Object.hasOwn(data,field));
- if(Object.hasOwn(data,"info_blocks")) updates.push("info_json");
+ const body=req.body&&typeof req.body==="object"&&!Array.isArray(req.body)?req.body:{};
+ const updates=fields.filter(field=>Object.hasOwn(body,field));
+ if(Object.hasOwn(body,"info_blocks")) updates.push("info_json");
  if(!updates.length) return res.status(400).json({error:"No editable alert fields supplied"});
  const transition=db.transaction(()=>{
   const alert=db.prepare("SELECT id,workflow,created_by FROM alerts WHERE id=?").get(req.params.id);
@@ -920,15 +923,17 @@ app.patch("/api/alerts/:id",auth,roles("admin","forecaster"),(req,res)=>{
   if(alert.workflow!=="draft") return {kind:"conflict"};
   if(alert.created_by!==req.user.id && req.user.role!=="admin") return {kind:"forbidden"};
   const assignments=updates.map(field=>field+"=@"+field).join(",");
-  const values={...data};
-  if(Object.hasOwn(data,"info_blocks")) values.info_json=JSON.stringify(data.info_blocks);
-  values.id=alert.id;
+  const values={id:alert.id};
+  for(const field of updates) {
+   if(field==="info_json") values.info_json=JSON.stringify(data.info_blocks);
+   else values[field]=data[field];
+  }
   // Enforce CAP scope-dependent fields on the post-edit state without replaying the full
   // create-time geometry/info validation path (which can reject stored NULL optional columns).
   const current=db.prepare("SELECT scope,restriction,addresses FROM alerts WHERE id=?").get(alert.id);
-  const nextScope=Object.hasOwn(data,"scope")?data.scope:current.scope;
-  const nextRestriction=Object.hasOwn(data,"restriction")?data.restriction:current.restriction;
-  const nextAddresses=Object.hasOwn(data,"addresses")?data.addresses:current.addresses;
+  const nextScope=Object.hasOwn(body,"scope")?data.scope:current.scope;
+  const nextRestriction=Object.hasOwn(body,"restriction")?data.restriction:current.restriction;
+  const nextAddresses=Object.hasOwn(body,"addresses")?data.addresses:current.addresses;
   if(nextScope==="Restricted" && (typeof nextRestriction!=="string" || !nextRestriction.trim())) {
    return {kind:"invalid",message:"CAP Restricted scope requires a non-empty restriction description."};
   }

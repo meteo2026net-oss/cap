@@ -587,20 +587,22 @@ app.use("/api/alerts",(_req,res,next)=>{
  next();
 });
 app.get("/api/alerts/export.csv",auth,(req,res)=>{
- const workflow=req.query.workflow, severity=req.query.severity, status=req.query.status;
+ const workflow=req.query.workflow, severity=req.query.severity, status=req.query.status, scope=req.query.scope;
  const search=typeof req.query.q==="string" ? req.query.q.trim().slice(0,160) : "";
  if(workflow!==undefined && !["draft","pending","approved","published","cancelled"].includes(workflow)) return res.status(400).json({error:"Invalid workflow filter"});
  if(severity!==undefined && !["Extreme","Severe","Moderate","Minor","Unknown"].includes(severity)) return res.status(400).json({error:"Invalid severity filter"});
  if(status!==undefined && !["Actual","Exercise","System","Test"].includes(status)) return res.status(400).json({error:"Invalid CAP status filter"});
+ if(scope!==undefined && !["Public","Restricted","Private"].includes(scope)) return res.status(400).json({error:"Invalid CAP scope filter"});
  const clauses=[],params=[];
  if(workflow!==undefined){clauses.push("workflow=?");params.push(workflow);}
  if(severity!==undefined){clauses.push("severity=?");params.push(severity);}
  if(status!==undefined){clauses.push("status=?");params.push(status);}
+ if(scope!==undefined){clauses.push("scope=?");params.push(scope);}
  if(search){clauses.push("(instr(lower(identifier),lower(?))>0 OR instr(lower(event),lower(?))>0 OR instr(lower(headline),lower(?))>0 OR instr(lower(area_desc),lower(?))>0)");params.push(search,search,search,search);}
  const where=clauses.length ? "WHERE "+clauses.join(" AND ") : "";
- const rows=db.prepare("SELECT identifier,event,headline,area_desc,urgency,severity,certainty,status,workflow,msg_type,sent,expires FROM alerts "+where+" ORDER BY sent DESC,id DESC LIMIT 5001").all(...params);
+ const rows=db.prepare("SELECT identifier,event,headline,area_desc,urgency,severity,certainty,status,scope,workflow,msg_type,sent,expires FROM alerts "+where+" ORDER BY sent DESC,id DESC LIMIT 5001").all(...params);
  if(rows.length>5000) return res.status(413).json({error:"Export exceeds 5000 rows; narrow the filters before exporting",maximum_rows:5000});
- const headers=["identifier","event","headline","area_desc","urgency","severity","certainty","status","workflow","msg_type","sent","expires"];
+ const headers=["identifier","event","headline","area_desc","urgency","severity","certainty","status","scope","workflow","msg_type","sent","expires"];
  const lines=[headers.map(csvCell).join(","),...rows.map(row=>headers.map(key=>csvCell(row[key])).join(","))];
  res.status(200).set({
   "Content-Type":"text/csv; charset=utf-8",
@@ -632,6 +634,7 @@ app.get("/api/alerts",auth,(req,res)=>{
  const workflow = req.query.workflow;
  const severity = req.query.severity;
  const status = req.query.status;
+ const scope = req.query.scope;
  const search = typeof req.query.q === "string" ? req.query.q.trim().slice(0,160) : "";
  const parseBoundedInteger = (value, fallback, maximum) => {
   if (value === undefined) return fallback;
@@ -645,11 +648,13 @@ app.get("/api/alerts",auth,(req,res)=>{
  if (workflow !== undefined && !["draft","pending","approved","published","cancelled"].includes(workflow)) return res.status(400).json({error:"Invalid workflow filter"});
  if (severity !== undefined && !["Extreme","Severe","Moderate","Minor","Unknown"].includes(severity)) return res.status(400).json({error:"Invalid severity filter"});
  if (status !== undefined && !["Actual","Exercise","System","Test"].includes(status)) return res.status(400).json({error:"Invalid CAP status filter"});
+ if (scope !== undefined && !["Public","Restricted","Private"].includes(scope)) return res.status(400).json({error:"Invalid CAP scope filter"});
  const clauses = [];
  const params = [];
  if (workflow !== undefined) { clauses.push("workflow=?"); params.push(workflow); }
  if (severity !== undefined) { clauses.push("severity=?"); params.push(severity); }
  if (status !== undefined) { clauses.push("status=?"); params.push(status); }
+ if (scope !== undefined) { clauses.push("scope=?"); params.push(scope); }
  if (search) {
   clauses.push("(instr(lower(identifier),lower(?))>0 OR instr(lower(event),lower(?))>0 OR instr(lower(headline),lower(?))>0 OR instr(lower(area_desc),lower(?))>0)");
   params.push(search,search,search,search);

@@ -211,8 +211,8 @@ $("#exportGeoBtn")?.addEventListener("click",async()=>{
 $("#exportAlertsCsvBtn").addEventListener("click",async()=>{
  try{
   const params=new URLSearchParams();
-  const q=$("#alertSearch").value.trim(),workflow=$("#alertWorkflowFilter").value,severity=$("#alertSeverityFilter").value,status=$("#alertStatusFilter").value;
-  if(q)params.set("q",q);if(workflow)params.set("workflow",workflow);if(severity)params.set("severity",severity);if(status)params.set("status",status);
+  const q=$("#alertSearch").value.trim(),workflow=$("#alertWorkflowFilter").value,severity=$("#alertSeverityFilter").value,status=$("#alertStatusFilter").value,scope=$("#alertScopeFilter")?.value||"";
+  if(q)params.set("q",q);if(workflow)params.set("workflow",workflow);if(severity)params.set("severity",severity);if(status)params.set("status",status);if(scope)params.set("scope",scope);
   const response=await fetch("/api/alerts/export.csv?"+params.toString(),{headers:{Authorization:"Bearer "+token}});
   if(!response.ok){const data=await response.json().catch(()=>({}));throw new Error(data.error||"تعذر تصدير التحذيرات");}
   const blob=await response.blob(),url=URL.createObjectURL(blob),a=document.createElement("a");
@@ -222,7 +222,7 @@ $("#exportAlertsCsvBtn").addEventListener("click",async()=>{
 });
 $("#refreshBtn").onclick=()=>{alertOffset=0;loadAlerts()};
 $("#alertSearch").addEventListener("change",()=>{alertOffset=0;loadAlerts()});
-["#alertWorkflowFilter","#alertSeverityFilter","#alertStatusFilter"].forEach(selector=>$(selector).addEventListener("change",()=>{alertOffset=0;loadAlerts()}));
+["#alertWorkflowFilter","#alertSeverityFilter","#alertStatusFilter","#alertScopeFilter"].forEach(selector=>$(selector).addEventListener("change",()=>{alertOffset=0;loadAlerts()}));
 $("#alertPrevPage").addEventListener("click",()=>{alertOffset=Math.max(0,alertOffset-alertPageSize);loadAlerts()});
 $("#alertNextPage").addEventListener("click",()=>{if(alertHasMore){alertOffset+=alertPageSize;loadAlerts()}});
 $("#userForm").addEventListener("submit",async e=>{e.preventDefault();const data=Object.fromEntries(new FormData(e.target));try{await api("/api/users",{method:"POST",body:JSON.stringify(data)});e.target.reset();await loadUsers();alert("تم إنشاء الحساب بنجاح.")}catch(err){alert(err.message)}});
@@ -587,10 +587,12 @@ async function loadAlerts(){
   const workflow=$("#alertWorkflowFilter").value;
   const severity=$("#alertSeverityFilter").value;
   const status=$("#alertStatusFilter").value;
+  const scope=$("#alertScopeFilter")?.value||"";
   if(q)params.set("q",q);
   if(workflow)params.set("workflow",workflow);
   if(severity)params.set("severity",severity);
   if(status)params.set("status",status);
+  if(scope)params.set("scope",scope);
   const [result,statsResult]=await Promise.all([api("/api/alerts?"+params.toString()),api("/api/alerts/stats")]);
   const alerts=result.alerts;
   const stats=statsResult.stats;

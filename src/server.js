@@ -869,6 +869,17 @@ app.post("/api/alerts/:id/derive",auth,roles("admin","forecaster"),(req,res)=>{
   const alert={...sourceFields,identifier:makeIdentifier(),sent,status:"Test",msg_type:msgType,
    references_text:references,info_json:msgType==="Cancel"?null:original.info_json,workflow:"draft",created_by:req.user.id,
    restriction:original.restriction||null,addresses:original.addresses||null};
+  try {
+   const forValidation={
+    ...alert,
+    info_blocks:alert.info_json?JSON.parse(alert.info_json):(msgType==="Cancel"?[]:undefined)
+   };
+   if(!forValidation.restriction) delete forValidation.restriction;
+   if(!forValidation.addresses) delete forValidation.addresses;
+   validateAlert(forValidation);
+  } catch(error) {
+   return {kind:"invalid_cap",message:error.message};
+  }
   const result=db.prepare(`INSERT INTO alerts
    (identifier,sender,sent,status,msg_type,scope,restriction,addresses,references_text,event,category,response_type,urgency,severity,certainty,effective,onset,expires,headline,description,instruction,area_desc,polygon,circle,language,info_json,workflow,created_by)
    VALUES (@identifier,@sender,@sent,@status,@msg_type,@scope,@restriction,@addresses,@references_text,@event,@category,@response_type,@urgency,@severity,@certainty,@effective,@onset,@expires,@headline,@description,@instruction,@area_desc,@polygon,@circle,@language,@info_json,@workflow,@created_by)`).run(alert);
@@ -880,6 +891,7 @@ app.post("/api/alerts/:id/derive",auth,roles("admin","forecaster"),(req,res)=>{
  if(result.kind==="missing") return res.status(404).json({error:"Source alert not found"});
  if(result.kind==="source_not_reviewed") return res.status(409).json({error:"Only published CAP messages can be used as the source of an update or cancellation"});
  if(result.kind==="already_cancelled") return res.status(409).json({error:"A cancellation for this CAP message already exists",existing_cancel_id:result.existingId});
+ if(result.kind==="invalid_cap") return res.status(400).json({error:result.message||"Derived CAP message failed validation"});
  res.status(201).json({id:result.id,identifier:result.identifier,msg_type:msgType,status:"Test",workflow:"draft",references:result.references});
 });
 

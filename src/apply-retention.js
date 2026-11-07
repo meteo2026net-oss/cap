@@ -1,10 +1,10 @@
 import "dotenv/config";
 import { db } from "./db.js";
-import { applyOperationalRetention, collectOperationalMetrics } from "./retention.js";
+import { applyOperationalRetentionWithAudit, collectOperationalMetrics } from "./retention.js";
 
 try {
   const before = collectOperationalMetrics(db);
-  const result = applyOperationalRetention(db);
+  const result = applyOperationalRetentionWithAudit(db, { userId: null });
   const after = collectOperationalMetrics(db);
   console.log(JSON.stringify({ ok: true, result, before: before.delivery_outbox, after: after.delivery_outbox }, null, 2));
 } catch (error) {

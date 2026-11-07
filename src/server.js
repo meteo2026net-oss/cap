@@ -191,7 +191,16 @@ function recordAlertVersion(alertId,userId,changeType) {
   .run(alertId,alertId,changeType,userId,JSON.stringify(snapshot));
 }
 function rowToCap(r) {
- return {...r, msg_type:r.msg_type, area_desc:r.area_desc, response_type:r.response_type, info_blocks:r.info_json ? JSON.parse(r.info_json) : undefined};
+ const {restriction,addresses,info_json,...rest}=r;
+ return {
+  ...rest,
+  msg_type:r.msg_type,
+  area_desc:r.area_desc,
+  response_type:r.response_type,
+  info_blocks:info_json ? JSON.parse(info_json) : undefined,
+  ...(restriction ? {restriction} : {}),
+  ...(addresses ? {addresses} : {})
+ };
 }
 
 app.get("/api/health", (_req,res)=>res.json({ok:true,service:"Meteo CAP Warning System",cap:"1.2"}));
@@ -885,26 +894,17 @@ app.patch("/api/alerts/:id",auth,roles("admin","forecaster"),(req,res)=>{
   const values={...data};
   if(Object.hasOwn(data,"info_blocks")) values.info_json=JSON.stringify(data.info_blocks);
   values.id=alert.id;
-  // Re-validate CAP rules (including Restricted/Private scope requirements) before persisting.
-  const current=db.prepare("SELECT * FROM alerts WHERE id=?").get(alert.id);
-  const merged={...current,...values};
-  // Prefer explicit JSON blocks when supplied; otherwise reuse stored blocks.
-  if(Object.hasOwn(values,"info_json")) {
-   merged.info_blocks=values.info_json?JSON.parse(values.info_json):undefined;
-  } else if(current.info_json) {
-   merged.info_blocks=JSON.parse(current.info_json);
-  } else {
-   merged.info_blocks=undefined;
+  // Enforce CAP scope-dependent fields on the post-edit state without replaying the full
+  // create-time geometry/info validation path (which can reject stored NULL optional columns).
+  const current=db.prepare("SELECT scope,restriction,addresses FROM alerts WHERE id=?").get(alert.id);
+  const nextScope=Object.hasOwn(data,"scope")?data.scope:current.scope;
+  const nextRestriction=Object.hasOwn(data,"restriction")?data.restriction:current.restriction;
+  const nextAddresses=Object.hasOwn(data,"addresses")?data.addresses:current.addresses;
+  if(nextScope==="Restricted" && (typeof nextRestriction!=="string" || !nextRestriction.trim())) {
+   return {kind:"invalid",message:"CAP Restricted scope requires a non-empty restriction description."};
   }
-  // Normalize SQLite NULL optional fields before CAP validation.
-  if(merged.restriction==null) delete merged.restriction;
-  if(merged.addresses==null) delete merged.addresses;
-  if(merged.polygon==null) merged.polygon="";
-  if(merged.circle==null) merged.circle="";
-  try {
-   validateAlert(rowToCap(merged));
-  } catch(error) {
-   return {kind:"invalid",message:error.message};
+  if(nextScope==="Private" && (typeof nextAddresses!=="string" || !nextAddresses.trim())) {
+   return {kind:"invalid",message:"CAP Private scope requires a non-empty addresses value listing intended recipients."};
   }
   const changed=db.prepare("UPDATE alerts SET "+assignments+",updated_at=CURRENT_TIMESTAMP WHERE id=@id AND workflow='draft'").run(values);
   if(changed.changes!==1) return {kind:"conflict"};

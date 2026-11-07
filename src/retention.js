@@ -65,7 +65,8 @@ export function collectOperationalMetrics(database) {
     SELECT workflow, COUNT(*) AS n FROM alerts WHERE scope='Public' GROUP BY workflow
   `).all();
   const auditCount = database.prepare(`SELECT COUNT(*) AS n FROM audit_log l
-    WHERE l.alert_id IS NULL OR EXISTS (SELECT 1 FROM alerts a WHERE a.id=l.alert_id AND a.scope='Public')`).get().n;
+    WHERE (l.alert_id IS NOT NULL AND EXISTS (SELECT 1 FROM alerts a WHERE a.id=l.alert_id AND a.scope='Public'))
+      OR (l.alert_id IS NULL AND l.action<>'retention_applied')`).get().n;
   return {
     database: {
       quick_check: quick[0]?.quick_check === "ok" ? "ok" : "failed",

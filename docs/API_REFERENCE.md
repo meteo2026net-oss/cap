@@ -5,7 +5,7 @@ Base auth: `Authorization: Bearer <jwt>` unless noted.
 ## Health
 - `GET /api/health` — liveness; includes `external_adapters_enabled: false`
 - `GET /api/health/ready` — SQLite quick_check + foreign_keys
-- `GET /api/health/metrics` — admin/publisher queue/DB metrics
+- `GET /api/health/metrics` — admin/publisher operational metrics; alert, delivery, and alert-linked audit aggregates are Public-only
 
 ## Auth / users
 - `POST /api/auth/login`

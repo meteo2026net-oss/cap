@@ -44,8 +44,10 @@ function validateReferences(value) {
     const calendar = new Date(0);
     calendar.setUTCFullYear(year, month - 1, day);
     calendar.setUTCHours(hour, minute, second, 0);
-    const offsetHour = timestamp[10] === undefined ? 0 : Number(timestamp[10]);
-    const offsetMinute = timestamp[11] === undefined ? 0 : Number(timestamp[11]);
+    // The fractional-seconds group is non-capturing in this regex:
+    // year..second are groups 1-6, Z/sign is 7-8, then offset hour/minute are 9-10.
+    const offsetHour = timestamp[9] === undefined ? 0 : Number(timestamp[9]);
+    const offsetMinute = timestamp[10] === undefined ? 0 : Number(timestamp[10]);
     if (year < 1 || calendar.getUTCFullYear() !== year || calendar.getUTCMonth() !== month - 1 ||
         calendar.getUTCDate() !== day || hour > 23 || minute > 59 || second > 59 ||
         offsetHour > 14 || offsetMinute > 59 || (offsetHour === 14 && offsetMinute !== 0)) {

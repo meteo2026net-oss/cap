@@ -38,6 +38,31 @@ test("phase7: independent receivers accept Public Alert and return Ack reference
   }
 });
 
+test("phase7: receivers resolve timezone-normalized references end to end", () => {
+  const sourceSent = "2026-11-07T10:00:00+01:00";
+  const source = { ...base, identifier: makeIdentifier(), sent: sourceSent };
+  const sourceXml = buildCapXml(source);
+  const sourceResults = [receiveCapXmlA(sourceXml), receiveCapXmlB(sourceXml)];
+  for (const result of sourceResults) {
+    assert.equal(result.ok, true, result.error);
+    assert.equal(result.stored.sent, "2026-11-07T09:00:00-00:00");
+  }
+
+  const updateXml = buildCapXml({
+    ...base,
+    identifier: makeIdentifier(),
+    sent: "2026-11-07T11:00:00+01:00",
+    msg_type: "Update",
+    references_text: `${source.sender},${source.identifier},${sourceSent}`,
+    headline: "Timezone-normalized update",
+    description: "Derived message references the exact emitted source timestamp."
+  });
+  for (const receive of [receiveCapXmlA, receiveCapXmlB]) {
+    const result = receive(updateXml, { knownMessages: [sourceResults[0].stored] });
+    assert.equal(result.ok, true, result.error);
+  }
+});
+
 test("phase7: receivers reject missing references on Update and invalid Restricted", () => {
   const originalAlert = receiveCapXmlA(buildCapXml(base));
   assert.equal(originalAlert.ok, true);

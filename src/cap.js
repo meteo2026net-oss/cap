@@ -82,7 +82,7 @@ function capDateTime(value, field) {
 function validDate(value, field) { if (value) capDateTime(value, field); }
 
 function normalizeReferences(value) {
-  const references = String(value || "").trim().split(/\\s+/).filter(Boolean);
+  const references = String(value || "").trim().split(/\s+/).filter(Boolean);
   validateReferences(value);
   return references.map(reference => {
     const [sender, identifier, sent] = reference.split(",");

@@ -165,11 +165,12 @@ function auth(req,res,next) {
    const user = db.prepare("SELECT id,username,role,active,token_version,mfa_enabled,must_change_password FROM users WHERE id=?").get(req.user.id);
    if (!user || !user.active) return res.status(401).json({error:"Account unavailable"});
    if (req.user.token_version !== user.token_version) return res.status(401).json({error:"Session expired; please sign in again"});
-   if(user.must_change_password===1) {
-    const allowedPaths=new Set(["GET /api/me","POST /api/auth/change-password","GET /api/auth/mfa/status","POST /api/auth/mfa/enroll","POST /api/auth/mfa/confirm"]);
-    if(!allowedPaths.has(req.method+" "+req.path))
-     return res.status(403).json({error:"A temporary password must be changed before using this operation",code:"PASSWORD_CHANGE_REQUIRED"});
-   }
+   const authenticationSetupPaths=new Set(["GET /api/me","POST /api/auth/change-password","GET /api/auth/mfa/status","POST /api/auth/mfa/enroll","POST /api/auth/mfa/confirm"]);
+   const requestPath=req.method+" "+req.path;
+   if(user.must_change_password===1 && !authenticationSetupPaths.has(requestPath))
+    return res.status(403).json({error:"A temporary password must be changed before using this operation",code:"PASSWORD_CHANGE_REQUIRED"});
+   if(mfaRequiredRoles.has(user.role) && user.mfa_enabled!==1 && !authenticationSetupPaths.has(requestPath))
+    return res.status(403).json({error:"MFA enrollment is required for this role before accessing protected operations",code:"MFA_REQUIRED"});
    req.user = user; next();
  } catch { return res.status(401).json({error:"Authentication required"}); }
 }

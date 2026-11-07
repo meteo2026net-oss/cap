@@ -632,7 +632,8 @@ app.use("/api/alerts",auth,(req,res,next)=>{
   if(req.body?.scope!==undefined && req.body.scope!=="Public") return res.status(403).json({error:"Creating Restricted or Private alerts is disabled until recipient authorization is configured",code:"SCOPE_AUTHORIZATION_UNCONFIGURED"});
   return next();
  }
- const idMatch=pathname.match(/^\\/api\\/alerts\\/([1-9]\\d*)(?:\\/|$)/);
+ const alertPathParts=pathname.split("/");
+ const idMatch=pathname.startsWith("/api/alerts/") && /^[1-9][0-9]*$/.test(alertPathParts[3]) ? [null,alertPathParts[3]] : null;
  if(idMatch){
   const existing=db.prepare("SELECT scope FROM alerts WHERE id=?").get(idMatch[1]);
   if(existing && existing.scope!=="Public") return res.status(404).json({error:"Alert not found"});
@@ -1145,7 +1146,8 @@ app.patch("/api/webhooks/inbox/:id/review",auth,roles("admin","reviewer"),(req,r
 
 app.use("/api/delivery",auth,(req,res,next)=>{
  const pathname=new URL(req.originalUrl,"http://localhost").pathname;
- const idMatch=pathname.match(/^\\/api\\/delivery\\/outbox\\/([1-9]\\d*)\\//);
+ const deliveryPathParts=pathname.split("/");
+ const idMatch=pathname.startsWith("/api/delivery/outbox/") && /^[1-9][0-9]*$/.test(deliveryPathParts[4]) ? [null,deliveryPathParts[4]] : null;
  if(idMatch){
   const row=db.prepare("SELECT a.scope FROM delivery_outbox d JOIN alerts a ON a.id=d.alert_id WHERE d.id=?").get(idMatch[1]);
   if(row && row.scope!=="Public") return res.status(404).json({error:"Delivery not found"});

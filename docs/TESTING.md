@@ -7,7 +7,7 @@
 
 ## Layers
 - Unit: CAP semantics, MFA, audit, delivery, retention, receivers
-- XML parser security: CAP 1.2 namespace enforcement (default/prefixed), DTD/entity rejection, and a 1 MB input limit
+- XML parser security: CAP 1.2 namespace enforcement on root and every element (default/prefixed), namespace-spoofing and foreign-child rejection, DTD/entity rejection, and a 1 MB input limit
 - Integration: API workflows, isolation, phases 4–6, lifecycle
 - Performance CI smoke: `tests/perf/cap-performance.test.js` (100/1000 synthetic messages)
 - Extended performance: `tests/perf/run-10k.mjs` (10,000 synthetic messages; automated CI run and local reproducible command)

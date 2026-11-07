@@ -221,6 +221,14 @@ test("API enforces role separation, public-feed filtering and account deactivati
   let admin = await login("admin", "Integration-Test-Admin-Password-2026");
   assert.equal((await request("/api/users", { token: admin })).status, 403,
     "an administrator without required MFA must not access protected administrator operations");
+  for (const path of ["/api/alerts", "/api/alerts/stats", "/api/alerts/export.csv"]) {
+    const blocked = await request(path, { token: admin });
+    assert.equal(blocked.status, 403,
+      "required-MFA roles must not bypass enrollment through auth-only data route " + path);
+    assert.equal(blocked.data.code, "MFA_REQUIRED");
+  }
+  assert.equal((await request("/api/auth/mfa/status", { token: admin })).status, 200,
+    "MFA setup endpoints must remain available before enrollment");
   const adminMfaStatus = await request("/api/auth/mfa/status", { token: admin });
   assert.equal(adminMfaStatus.data.required, true);
   assert.equal(adminMfaStatus.headers.get("cache-control"), "no-store",

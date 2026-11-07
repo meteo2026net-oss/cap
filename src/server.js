@@ -656,7 +656,7 @@ app.get("/api/alerts",auth,(req,res)=>{
  }
  const where = clauses.length ? "WHERE " + clauses.join(" AND ") : "";
  const total = db.prepare("SELECT COUNT(*) AS count FROM alerts " + where).get(...params).count;
- const rows = db.prepare("SELECT id,identifier,event,urgency,severity,certainty,headline,area_desc,workflow,sent,expires,status,msg_type FROM alerts " + where + " ORDER BY sent DESC,id DESC LIMIT ? OFFSET ?").all(...params,limit,offset);
+ const rows = db.prepare("SELECT id,identifier,event,urgency,severity,certainty,headline,area_desc,workflow,sent,expires,status,msg_type,scope FROM alerts " + where + " ORDER BY sent DESC,id DESC LIMIT ? OFFSET ?").all(...params,limit,offset);
  res.json({alerts:rows,pagination:{total,limit,offset,has_more:offset+rows.length<total}});
 });
 app.get("/api/review/queue",auth,roles("admin","reviewer","approver"),(req,res)=>{
@@ -669,7 +669,7 @@ app.get("/api/review/queue",auth,roles("admin","reviewer","approver"),(req,res)=
  const params=[];
  const severityClause=severity===undefined?"":" AND a.severity=?";
  if(severity!==undefined)params.push(severity);
- const rows=db.prepare(`SELECT a.id,a.identifier,a.event,a.headline,a.area_desc,a.urgency,a.severity,a.certainty,a.status,a.sent,a.expires,a.created_at,a.updated_at,a.created_by,u.username AS creator,
+ const rows=db.prepare(`SELECT a.id,a.identifier,a.event,a.headline,a.area_desc,a.urgency,a.severity,a.certainty,a.status,a.scope,a.sent,a.expires,a.created_at,a.updated_at,a.created_by,u.username AS creator,
   CAST(MAX(0,(julianday('now')-julianday(a.created_at))*86400) AS INTEGER) AS waiting_seconds
   FROM alerts a LEFT JOIN users u ON u.id=a.created_by
   WHERE a.workflow='pending'${severityClause}

@@ -627,7 +627,9 @@ async function loadAlerts(){
        return "<span>"+esc(resource.resourceDesc)+" · "+esc(resource.mimeType)+(resource.size!==undefined?" · "+esc(resource.size)+" بايت":"")+(resource.language?" · "+esc(resource.language):"")+link+"</span>";
       }).join(" | ")+"</div>"
     : "";
-   return "<article class='alertItem'><b>"+esc(a.headline)+"</b><div class='alertMeta'><span>"+esc(a.event)+"</span><span class='pill'>"+esc(a.workflow)+"</span><span class='pill "+severityClass+"'>"+esc(a.severity)+"</span><span>"+esc(a.area_desc)+"</span></div>"+resourceHtml+"<div class='actions'>"+actions.join("")+"</div></article>";
+   const scopeLabel={Public:"عام",Restricted:"مقيّد",Private:"خاص"}[a.scope]||a.scope||"";
+   const scopeClass=a.scope==="Private"?"blue":a.scope==="Restricted"?"orange":"";
+   return "<article class='alertItem'><b>"+esc(a.headline)+"</b><div class='alertMeta'><span>"+esc(a.event)+"</span><span class='pill'>"+esc(a.workflow)+"</span><span class='pill "+severityClass+"'>"+esc(a.severity)+"</span><span class='pill "+scopeClass+"'>"+esc(scopeLabel)+"</span><span>"+esc(a.area_desc)+"</span></div>"+resourceHtml+"<div class='actions'>"+actions.join("")+"</div></article>";
   }).join("")||'<p class="muted">لا توجد تحذيرات حتى الآن.</p>';
   if(["admin","reviewer","approver"].includes(currentRole))await loadReviewQueue();
  }catch(e){
@@ -649,7 +651,8 @@ async function loadReviewQueue(){
    const card=document.createElement("article");card.className="alertItem";
    const title=document.createElement("b");title.textContent=item.headline;card.append(title);
    const meta=document.createElement("p");meta.className="alertMeta";
-   meta.textContent=[item.event,item.severity,"المنشئ: "+(item.creator||"غير معروف"),"مدة الانتظار: "+Math.floor(item.waiting_seconds/3600)+" ساعة"].join(" • ");card.append(meta);
+   const scopeLabel={Public:"عام",Restricted:"مقيّد",Private:"خاص"}[item.scope]||item.scope||"";
+   meta.textContent=[item.event,item.severity,scopeLabel,"المنشئ: "+(item.creator||"غير معروف"),"مدة الانتظار: "+Math.floor(item.waiting_seconds/3600)+" ساعة"].join(" • ");card.append(meta);
    const noteLabel=document.createElement("label");noteLabel.className="small";noteLabel.textContent="ملاحظة المراجعة";
    const note=document.createElement("textarea");note.rows=2;note.maxLength=1000;note.placeholder="اكتب ملاحظة واضحة للمراجعة (5 أحرف على الأقل)";noteLabel.append(note);card.append(noteLabel);
    const actions=document.createElement("div");actions.className="actions";

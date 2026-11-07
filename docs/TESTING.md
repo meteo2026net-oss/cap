@@ -13,5 +13,6 @@
 
 The 10,000-message harness measures validation, XML build/parse, insert into the actual application `alerts` schema, and scoped SQLite reads. Its dataset is synthetic and it is not a production load test.
 - Security: role gates, cache headers, scope isolation
+- Browser asset / DOM security: `tests/static-assets-security.test.js` checks SRI, anonymous CORS, no-referrer attributes, CSP permissions for the Leaflet Draw CDN, HTML escaping of dynamic dashboard templates, and the reviewed HTML insertion points.
 
 CI must pass on the same SHA used for acceptance claims.

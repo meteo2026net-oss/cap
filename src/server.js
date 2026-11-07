@@ -631,7 +631,10 @@ app.use("/api/alerts",auth,(req,res,next)=>{
   return next();
  }
  if(req.method==="POST" && normalizedPath==="/api/alerts"){
-  if(["Restricted","Private"].includes(req.body?.scope)) return res.status(403).json({error:"Creating Restricted or Private alerts is disabled until recipient authorization is configured",code:"SCOPE_AUTHORIZATION_UNCONFIGURED"});
+  if(req.body?.scope==="Restricted" && typeof req.body?.restriction==="string" && req.body.restriction.trim())
+   return res.status(403).json({error:"Creating Restricted alerts is disabled until recipient authorization is configured",code:"SCOPE_AUTHORIZATION_UNCONFIGURED"});
+  if(req.body?.scope==="Private" && typeof req.body?.addresses==="string" && req.body.addresses.trim())
+   return res.status(403).json({error:"Creating Private alerts is disabled until recipient authorization is configured",code:"SCOPE_AUTHORIZATION_UNCONFIGURED"});
   return next();
  }
  const alertPathParts=normalizedPath.split("/");

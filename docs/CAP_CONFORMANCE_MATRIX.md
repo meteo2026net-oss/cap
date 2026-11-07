@@ -23,15 +23,16 @@ This matrix records the automated conformance coverage currently present in this
 | Independent semantic CAP rules | `tests/cap-semantic.test.js`: required headers, enumerations, date-time/timezone, onset/expiry order, Alert/Update/Cancel/Ack/Error info and reference rules, Restricted/Private scope fields, and rejection before XML emission | Implemented |
 | Validation atomicity | `tests/cap-validation-atomicity.integration.test.js`: failed create/derive/patch CAP validation leaves no partial alert, version, or outbox rows | Implemented |
 | Phase 4 reference/security/reliability | `tests/cap-phase4-security-reliability.integration.test.js`: Update/Cancel references match source sender/identifier/sent; duplicate cancel rejection; role-stage gates; unauthenticated isolation; SQLite backup/restore with quick_check and foreign_key_check; process restart durability | Implemented |
-| Phase 6 performance | `tests/perf/cap-performance.test.js`: validate/build/parse at 100 and 1000 messages; SQLite mixed read stats | Implemented |
-| Phase 7 independent receivers | `tools/cap-receivers/*`, `tests/cap-phase7-receivers.test.js`: dual local receivers, Arabic/compact XML, duplicates, update-before-alert policy | Implemented |
-| Phase 6 operational readiness | `tests/retention.test.js`, `tests/cap-phase6-ops.integration.test.js`, `docs/OPERATIONAL_ACCEPTANCE.md`: concurrent create/submit sample, metrics endpoint, local retention without audit deletion, ops acceptance split | Implemented |
+| Phase 6 performance | `tests/perf/cap-performance.test.js`: validate/build/parse at 100 and 1000 messages; SQLite mixed read stats; `npm run perf:10k` adds a manual 10,000-message run against CAP functions and the application alerts schema | CI smoke covered; 10k manual run pending |
+| Phase 7 independent receivers | `tools/cap-receivers/*`, `tests/cap-phase7-receivers.test.js`: XML parser path, DTD/entity rejection, exact sender/identifier/sent reference matching, separate SQLite stores, restart-safe deduplication, and Update-before-Alert rejection | Local receiver harness covered; no external receiver certification |
+| Phase 6 operational readiness | `tests/retention.test.js`, `tests/cap-phase6-ops.integration.test.js`, `tests/retention-audit-atomicity.test.js`, `docs/OPERATIONAL_ACCEPTANCE.md`: concurrent create/submit sample, metrics endpoint, retention/audit atomicity and rollback, post-commit checkpoint warning, CLI system audit event | Implemented locally; latest SHA CI pending |
 | Phase 5 interop lifecycle | `tests/cap-interop-lifecycle.test.js` and `tests/cap-phase5-interop.integration.test.js`: Ack/Error API derive/publish, reference fidelity, in-flight duplicate rejection, CAP XML parse/round-trip, whitespace tolerance, simulated external receiver Ack, internal delivery retry, Restricted isolation, audit presence | Implemented |
 
 ## Required follow-up before interoperability acceptance
 
 - Continue positive and negative cases for optional CAP elements and malformed calendar date-times; the newly covered metadata/resource/parameter cases remain subject to XSD and receiver interoperability checks.
 - Run the isolated restore drill (`npm run restore:drill -- <backup-file>`) against a representative backup and retain its report; CI now covers the drill workflow with a synthetic database.
+- Execute `npm run perf:10k` on the target deployment host and retain the machine-readable report; the new manual harness is not a CI result.
 - Validate representative production-profile messages with an independent CAP validator in addition to the bundled OASIS XSD.
 - Exchange Alert, Update, Cancel, Ack, and Error test messages with each intended receiving organization/provider.
 - Record receiver name/version, test date, message identifiers, acknowledgements, rejected-message diagnostics, and written acceptance.

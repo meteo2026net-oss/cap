@@ -1243,6 +1243,30 @@ test("API enforces role separation, public-feed filtering and account deactivati
     alert.identifier === privateOk.data.identifier
   ), "Restricted and Private drafts must never appear on the public feed");
 
+  const scopeFiltered = await request("/api/alerts?scope=Restricted&workflow=draft", { token: forecaster });
+  assert.equal(scopeFiltered.status, 200, "alert list should accept a CAP scope filter");
+  assert.ok((scopeFiltered.data.alerts || []).length >= 1, "Restricted draft filter should return at least one alert");
+  assert.ok((scopeFiltered.data.alerts || []).every(alert => alert.scope === "Restricted"),
+    "scope=Restricted filter must return only Restricted alerts");
+  assert.ok((scopeFiltered.data.alerts || []).some(alert => alert.id === restrictedOk.data.id),
+    "Restricted filter should include the newly created Restricted draft");
+
+  const invalidScopeFilter = await request("/api/alerts?scope=Worldwide", { token: forecaster });
+  assert.equal(invalidScopeFilter.status, 400, "invalid CAP scope filter values must be rejected");
+
+  const restrictedPatchDenied = await request(`/api/alerts/${restrictedOk.data.id}`, {
+    token: forecaster, method: "PATCH", body: { scope: "Private" }
+  });
+  assert.equal(restrictedPatchDenied.status, 400,
+    "changing a draft to Private without addresses must be rejected");
+  assert.match(restrictedPatchDenied.data.error || "", /addresses/i);
+
+  const privatePatchOk = await request(`/api/alerts/${privateOk.data.id}`, {
+    token: forecaster, method: "PATCH",
+    body: { addresses: "ops@example.test duty@example.test night@example.test", headline: "Private advisory revised" }
+  });
+  assert.equal(privatePatchOk.status, 200, "Private draft address updates should succeed");
+
   let publishedUpdate = null;
   for (const msg_type of ["Update", "Cancel"]) {
     let derived;

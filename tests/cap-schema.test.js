@@ -77,7 +77,11 @@ test("all CAP message types conform to the official OASIS CAP 1.2 XSD", { skip: 
       areas: [{ areaDesc: "Test district", polygon: "51,0 52,0 52,1 51,1 51,0" }]
     }]
   };
-  const references = "alerts@example.test,urn:uuid:previous-id,2026-11-03T12:00:00-00:00";
+  const references = [
+    "alerts@example.test,urn:uuid:previous-id,2026-11-03T13:00:00+01:00",
+    "alerts@example.test,urn:uuid:previous-id-2,2026-11-03T07:00:00-05:00",
+    "alerts@example.test,urn:uuid:previous-id-3,2026-11-03T12:00:00Z"
+  ].join(" ");
   const cases = ["Alert", "Update", "Cancel", "Ack", "Error"].map(msg_type => ({
     msg_type,
     ...base,

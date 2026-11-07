@@ -31,8 +31,8 @@ async function fixture() {
       status TEXT,
       reviewed_at TEXT
     );
-    CREATE TABLE alerts (id INTEGER PRIMARY KEY, workflow TEXT);
-    CREATE TABLE audit_log (id INTEGER PRIMARY KEY, action TEXT);
+    CREATE TABLE alerts (id INTEGER PRIMARY KEY, workflow TEXT, scope TEXT);
+    CREATE TABLE audit_log (id INTEGER PRIMARY KEY, alert_id INTEGER, action TEXT);
   `);
   return { root, db };
 }
@@ -77,14 +77,18 @@ test("applyOperationalRetention never deletes audit rows", async () => {
 test("collectOperationalMetrics reports queue and database health", async () => {
   const { root, db } = await fixture();
   try {
-    db.prepare("INSERT INTO alerts(workflow) VALUES ('published'), ('draft')").run();
+    db.prepare("INSERT INTO alerts(workflow,scope) VALUES ('published','Public'), ('draft','Private')").run();
     db.prepare(`INSERT INTO delivery_outbox(alert_id,channel,payload,status,created_at,updated_at)
-      VALUES (1,'cap_feed','{}','queued',datetime('now'),datetime('now'))`).run();
+      VALUES (1,'cap_feed','{}','queued',datetime('now'),datetime('now')),
+             (2,'cap_feed','private-payload','queued',datetime('now'),datetime('now'))`).run();
+    db.prepare("INSERT INTO audit_log(alert_id,action) VALUES (1,'public_event'), (2,'private_event')").run();
     const metrics = collectOperationalMetrics(db);
     assert.equal(metrics.database.quick_check, "ok");
-    assert.equal(metrics.delivery_outbox.queued, 1);
+    assert.equal(metrics.delivery_outbox.queued, 1, "queue metrics must exclude non-Public deliveries");
     assert.equal(metrics.external_adapters_enabled, false);
     assert.equal(metrics.alerts_by_workflow.published, 1);
+    assert.equal(metrics.alerts_by_workflow.draft, undefined, "workflow metrics must exclude non-Public alerts");
+    assert.equal(metrics.audit_log_entries, 1, "audit metrics must exclude events attached to non-Public alerts");
   } finally {
     db.close();
     await fs.rm(root, { recursive: true, force: true });

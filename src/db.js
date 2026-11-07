@@ -10,6 +10,9 @@ const databasePath = path.resolve(process.env.DB_PATH || path.join("storage", "c
 fs.mkdirSync(path.dirname(databasePath), { recursive: true });
 export const db = new Database(databasePath);
 db.pragma("journal_mode = WAL");
+// Allow short-lived concurrent writers (e.g. API requests and background jobs)
+// to wait for SQLite's single-writer lock instead of failing immediately.
+db.pragma("busy_timeout = 5000");
 db.pragma("foreign_keys = ON");
 
 db.exec(`

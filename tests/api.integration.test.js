@@ -1648,11 +1648,11 @@ test("API enforces role separation, public-feed filtering and account deactivati
     const insertNonWarning = feedControlDb.prepare(`
       INSERT INTO alerts
         (identifier,sender,sent,status,msg_type,scope,event,category,urgency,severity,certainty,
-         headline,description,area_desc,language,workflow)
+         headline,description,area_desc,circle,language,workflow)
       VALUES
         (?, 'feed-control@example.test', ?, 'Actual', ?, 'Public', 'Synthetic control',
          'Met', 'Unknown', 'Unknown', 'Unknown', 'Synthetic control', 'Not a public warning',
-         'Test area', 'en-US', 'published')
+         'Test area', '33.5,36.2 5', 'en-US', 'published')
     `);
     feedControlDb.transaction(() => {
       insertNonWarning.run(feedControlIdentifiers[0], new Date().toISOString(), "Ack");

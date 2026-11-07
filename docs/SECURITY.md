@@ -20,7 +20,7 @@ The application does not yet have an institution-approved recipient/grant model 
 
 Until that model is implemented and approved, the API applies a temporary Public-only policy:
 - Authenticated alert lists, detail reads, CSV exports, statistics, review queues, CAP XML, versions, review history, timelines, and relationship traversal expose Public-scope records only. A direct request for a non-Public record returns the same 404 response as a missing record.
-- Relationship traversal filters both parent and child candidates to Public, preventing a Public root from revealing a Restricted/Private linked message.
+- Relationship traversal filters both parent and child candidates to Public, preventing a Public root from revealing a Restricted/Private linked message. Recipient-only CAP fields (restriction/addresses) are also suppressed from Public detail, XML, CSV, review-queue, and historical-version responses, including legacy Public rows that still contain those columns.
 - New Restricted/Private alerts and promotion of a Public draft into either non-Public scope are rejected with SCOPE_AUTHORIZATION_UNCONFIGURED.
 - Generic audit listing/export and operational metrics omit events/aggregates attached to non-Public alerts. Delivery outbox listing/counts are Public-only; direct operations on non-Public deliveries are hidden, and global retry/recovery maintenance is blocked while any non-Public outbox row exists.
 - Public JSON/GeoJSON feeds retain their separate published + Public + Actual + unexpired + Alert/Update/Cancel filters.

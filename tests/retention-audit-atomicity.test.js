@@ -4,6 +4,7 @@ import Database from "better-sqlite3";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { execFileSync } from "node:child_process";
 import { installAuditLogGuards, verifyAuditChain } from "../src/audit.js";
 import { applyOperationalRetentionWithAudit } from "../src/retention.js";
 
@@ -94,4 +95,42 @@ test("external checkpoint refresh occurs after commit and reports filesystem fai
     db.close();
     fs.rmSync(root, { recursive: true, force: true });
   }
+});
+
+test("retention CLI records its system audit event through the atomic path", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "cap-retention-cli-"));
+  const databasePath = path.join(root, "cap.sqlite");
+  const env = {
+    ...process.env,
+    DB_PATH: databasePath,
+    CAP_DELIVERY_RETENTION_DAYS: "90",
+    CAP_WEBHOOK_RETENTION_DAYS: "90"
+  };
+  try {
+    execFileSync(process.execPath, ["--input-type=module", "-e", `
+      const { db } = await import("./src/db.js");
+      const alert = db.prepare(`
+        INSERT INTO alerts
+          (identifier,sender,sent,status,msg_type,scope,event,category,urgency,severity,certainty,headline,description,area_desc)
+        VALUES
+          ('urn:uuid:retention-cli-test','cli@example.test','2026-11-07T00:00:00.000-00:00','Test','Alert','Public','Retention test','Met','Expected','Minor','Likely','Retention test','CLI retention fixture','Test area')
+      `).run();
+      db.prepare(`
+        INSERT INTO delivery_outbox(alert_id,channel,payload,status,created_at,updated_at,delivered_at)
+        VALUES (?,'cap_feed','{}','delivered',datetime('now','-120 days'),datetime('now','-120 days'),datetime('now','-120 days'))
+      `).run(alert.lastInsertRowid);
+      db.close();
+    `], { cwd: process.cwd(), env, stdio: "pipe" });
+    const output = execFileSync(process.execPath, ["src/apply-retention.js"], {
+      cwd: process.cwd(), env, encoding: "utf8", stdio: "pipe"
+    });
+    assert.match(output, /retention_applied|delivery/);
+    const db = new Database(databasePath);
+    try {
+      assert.equal(db.prepare("SELECT COUNT(*) AS n FROM delivery_outbox").get().n, 0);
+      const event = db.prepare("SELECT user_id,action FROM audit_log WHERE action='retention_applied'").get();
+      assert.ok(event);
+      assert.equal(event.user_id, null);
+    } finally { db.close(); }
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });

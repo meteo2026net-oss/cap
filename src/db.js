@@ -29,6 +29,8 @@ CREATE TABLE IF NOT EXISTS alerts (
  status TEXT NOT NULL CHECK(status IN ('Actual','Exercise','System','Test')),
  msg_type TEXT NOT NULL CHECK(msg_type IN ('Alert','Update','Cancel','Ack','Error')),
  scope TEXT NOT NULL CHECK(scope IN ('Public','Restricted','Private')),
+ restriction TEXT,
+ addresses TEXT,
  references_text TEXT,
  event TEXT NOT NULL,
  category TEXT NOT NULL,

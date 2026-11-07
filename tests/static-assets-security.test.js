@@ -49,7 +49,7 @@ test("dashboard escapes untrusted values before inserting generated HTML", () =>
     "esc(row.headline||row.identifier||", "esc(row.last_error)",
     "esc(row.channel)", "esc(row.attempts)", "esc(row.max_attempts)",
     "esc(row.id)", "esc(row.received_at)", "esc(row.reviewer_username)",
-    "esc(row.reviewed_at||", "esc(row.review_note)", "esc(row.payload)"
+    "esc(row.reviewed_at||", "esc(row.review_note)", "esc(JSON.stringify(row.payload,null,2))"
   ]) {
     assert.ok(dashboard.includes(field), "dynamic HTML output must escape " + field);
   }

@@ -228,6 +228,7 @@ test("independent OASIS XSD validator rejects malformed CAP documents", { skip: 
       certainty: "Likely",
       headline: "Heavy rain warning",
       description: "Heavy rain is possible.",
+      resources: [{ resourceDesc: "Warning map", mimeType: "image/png", uri: "https://example.org/warning.png" }],
       areas: [{ areaDesc: "Test district", circle: "51.5,-0.1 10" }]
     }]
   });
@@ -238,6 +239,9 @@ test("independent OASIS XSD validator rejects malformed CAP documents", { skip: 
     ["missing required status", xml.replace(/<status>[^<]*<\/status>/, "")],
     ["missing required message type", xml.replace(/<msgType>[^<]*<\/msgType>/, "")],
     ["missing required scope", xml.replace(/<scope>[^<]*<\/scope>/, "")],
+    ["invalid CAP calendar date-time", xml.replace(/<sent>[^<]*<\/sent>/, "<sent>2026-02-30T05:00:00-00:00</sent>")],
+    ["missing required resource description", xml.replace(/<resourceDesc>[^<]*<\/resourceDesc>/, "")],
+    ["missing required resource MIME type", xml.replace(/<mimeType>[^<]*<\/mimeType>/, "")],
     ["invalid severity enumeration", xml.replace("<severity>Moderate</severity>", "<severity>Catastrophic</severity>")],
     ["invalid message type enumeration", xml.replace("<msgType>Alert</msgType>", "<msgType>Broadcast</msgType>")],
     ["missing required event", xml.replace(/<event>[^<]*<\/event>/, "")],

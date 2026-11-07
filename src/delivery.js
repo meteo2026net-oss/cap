@@ -4,6 +4,12 @@ const CHANNELS = new Set(["cap_feed", "webhook", "email", "sms", "push"]);
 const MAX_BACKOFF_SECONDS = 3600;
 const MAINTENANCE_BATCH_SIZE = 500;
 
+export function hasNonPublicDeliveryOutbox(database) {
+  return Boolean(database.prepare(`SELECT 1
+    FROM delivery_outbox d JOIN alerts a ON a.id=d.alert_id
+    WHERE a.scope<>'Public' LIMIT 1`).get());
+}
+
 function hashLeaseToken(token) {
   return createHash("sha256").update(token, "utf8").digest("hex");
 }

@@ -1120,6 +1120,8 @@ app.post("/api/delivery/outbox/:id/retry",auth,roles("admin","publisher"),(req,r
 });
 
 app.get("/api/alerts/:id/cap.xml",auth,(req,res)=>{
+ res.set("Cache-Control","no-store");
+ res.set("Pragma","no-cache");
  const a=db.prepare("SELECT * FROM alerts WHERE id=?").get(req.params.id);
  if(!a) return res.status(404).json({error:"Alert not found"});
  try {

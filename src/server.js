@@ -866,7 +866,7 @@ app.post("/api/alerts",auth,roles("admin","forecaster"),(req,res)=>{
 });
 app.post("/api/alerts/:id/derive",auth,roles("admin","forecaster"),(req,res)=>{
  const msgType=req.body?.msg_type;
- if(!["Update","Cancel"].includes(msgType)) return res.status(400).json({error:"msg_type must be Update or Cancel"});
+ if(!["Update","Cancel","Ack","Error"].includes(msgType)) return res.status(400).json({error:"msg_type must be Update, Cancel, Ack or Error"});
  const createDerived=db.transaction(()=>{
   const original=db.prepare("SELECT * FROM alerts WHERE id=?").get(req.params.id);
   if(!original) return {kind:"missing"};
@@ -877,14 +877,19 @@ app.post("/api/alerts/:id/derive",auth,roles("admin","forecaster"),(req,res)=>{
    const existing=db.prepare("SELECT id FROM alerts WHERE msg_type='Cancel' AND references_text=? LIMIT 1").get(references);
    if(existing) return {kind:"already_cancelled",existingId:existing.id};
   }
+  if(msgType==="Ack" || msgType==="Error") {
+   const existing=db.prepare("SELECT id FROM alerts WHERE msg_type=? AND references_text=? AND workflow IN ('draft','pending','approved') LIMIT 1").get(msgType,references);
+   if(existing) return {kind:"duplicate_derived",existingId:existing.id,msgType};
+  }
   const {id:_id,approved_by:_approvedBy,published_at:_publishedAt,created_at:_createdAt,updated_at:_updatedAt,...sourceFields}=original;
+  const clearsInfo=["Cancel","Ack","Error"].includes(msgType);
   const alert={...sourceFields,identifier:makeIdentifier(),sent,status:"Test",msg_type:msgType,
-   references_text:references,info_json:msgType==="Cancel"?null:original.info_json,workflow:"draft",created_by:req.user.id,
+   references_text:references,info_json:clearsInfo?null:original.info_json,workflow:"draft",created_by:req.user.id,
    restriction:original.restriction||null,addresses:original.addresses||null};
   try {
    const forValidation={
     ...alert,
-    info_blocks:alert.info_json?JSON.parse(alert.info_json):(msgType==="Cancel"?[]:undefined)
+    info_blocks:alert.info_json?JSON.parse(alert.info_json):(clearsInfo?[]:undefined)
    };
    if(!forValidation.restriction) delete forValidation.restriction;
    if(!forValidation.addresses) delete forValidation.addresses;
@@ -903,6 +908,7 @@ app.post("/api/alerts/:id/derive",auth,roles("admin","forecaster"),(req,res)=>{
  if(result.kind==="missing") return res.status(404).json({error:"Source alert not found"});
  if(result.kind==="source_not_reviewed") return res.status(409).json({error:"Only published CAP messages can be used as the source of an update or cancellation"});
  if(result.kind==="already_cancelled") return res.status(409).json({error:"A cancellation for this CAP message already exists",existing_cancel_id:result.existingId});
+ if(result.kind==="duplicate_derived") return res.status(409).json({error:`An in-flight ${result.msgType} for this CAP message already exists`,existing_id:result.existingId});
  if(result.kind==="invalid_cap") return res.status(400).json({error:result.message||"Derived CAP message failed validation"});
  res.status(201).json({id:result.id,identifier:result.identifier,msg_type:msgType,status:"Test",workflow:"draft",references:result.references});
 });
@@ -1011,7 +1017,7 @@ app.post("/api/alerts/:id/publish",auth,roles("admin","publisher"),(req,res)=>{
   if(a.workflow!=="approved") return {kind:"conflict"};
   if(a.approved_by===req.user.id) return {kind:"forbidden"};
   let cancellationSource=null;
-  if(["Update","Cancel"].includes(a.msg_type)) {
+  if(["Update","Cancel","Ack","Error"].includes(a.msg_type)) {
    const references=(a.references_text || "").trim().split(/\s+/);
    if(references.length!==1) return {kind:"invalid_reference"};
    const parts=references[0].split(",");

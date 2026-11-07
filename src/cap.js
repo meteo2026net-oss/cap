@@ -1,6 +1,17 @@
 import { create } from "xmlbuilder2";
 import { randomUUID } from "node:crypto";
 
+function asArray(value) {
+  if (value === undefined || value === null || value === "") return [];
+  return Array.isArray(value) ? value : [value];
+}
+
+function textValue(value) {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value === "object" && value["#"] !== undefined) return String(value["#"]);
+  return String(value);
+}
+
 const allowed = {
   urgency: ["Immediate", "Expected", "Future", "Past", "Unknown"],
   severity: ["Extreme", "Severe", "Moderate", "Minor", "Unknown"],
@@ -338,4 +349,112 @@ export function buildCapXml(a) {
   };
   if (!["Cancel","Ack","Error"].includes(a.msg_type)) alert.info = infos.map(normalizeInfo);
   return create({ alert }).end({ prettyPrint: true });
+}
+
+/**
+ * Parse a CAP 1.2 XML document into the internal alert representation used by validateAlert/buildCapXml.
+ * Accepts whitespace and element-order variations produced by xmlbuilder2 and typical receivers.
+ */
+export function parseCapXml(xml) {
+  if (typeof xml !== "string" || !xml.trim()) throw new Error("CAP XML is required");
+  let document;
+  try {
+    document = create(xml).end({ format: "object" });
+  } catch {
+    throw new Error("CAP XML is not well-formed");
+  }
+  const alert = document?.alert;
+  if (!alert || typeof alert !== "object") throw new Error("CAP XML must contain a root alert element");
+
+  const infoNodes = asArray(alert.info);
+  const info_blocks = infoNodes.map(info => {
+    const categories = asArray(info.category).map(textValue).filter(Boolean);
+    const responseTypes = asArray(info.responseType).map(textValue).filter(Boolean);
+    const areas = asArray(info.area).map(area => ({
+      areaDesc: textValue(area.areaDesc) || "",
+      polygon: textValue(area.polygon) || "",
+      circle: textValue(area.circle) || "",
+      altitude: textValue(area.altitude),
+      ceiling: textValue(area.ceiling),
+      geocode: asArray(area.geocode).map(code => ({
+        valueName: textValue(code.valueName) || "",
+        value: textValue(code.value) || ""
+      })).filter(code => code.valueName || code.value)
+    }));
+    const resources = asArray(info.resource).map(resource => ({
+      resourceDesc: textValue(resource.resourceDesc) || "",
+      mimeType: textValue(resource.mimeType) || "",
+      size: textValue(resource.size),
+      uri: textValue(resource.uri) || "",
+      derefUri: textValue(resource.derefUri) || "",
+      digest: textValue(resource.digest) || ""
+    }));
+    const parameters = asArray(info.parameter).map(parameter => ({
+      valueName: textValue(parameter.valueName) || "",
+      value: textValue(parameter.value) || ""
+    }));
+    return {
+      language: textValue(info.language) || "en-US",
+      categories: categories.length ? categories : undefined,
+      category: categories[0],
+      event: textValue(info.event) || "",
+      urgency: textValue(info.urgency) || "Unknown",
+      severity: textValue(info.severity) || "Unknown",
+      certainty: textValue(info.certainty) || "Unknown",
+      effective: textValue(info.effective) || "",
+      onset: textValue(info.onset) || "",
+      expires: textValue(info.expires) || "",
+      headline: textValue(info.headline) || "",
+      description: textValue(info.description) || "",
+      instruction: textValue(info.instruction) || "",
+      responseTypes: responseTypes.length ? responseTypes : undefined,
+      response_type: responseTypes[0] || "",
+      areas,
+      resources: resources.length ? resources : undefined,
+      parameters: parameters.length ? parameters : undefined
+    };
+  });
+
+  const first = info_blocks[0] || {};
+  const firstArea = first.areas?.[0] || {};
+  const parsed = {
+    identifier: textValue(alert.identifier) || "",
+    sender: textValue(alert.sender) || "",
+    sent: textValue(alert.sent) || "",
+    status: textValue(alert.status) || "Test",
+    msg_type: textValue(alert.msgType) || "Alert",
+    scope: textValue(alert.scope) || "Public",
+    restriction: textValue(alert.restriction),
+    addresses: textValue(alert.addresses),
+    references_text: textValue(alert.references) || "",
+    note: textValue(alert.note) || "",
+    source: textValue(alert.source) || "",
+    event: first.event || "",
+    category: first.category || "Met",
+    urgency: first.urgency || "Unknown",
+    severity: first.severity || "Unknown",
+    certainty: first.certainty || "Unknown",
+    headline: first.headline || "",
+    description: first.description || "",
+    instruction: first.instruction || "",
+    response_type: first.response_type || "",
+    effective: first.effective || "",
+    onset: first.onset || "",
+    expires: first.expires || "",
+    language: first.language || "en-US",
+    area_desc: firstArea.areaDesc || "",
+    polygon: firstArea.polygon || "",
+    circle: firstArea.circle || "",
+    info_blocks: ["Cancel", "Ack", "Error"].includes(textValue(alert.msgType) || "Alert") ? [] : info_blocks
+  };
+  validateAlert(parsed);
+  return parsed;
+}
+
+/** Export then re-import a CAP message and return both representations for interoperability checks. */
+export function roundTripCap(input) {
+  const xml = buildCapXml(input);
+  const parsed = parseCapXml(xml);
+  const xmlAgain = buildCapXml(parsed);
+  return { xml, parsed, xmlAgain };
 }

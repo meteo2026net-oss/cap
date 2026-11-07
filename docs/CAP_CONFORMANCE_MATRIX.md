@@ -23,6 +23,7 @@ This matrix records the automated conformance coverage currently present in this
 | Independent semantic CAP rules | `tests/cap-semantic.test.js`: required headers, enumerations, date-time/timezone, onset/expiry order, Alert/Update/Cancel/Ack/Error info and reference rules, Restricted/Private scope fields, and rejection before XML emission | Implemented |
 | Validation atomicity | `tests/cap-validation-atomicity.integration.test.js`: failed create/derive/patch CAP validation leaves no partial alert, version, or outbox rows | Implemented |
 | Phase 4 reference/security/reliability | `tests/cap-phase4-security-reliability.integration.test.js`: Update/Cancel references match source sender/identifier/sent; duplicate cancel rejection; role-stage gates; unauthenticated isolation; SQLite backup/restore with quick_check and foreign_key_check; process restart durability | Implemented |
+| Phase 5 interop lifecycle | `tests/cap-interop-lifecycle.test.js` and `tests/cap-phase5-interop.integration.test.js`: Ack/Error API derive/publish, reference fidelity, in-flight duplicate rejection, CAP XML parse/round-trip, whitespace tolerance, simulated external receiver Ack, internal delivery retry, Restricted isolation, audit presence | Implemented |
 
 ## Required follow-up before interoperability acceptance
 

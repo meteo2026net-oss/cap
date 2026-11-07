@@ -203,7 +203,15 @@ function rowToCap(r) {
  };
 }
 
-app.get("/api/health", (_req,res)=>res.json({ok:true,service:"Meteo CAP Warning System",cap:"1.2"}));
+app.get("/api/health", (_req,res)=>res.json({
+ ok:true,
+ service:"Meteo CAP Warning System",
+ version:"0.1.0",
+ cap:"1.2",
+ external_adapters_enabled:false,
+ public_feed_scopes:["Public"],
+ supported_scopes:["Public","Restricted","Private"]
+}));
 app.get("/api/health/ready", (_req,res)=>{
  try {
   const sqlite = db.pragma("quick_check");
@@ -214,12 +222,16 @@ app.get("/api/health/ready", (_req,res)=>{
   return res.status(ok ? 200 : 503).json({
    ok,
    service:"Meteo CAP Warning System",
+   version:"0.1.0",
+   cap:"1.2",
+   external_adapters_enabled:false,
    checks:{database:databaseOk ? "ok" : "failed",foreign_keys:foreignKeysOk ? "ok" : "failed"}
   });
  } catch {
   return res.status(503).json({
    ok:false,
    service:"Meteo CAP Warning System",
+   version:"0.1.0",
    checks:{database:"unavailable"}
   });
  }

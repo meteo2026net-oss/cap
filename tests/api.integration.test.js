@@ -12,6 +12,8 @@ import { appendAuditLog } from "../src/audit.js";
 import { totpAt } from "../src/mfa.js";
 
 const serverEntry = fileURLToPath(new URL("../src/server.js", import.meta.url));
+// Parent-process crypto for webhook source bootstrap must match the child server key.
+if (!process.env.MFA_ENCRYPTION_KEY) process.env.MFA_ENCRYPTION_KEY = "a".repeat(64);
 
 async function reservePort() {
   const server = createServer();
@@ -116,13 +118,78 @@ test("API enforces role separation, public-feed filtering and account deactivati
   const webhookTimestamp = Math.floor(Date.now() / 1000);
   const webhookBody = JSON.stringify({ provider: "synthetic-test", event: "inbound-test", alert: { headline: "Not an operational alert" } });
   const webhookSecret = "integration-webhook-secret-that-is-at-least-32-bytes";
+  const webhookSourceKey = "integration-source";
+  // Seed an organization-bound webhook source into the live test database before ingress checks.
+  {
+    const { createOrganization, installRecipientSchema, requestOrganizationMembership, transitionOrganizationMembership } = await import("../src/recipient-auth.js");
+    const { createWebhookSource, ensureWebhookSourcesSchema } = await import("../src/webhook-sources.js");
+    const database = new Database(path.join(cwd, "storage", "cap.sqlite"));
+    try {
+      installRecipientSchema(database);
+      ensureWebhookSourcesSchema(database);
+      const adminRow = database.prepare("SELECT id FROM users WHERE username='admin'").get();
+      assert.ok(adminRow, "admin user must exist before webhook source bootstrap");
+      let org = database.prepare("SELECT id FROM organizations WHERE slug='integration-org'").get();
+      if (!org) {
+        const orgId = createOrganization(database, { slug: "integration-org", name: "Integration Org", actorUserId: adminRow.id });
+        org = { id: orgId };
+      }
+      const membershipId = requestOrganizationMembership(database, {
+        organizationId: org.id, userId: adminRow.id, actorUserId: adminRow.id
+      });
+      try {
+        transitionOrganizationMembership(database, {
+          membershipId, nextStatus: "active", actorUserId: adminRow.id
+        });
+      } catch {}
+      const existingSource = database.prepare("SELECT id FROM webhook_sources WHERE source_key=?").get(webhookSourceKey);
+      if (!existingSource) {
+        createWebhookSource(database, {
+          organizationId: org.id,
+          sourceKey: webhookSourceKey,
+          secret: webhookSecret,
+          label: "integration",
+          actorUserId: adminRow.id
+        });
+      }
+    } finally {
+      database.close();
+    }
+  }
   const webhookSignature = createWebhookSignature(webhookSecret, webhookTimestamp, webhookBody);
   const sendWebhook = (body, timestamp = webhookTimestamp, signature = webhookSignature, contentType = "application/json") =>
     fetch(base + "/api/webhooks/inbound", {
       method: "POST",
-      headers: { "Content-Type": contentType, "X-Webhook-Timestamp": String(timestamp), "X-Webhook-Signature": signature },
+      headers: {
+        "Content-Type": contentType,
+        "X-Webhook-Timestamp": String(timestamp),
+        "X-Webhook-Signature": signature,
+        "X-Webhook-Source": webhookSourceKey
+      },
       body
     });
+  // Missing source header must be rejected before signature checks.
+  const missingSource = await fetch(base + "/api/webhooks/inbound", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Webhook-Timestamp": String(webhookTimestamp),
+      "X-Webhook-Signature": webhookSignature
+    },
+    body: webhookBody
+  });
+  assert.equal(missingSource.status, 401, "webhooks without X-Webhook-Source must be rejected");
+  const unknownSource = await fetch(base + "/api/webhooks/inbound", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Webhook-Timestamp": String(webhookTimestamp),
+      "X-Webhook-Signature": webhookSignature,
+      "X-Webhook-Source": "unknown-source"
+    },
+    body: webhookBody
+  });
+  assert.equal(unknownSource.status, 401, "unknown webhook sources must be rejected");
   const concurrentWebhookResponses = await Promise.all(
     Array.from({ length: 8 }, () => sendWebhook(webhookBody))
   );

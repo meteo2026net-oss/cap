@@ -5,6 +5,7 @@ import bcrypt from "bcryptjs";
 import { installAuditLogGuards } from "./audit.js";
 import { migrateLeaseTokenStorage } from "./lease-migration.js";
 import { initializeWebhookReplayStore } from "./webhook-replay.js";
+import { ensureWebhookSourcesSchema } from "./webhook-sources.js";
 import { installRecipientSchema } from "./recipient-auth.js";
 
 const databasePath = path.resolve(process.env.DB_PATH || path.join("storage", "cap.sqlite"));
@@ -171,6 +172,7 @@ CREATE INDEX IF NOT EXISTS idx_delivery_alert ON delivery_outbox(alert_id);
  `);
  const webhookInboxColumns = db.prepare("PRAGMA table_info(webhook_inbox)").all().map(column => column.name);
  if (!webhookInboxColumns.includes("reviewed_by")) db.exec("ALTER TABLE webhook_inbox ADD COLUMN reviewed_by INTEGER REFERENCES users(id)");
+ ensureWebhookSourcesSchema(db);
  db.exec("CREATE INDEX IF NOT EXISTS idx_delivery_retry_due ON delivery_outbox(status,next_attempt_at,attempts)");
 
 

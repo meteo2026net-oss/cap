@@ -17,6 +17,7 @@ import { applyOperationalRetentionWithAudit, collectOperationalMetrics } from ".
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { consumeRecoveryCode, decryptTotpSecret, encryptTotpSecret, generateRecoveryCodes, generateTotpSecret, hashRecoveryCode, verifyTotp } from "./mfa.js";
 import { verifyAndConsumeWebhook } from "./webhook-replay.js";
+import { createWebhookSource, disableWebhookSource, listWebhookSources, resolveActiveWebhookSource, generateWebhookSourceSecret } from "./webhook-sources.js";
 import { alertRecipientGrantSql, assignAlertOrganizationOwner, createAlertRecipientGrant, createOrganization, createRecipientGroup, expireAlertRecipientGrants, expireOrganizationMemberships, expireRecipientGroupMemberships, hasActiveAlertRecipientGrant, hasActiveOrganizationMembership, requestOrganizationMembership, requestRecipientGroupMembership, transitionAlertRecipientGrant, transitionOrganizationMembership, transitionRecipientGroupMembership } from "./recipient-auth.js";
 
 const app = express();
@@ -130,21 +131,53 @@ app.post("/api/webhooks/inbound", webhookIngressLimiter, express.raw({ type: "ap
  } catch {
   return res.status(400).json({ error: "A valid JSON object is required" });
  }
+ // Organization binding comes only from the registered source_key header → DB registry.
+ // Never trust organization_id or tenant fields supplied in the JSON body.
+ const sourceKeyHeader = req.get("x-webhook-source") || "";
+ if (!sourceKeyHeader.trim()) {
+  return res.status(401).json({ error: "X-Webhook-Source header identifying a registered organization-bound source is required" });
+ }
+ const source = resolveActiveWebhookSource(db, sourceKeyHeader);
+ if (!source) {
+  return res.status(401).json({ error: "Webhook source is unknown, disabled, or not bound to an active organization" });
+ }
+ // Ignore any organization identifiers present in the body for authorization decisions.
+ if (payload && typeof payload === "object") {
+  delete payload.organization_id;
+  delete payload.organizationId;
+  delete payload.org_id;
+ }
  const timestampHeader = req.get("x-webhook-timestamp") || "";
  if (!/^[0-9]{1,12}$/.test(timestampHeader)) return res.status(400).json({ error: "A valid X-Webhook-Timestamp header is required" });
  const timestamp = Number(timestampHeader);
  const signature = req.get("x-webhook-signature") || "";
  try {
   const receive = db.transaction(() => {
-   if (!verifyAndConsumeWebhook(db, webhookSecret, timestamp, req.body, signature)) return null;
+   // Verify with the per-source secret from the registry (not a client-supplied secret).
+   if (!verifyAndConsumeWebhook(db, source.secret, timestamp, req.body, signature)) return null;
    const signatureHash = createHash("sha256").update(signature, "utf8").digest("hex");
-   const result = db.prepare("INSERT INTO webhook_inbox(source_timestamp,signature_hash,payload_json) VALUES(?,?,?)")
-    .run(timestamp, signatureHash, JSON.stringify(payload));
+   const result = db.prepare(`INSERT INTO webhook_inbox(
+     source_timestamp,signature_hash,payload_json,organization_id,webhook_source_id,source_key
+   ) VALUES (?,?,?,?,?,?)`).run(
+    timestamp,
+    signatureHash,
+    JSON.stringify(payload),
+    source.organization_id,
+    source.id,
+    source.source_key
+   );
    return Number(result.lastInsertRowid);
   });
   const inboxId = receive.immediate();
   if (inboxId === null) return res.status(401).json({ error: "Webhook signature is invalid, expired, or has already been used" });
-  return res.status(202).json({ accepted: true, inbox_id: inboxId, status: "pending", action: "manual_review_required" });
+  return res.status(202).json({
+   accepted: true,
+   inbox_id: inboxId,
+   status: "pending",
+   action: "manual_review_required",
+   organization_id: source.organization_id,
+   source_key: source.source_key
+  });
  } catch (error) {
   console.error("Webhook ingress failed:", error);
   return res.status(500).json({ error: "Unable to safely store webhook message" });
@@ -224,11 +257,12 @@ const roles = (...allowed) => (req,res,next) => {
 function webhookInboxAccess(req,res,next) {
  if(req.user.role==="admin") return next();
  if(req.user.role!=="reviewer") return res.status(403).json({error:"Insufficient permissions"});
- const organizationsConfigured=Boolean(db.prepare("SELECT 1 FROM organizations LIMIT 1").get());
- if(organizationsConfigured) {
+ // Reviewers may inspect only inbox rows bound to organizations where they hold an active membership.
+ const membership=db.prepare(`SELECT 1 FROM organization_memberships WHERE user_id=? AND status='active' LIMIT 1`).get(req.user.id);
+ if(!membership) {
   return res.status(403).json({
-   error:"Webhook inbox review is disabled until inbound sources are attributed to organizations",
-   code:"WEBHOOK_TENANT_ATTRIBUTION_UNCONFIGURED"
+   error:"Webhook inbox access requires an active organization membership",
+   code:"WEBHOOK_ORGANIZATION_MEMBERSHIP_REQUIRED"
   });
  }
  return next();
@@ -1485,6 +1519,48 @@ app.post("/api/alerts/:id/publish",auth,roles("admin","publisher"),(req,res)=>{
  const delivery=result.delivery;
  res.json({ok:true,workflow:"published",delivery:{id:delivery.id,status:delivery.status,channel:delivery.channel},note:"Internal publication only. External delivery adapters remain disabled; the outbox entry is queued for controlled processing."});
 });
+
+const webhookSourceSchema = z.object({
+ organization_id: z.number().int().positive(),
+ source_key: z.string().min(3).max(64),
+ secret: z.string().min(32).max(500).optional(),
+ label: z.string().max(120).optional()
+});
+app.get("/api/webhook-sources",auth,roles("admin"),(req,res)=>{
+ res.set("Cache-Control","no-store");
+ const organizationId=req.query.organization_id!==undefined?Number(req.query.organization_id):null;
+ if(organizationId!==null && (!Number.isSafeInteger(organizationId)||organizationId<1)) {
+  return res.status(400).json({error:"Invalid organization_id"});
+ }
+ res.json({sources:listWebhookSources(db,organizationId)});
+});
+app.post("/api/webhook-sources",auth,roles("admin"),adminAccountMutationLimiter,(req,res)=>{
+ try {
+  const data=webhookSourceSchema.parse(req.body||{});
+  const secret=data.secret || generateWebhookSourceSecret();
+  const created=createWebhookSource(db,{
+   organizationId:data.organization_id,
+   sourceKey:data.source_key,
+   secret,
+   label:data.label||"",
+   actorUserId:req.user.id
+  });
+  audit(req.user.id,null,"webhook_source_created",`Created webhook source ${created.source_key} for organization ${created.organization_id}`);
+  res.status(201).json({...created,secret});
+ } catch(error) {
+  if(error.code==="SQLITE_CONSTRAINT_UNIQUE") return res.status(409).json({error:"Webhook source_key already exists"});
+  res.status(400).json({error:error.message});
+ }
+});
+app.post("/api/webhook-sources/:id/disable",auth,roles("admin"),adminAccountMutationLimiter,(req,res)=>{
+ const id=Number(req.params.id);
+ if(!Number.isSafeInteger(id)||id<1) return res.status(400).json({error:"Invalid webhook source id"});
+ const disabled=disableWebhookSource(db,id);
+ if(!disabled) return res.status(409).json({error:"Webhook source not found or already disabled"});
+ audit(req.user.id,null,"webhook_source_disabled",`Disabled webhook source ${id}`);
+ res.json({ok:true,id,status:"disabled"});
+});
+
 app.get("/api/webhooks/inbox",auth,webhookInboxAccess,(req,res)=>{
  res.set("Cache-Control","no-store");
  res.set("Pragma","no-cache");
@@ -1496,7 +1572,13 @@ app.get("/api/webhooks/inbox",auth,webhookInboxAccess,(req,res)=>{
   if(!/^[1-9]\d*$/.test(beforeRaw) || !Number.isSafeInteger(Number(beforeRaw))) return res.status(400).json({error:"Invalid webhook inbox cursor"});
   beforeId=Number(beforeRaw);
  }
- const rows=db.prepare(`SELECT w.id,w.received_at,w.source_timestamp,w.payload_json,w.status,w.reviewed_at,w.review_note,w.reviewed_by,u.username AS reviewer_username FROM webhook_inbox w LEFT JOIN users u ON u.id=w.reviewed_by WHERE (? IS NULL OR w.status=?) AND (? IS NULL OR w.id < ?) ORDER BY w.id DESC LIMIT 101`).all(status ?? null,status ?? null,beforeId,beforeId);
+ const isAdmin=req.user.role==="admin";
+ const membershipOrgs=isAdmin?null:db.prepare(`SELECT organization_id FROM organization_memberships WHERE user_id=? AND status='active'`).all(req.user.id).map(row=>row.organization_id);
+ if(!isAdmin && (!membershipOrgs || !membershipOrgs.length)) {
+  return res.set("Cache-Control","no-store").json({messages:[],count:0,has_more:false});
+ }
+ const orgFilter=isAdmin?"":` AND w.organization_id IN (${membershipOrgs.map(()=>"?").join(",")})`;
+ const rows=db.prepare(`SELECT w.id,w.received_at,w.source_timestamp,w.payload_json,w.status,w.reviewed_at,w.review_note,w.reviewed_by,w.organization_id,w.source_key,u.username AS reviewer_username FROM webhook_inbox w LEFT JOIN users u ON u.id=w.reviewed_by WHERE (? IS NULL OR w.status=?) AND (? IS NULL OR w.id < ?)${orgFilter} ORDER BY w.id DESC LIMIT 101`).all(status ?? null,status ?? null,beforeId,beforeId, ...(isAdmin?[]:membershipOrgs));
  const hasMore=rows.length>100;
  const page=rows.slice(0,100);
  res.json({
@@ -1514,12 +1596,20 @@ app.patch("/api/webhooks/inbox/:id/review",auth,webhookInboxAccess,(req,res)=>{
  if(!parsed.success) return res.status(400).json({error:"Invalid webhook review decision"});
  const data=parsed.data;
  const result=db.transaction(()=>{
+  const row=db.prepare("SELECT id,organization_id,status FROM webhook_inbox WHERE id=?").get(id);
+  if(!row || row.status!=="pending") return {kind:"missing"};
+  if(req.user.role!=="admin") {
+   if(!row.organization_id) return {kind:"forbidden"};
+   const membership=db.prepare(`SELECT 1 FROM organization_memberships WHERE user_id=? AND organization_id=? AND status='active'`).get(req.user.id,row.organization_id);
+   if(!membership) return {kind:"forbidden"};
+  }
   const updated=db.prepare("UPDATE webhook_inbox SET status=?,reviewed_at=CURRENT_TIMESTAMP,reviewed_by=?,review_note=? WHERE id=? AND status='pending'").run(data.status,req.user.id,data.note,id);
-  if(!updated.changes) return null;
-  audit(req.user.id,null,"webhook_inbox_"+data.status,`Reviewed inbound webhook message ${id}`);
-  return updated;
+  if(!updated.changes) return {kind:"missing"};
+  audit(req.user.id,null,"webhook_inbox_"+data.status,`Reviewed inbound webhook message ${id} for organization ${row.organization_id||"unassigned"}`);
+  return {kind:"ok"};
  }).immediate();
- if(!result) return res.status(409).json({error:"Webhook message is missing or no longer pending"});
+ if(result.kind==="forbidden") return res.status(403).json({error:"Insufficient organization permission for this webhook message"});
+ if(result.kind!=="ok") return res.status(409).json({error:"Webhook message is missing or no longer pending"});
  res.json({ok:true,id,status:data.status,reviewed_by:req.user.id,reviewer_username:req.user.username});
 });
 

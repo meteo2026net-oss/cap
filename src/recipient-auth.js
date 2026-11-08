@@ -302,11 +302,12 @@ export function installRecipientSchema(database) {
       OR (NEW.recipient_type='user' AND NOT EXISTS (
         SELECT 1 FROM organization_memberships m JOIN organizations o ON o.id=m.organization_id
         JOIN users u ON u.id=m.user_id
-        WHERE m.user_id=NEW.recipient_user_id AND m.status='active'
-          AND o.status='active' AND u.active=1
+        WHERE m.user_id=NEW.recipient_user_id AND m.organization_id=NEW.recipient_organization_id
+          AND m.status='active' AND o.status='active' AND u.active=1
           AND (m.starts_at IS NULL OR julianday(m.starts_at)<=julianday('now'))
           AND (m.expires_at IS NULL OR julianday(m.expires_at)>julianday('now'))
       ))
+      OR (NEW.recipient_type='user' AND NEW.recipient_organization_id=NEW.owner_organization_id)
       OR (NEW.recipient_type='organization' AND NOT EXISTS (
         SELECT 1 FROM organizations o WHERE o.id=NEW.recipient_organization_id
           AND o.status='active' AND o.id<>NEW.owner_organization_id
@@ -714,5 +715,165 @@ export function expireRecipientGroupMemberships(database, { at = new Date(), act
     WHERE status IN ('pending','active','suspended')
       AND expires_at IS NOT NULL AND julianday(expires_at)<=julianday(?)
   `).run(actorUserId,instant));
+  return expire.immediate().changes;
+}
+
+
+export function assignAlertOrganizationOwner(database, { alertId, organizationId, actorUserId }) {
+  const assign = database.transaction(() => {
+    requireActiveAdmin(database, actorUserId);
+    const result = database.prepare(`
+      UPDATE alerts SET owner_organization_id=?,updated_at=CURRENT_TIMESTAMP
+      WHERE id=? AND owner_organization_id IS NULL
+        AND EXISTS (SELECT 1 FROM organizations o WHERE o.id=? AND o.status='active')
+    `).run(organizationId,alertId,organizationId);
+    if (result.changes !== 1) throw new Error("Unassigned alert and active organization are required.");
+    return { alertId, organizationId };
+  });
+  return assign.immediate();
+}
+
+export function createAlertRecipientGrant(database, {
+  alertId, ownerOrganizationId, recipientType, recipientUserId = null,
+  recipientOrganizationId, recipientGroupId = null, action, actorUserId,
+  startsAt = null, expiresAt = null
+}) {
+  if (!["user","organization","group"].includes(recipientType)) {
+    throw new TypeError("Unsupported recipient type.");
+  }
+  if (!["read","deliver"].includes(action)) throw new TypeError("Unsupported grant action.");
+  const starts = normalizeInstant(startsAt,"startsAt");
+  const expires = normalizeInstant(expiresAt,"expiresAt");
+  if (starts && expires && Date.parse(expires)<=Date.parse(starts)) {
+    throw new RangeError("Grant expiry must be later than its start.");
+  }
+  const create = database.transaction(() => {
+    requireActiveAdmin(database,actorUserId);
+    const result = database.prepare(`
+      INSERT INTO alert_recipient_grants
+        (alert_id,owner_organization_id,recipient_type,recipient_user_id,
+         recipient_organization_id,recipient_group_id,action,status,starts_at,
+         expires_at,created_by)
+      VALUES(?,?,?,?,?,?,?,'pending',?,?,?)
+    `).run(alertId,ownerOrganizationId,recipientType,recipientUserId,
+      recipientOrganizationId,recipientGroupId,action,starts,expires,actorUserId);
+    return Number(result.lastInsertRowid);
+  });
+  return create.immediate();
+}
+
+export function transitionAlertRecipientGrant(database, { grantId, nextStatus, actorUserId }) {
+  if (!ALLOWED_TRANSITIONS[nextStatus] || nextStatus==="expired") {
+    throw new TypeError("Expiry is system-managed; use the expiry sweep.");
+  }
+  const transition = database.transaction(() => {
+    requireActiveAdmin(database,actorUserId);
+    const current = database.prepare(`
+      SELECT id,alert_id,owner_organization_id,recipient_type,recipient_user_id,
+        recipient_organization_id,recipient_group_id,action,status,starts_at,expires_at
+      FROM alert_recipient_grants WHERE id=?
+    `).get(grantId);
+    if (!current) throw new Error("Grant not found.");
+    if (!ALLOWED_TRANSITIONS[current.status].has(nextStatus)) {
+      throw new Error("Grant transition is not permitted.");
+    }
+    if (nextStatus==="active") {
+      const eligible = database.prepare(`
+        SELECT 1 FROM alerts a
+        JOIN organizations owner ON owner.id=a.owner_organization_id AND owner.status='active'
+        WHERE a.id=? AND a.owner_organization_id=?
+          AND (? IS NULL OR julianday(?)<=julianday('now'))
+          AND (? IS NULL OR julianday(?)>julianday('now'))
+          AND (
+            (?='user' AND EXISTS (
+              SELECT 1 FROM organization_memberships m
+              JOIN organizations o ON o.id=m.organization_id
+              JOIN users u ON u.id=m.user_id
+              WHERE m.user_id=? AND m.organization_id=? AND m.status='active'
+                AND o.status='active' AND u.active=1
+                AND (m.starts_at IS NULL OR julianday(m.starts_at)<=julianday('now'))
+                AND (m.expires_at IS NULL OR julianday(m.expires_at)>julianday('now'))
+            )) OR
+            (?='organization' AND EXISTS (
+              SELECT 1 FROM organizations o WHERE o.id=? AND o.status='active'
+                AND o.id<>?
+            )) OR
+            (?='group' AND EXISTS (
+              SELECT 1 FROM recipient_groups g JOIN organizations o ON o.id=g.organization_id
+              WHERE g.id=? AND g.organization_id=? AND g.status='active'
+                AND o.status='active' AND o.id<>?
+            ))
+          )
+      `).get(current.alert_id,current.owner_organization_id,
+        current.starts_at,current.starts_at,current.expires_at,current.expires_at,
+        current.recipient_type,current.recipient_user_id,current.recipient_organization_id,
+        current.recipient_type,current.recipient_organization_id,current.owner_organization_id,
+        current.recipient_type,current.recipient_group_id,current.recipient_organization_id,current.owner_organization_id);
+      if (!eligible) throw new Error("Alert ownership, recipient membership, or grant validity window is no longer valid.");
+    }
+    const revokedAt=nextStatus==="revoked"?new Date().toISOString():null;
+    const result=database.prepare(`
+      UPDATE alert_recipient_grants
+      SET status=?,approved_by=CASE WHEN ?='active' THEN ? ELSE approved_by END,
+        updated_by=?,revoked_at=CASE WHEN ?='revoked' THEN ? ELSE revoked_at END,
+        updated_at=CURRENT_TIMESTAMP
+      WHERE id=? AND status=?
+    `).run(nextStatus,nextStatus,actorUserId,actorUserId,nextStatus,revokedAt,grantId,current.status);
+    if(result.changes!==1) throw new Error("Grant changed concurrently; retry authorization.");
+    return {id:current.id,alertId:current.alert_id,ownerOrganizationId:current.owner_organization_id,
+      recipientType:current.recipient_type,recipientUserId:current.recipient_user_id,
+      recipientOrganizationId:current.recipient_organization_id,recipientGroupId:current.recipient_group_id,
+      action:current.action,previousStatus:current.status,status:nextStatus};
+  });
+  return transition.immediate();
+}
+
+export function hasActiveAlertRecipientGrant(database, {
+  alertId, userId, organizationId, action = "read", at = new Date()
+}) {
+  if(!["read","deliver"].includes(action)) return false;
+  const instant=at instanceof Date?at.toISOString():normalizeInstant(at,"at");
+  return Boolean(database.prepare(`
+    SELECT 1 FROM alert_recipient_grants grant_row
+    JOIN alerts a ON a.id=grant_row.alert_id
+    JOIN organizations owner ON owner.id=grant_row.owner_organization_id AND owner.status='active'
+    JOIN organizations recipient ON recipient.id=grant_row.recipient_organization_id AND recipient.status='active'
+    JOIN organization_memberships m ON m.organization_id=recipient.id AND m.user_id=?
+      AND m.status='active'
+    JOIN users u ON u.id=m.user_id AND u.active=1
+    WHERE grant_row.alert_id=? AND grant_row.owner_organization_id=a.owner_organization_id
+      AND grant_row.status='active' AND grant_row.action=?
+      AND grant_row.recipient_organization_id=?
+      AND (grant_row.starts_at IS NULL OR julianday(grant_row.starts_at)<=julianday(?))
+      AND (grant_row.expires_at IS NULL OR julianday(grant_row.expires_at)>julianday(?))
+      AND (m.starts_at IS NULL OR julianday(m.starts_at)<=julianday(?))
+      AND (m.expires_at IS NULL OR julianday(m.expires_at)>julianday(?))
+      AND (
+        (grant_row.recipient_type='user' AND grant_row.recipient_user_id=?) OR
+        (grant_row.recipient_type='organization') OR
+        (grant_row.recipient_type='group' AND EXISTS (
+          SELECT 1 FROM recipient_group_memberships gm
+          JOIN recipient_groups g ON g.id=gm.group_id AND g.organization_id=gm.organization_id
+          WHERE gm.group_id=grant_row.recipient_group_id
+            AND gm.organization_id=grant_row.recipient_organization_id
+            AND gm.user_id=? AND gm.status='active' AND g.status='active'
+            AND gm.organization_membership_id=m.id
+            AND (gm.starts_at IS NULL OR julianday(gm.starts_at)<=julianday(?))
+            AND (gm.expires_at IS NULL OR julianday(gm.expires_at)>julianday(?))
+        ))
+      )
+    LIMIT 1
+  `).get(userId,alertId,action,organizationId,instant,instant,instant,instant,
+    userId,userId,instant,instant));
+}
+
+export function expireAlertRecipientGrants(database, { at = new Date() } = {}) {
+  const instant=at instanceof Date?at.toISOString():normalizeInstant(at,"at");
+  const expire=database.transaction(()=>database.prepare(`
+    UPDATE alert_recipient_grants
+    SET status='expired',updated_by=NULL,updated_at=CURRENT_TIMESTAMP
+    WHERE status IN ('pending','active','suspended')
+      AND expires_at IS NOT NULL AND julianday(expires_at)<=julianday(?)
+  `).run(instant));
   return expire.immediate().changes;
 }

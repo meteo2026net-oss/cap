@@ -209,7 +209,9 @@ test("alert grants bind direct users, organizations, and groups to an alert owne
     const owner=createOrganization(database,{slug:"grant-owner",name:"Grant Owner",actorUserId:1});
     const recipient=createOrganization(database,{slug:"grant-recipient",name:"Grant Recipient",actorUserId:1});
     const member=requestOrganizationMembership(database,{organizationId:recipient,userId:3,actorUserId:1});
+    const sameRolePeer=requestOrganizationMembership(database,{organizationId:recipient,userId:2,actorUserId:1});
     transitionOrganizationMembership(database,{membershipId:member,nextStatus:"active",actorUserId:1});
+    transitionOrganizationMembership(database,{membershipId:sameRolePeer,nextStatus:"active",actorUserId:1});
     const group=createRecipientGroup(database,{organizationId:recipient,slug:"ops",name:"Operations",actorUserId:1});
     const groupMember=requestRecipientGroupMembership(database,{groupId:group,organizationMembershipId:member,actorUserId:1});
     transitionRecipientGroupMembership(database,{membershipId:groupMember,nextStatus:"active",actorUserId:1});
@@ -226,7 +228,7 @@ test("alert grants bind direct users, organizations, and groups to an alert owne
     }),true);
     assert.equal(hasActiveAlertRecipientGrant(database,{
       alertId:100,userId:2,organizationId:recipient,action:"read"
-    }),false);
+    }),false,"a same-role peer in the same recipient organization receives no direct-user grant");
 
     const organizationGrant=createAlertRecipientGrant(database,{
       alertId:100,ownerOrganizationId:owner,recipientType:"organization",
@@ -236,6 +238,9 @@ test("alert grants bind direct users, organizations, and groups to an alert owne
     assert.equal(hasActiveAlertRecipientGrant(database,{
       alertId:100,userId:3,organizationId:recipient,action:"deliver"
     }),true);
+    assert.equal(hasActiveAlertRecipientGrant(database,{
+      alertId:100,userId:2,organizationId:recipient,action:"deliver"
+    }),true,"organization grants intentionally include active members of the recipient organization");
 
     const groupGrant=createAlertRecipientGrant(database,{
       alertId:100,ownerOrganizationId:owner,recipientType:"group",
@@ -245,6 +250,9 @@ test("alert grants bind direct users, organizations, and groups to an alert owne
     assert.equal(hasActiveAlertRecipientGrant(database,{
       alertId:100,userId:3,organizationId:recipient,action:"read"
     }),true);
+    assert.equal(hasActiveAlertRecipientGrant(database,{
+      alertId:100,userId:2,organizationId:recipient,action:"read"
+    }),false,"group grants require active membership in the specifically granted group");
 
     transitionAlertRecipientGrant(database,{grantId:direct,nextStatus:"revoked",actorUserId:1});
     assert.equal(database.prepare("SELECT status FROM alert_recipient_grants WHERE id=?").get(direct).status,"revoked");

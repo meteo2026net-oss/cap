@@ -39,6 +39,11 @@ if (!Number.isSafeInteger(adminAccountMutationLimit) || adminAccountMutationLimi
  console.error("FATAL: ADMIN_ACCOUNT_MUTATION_LIMIT must be an integer between 1 and 1000.");
  process.exit(1);
 }
+const adminPasswordResetLimit = Number(process.env.ADMIN_PASSWORD_RESET_LIMIT || 5);
+if (!Number.isSafeInteger(adminPasswordResetLimit) || adminPasswordResetLimit < 1 || adminPasswordResetLimit > 1000) {
+ console.error("FATAL: ADMIN_PASSWORD_RESET_LIMIT must be an integer between 1 and 1000.");
+ process.exit(1);
+}
 const port = Number(process.env.PORT || 8095);
 const secret = process.env.JWT_SECRET;
 if (!secret || secret.length < 32 || /^REPLACE_WITH_/i.test(secret)) {
@@ -541,7 +546,7 @@ app.post("/api/users",auth,roles("admin"),adminAccountMutationLimiter,(req,res)=
  }
 });
 
-const adminPasswordResetLimiter=rateLimit({windowMs:15*60*1000,limit:5,standardHeaders:true,legacyHeaders:false});
+const adminPasswordResetLimiter=rateLimit({windowMs:15*60*1000,limit:adminPasswordResetLimit,standardHeaders:true,legacyHeaders:false});
 app.post("/api/users/:id/password-reset",auth,roles("admin"),adminPasswordResetLimiter,(req,res)=>{
  const id=Number(req.params.id);
  if(!Number.isSafeInteger(id) || id<1) return res.status(400).json({error:"Invalid user id"});

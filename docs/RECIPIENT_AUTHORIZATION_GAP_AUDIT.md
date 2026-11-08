@@ -225,3 +225,26 @@ A follow-up route audit added temporary protections when at least one organizati
 The same-role cross-organization integration fixture now creates active memberships for Forecaster, Reviewer, and Publisher accounts in both organizations. It verifies that Reviewer B cannot enumerate or mutate the unscoped webhook inbox, cannot see Organization A's alert-less lifecycle events through audit list/export, and that platform Admin retains the intended global operational view. It also checks direct-ID, XML, relations, versions, timeline, list/export, and outbox boundaries for legacy non-Public alerts.
 
 The delivery worker remains intentionally global but Public-only, with global maintenance paused whenever a non-Public outbox row exists. This is a containment mechanism, not tenant-aware background authorization.
+
+
+## 12. Opt-in recipient grant enforcement for alert reads and delivery APIs
+
+A deny-by-default enforcement path has now been added behind the explicit environment setting `CAP_NON_PUBLIC_RECIPIENT_ACCESS_ENABLED=true`. The setting is **off by default** and has not been enabled in deployment configuration. The new integration test enables it only inside an isolated temporary test server.
+
+When the flag is enabled:
+
+- A request must identify its active organization using `X-CAP-Organization-ID` (or `organization_id` for collection reads). The server verifies a current, unexpired membership for the authenticated user; the supplied organization ID alone is never trusted.
+- Alert list, statistics, CSV export, review queue, detail, CAP XML, relations, review history, versions, and timeline apply the current `read` grant predicate. Collection predicates are applied in SQL before counts, pagination, and export limits.
+- The correlated SQL predicate checks the alert's immutable owner, active owner/recipient organizations, active user membership, current grant state and time window, and (for group grants) active group membership tied to the same organization membership.
+- Outbox list/count, per-ID concealment, claim, receipt, and retry re-check the current `deliver` grant. Claim/receipt/retry repeat the authorization predicate inside the database mutation, rather than relying only on an earlier route check.
+- Platform Admin retains access to owner/grant management routes for non-Public alerts.
+
+The flag remains disabled by default because this is a controlled enforcement path, not production approval. Restricted/Private alert creation and workflow mutation remain blocked. The worker has no tenant principal and remains Public-only; global retry/recovery pauses when any non-Public outbox row exists. `enqueueDelivery` remains Public-only. External adapters remain disabled and no external transmission is performed.
+
+### Required validation before enabling outside tests
+
+- Run the complete CI suite on the exact head and inspect the integration test result.
+- Validate the opt-in integration test's positive Organization B grant and negative same-role Organization A access for detail, XML, relations, list, CSV, outbox, claim, receipt, and retry.
+- Add independent review/approver role coverage and test revoked/expired membership and grant behavior against every collection and mutation route.
+- Define tenant-aware worker identity and job claim/dispatch authorization before any background processing of non-Public deliveries.
+- Keep the deployment flag unset until these controls and operational procedures are reviewed and explicitly approved.

@@ -519,6 +519,8 @@ app.use("/api/users",(_req,res,next)=>{
  res.set("Pragma","no-cache");
  next();
 });
+const adminAccountMutationLimiter=rateLimit({windowMs:15*60*1000,limit:adminAccountMutationLimit,keyGenerator:req=>String(req.user.id),standardHeaders:true,legacyHeaders:false});
+
 app.get("/api/me",auth,(req,res)=>res.json({user:req.user}));
 
 const organizationSchema = z.object({
@@ -617,7 +619,6 @@ const userSchema = z.object({
  password: z.string().min(14).max(200),
  role: z.enum(["admin","forecaster","reviewer","approver","publisher","viewer"])
 });
-const adminAccountMutationLimiter=rateLimit({windowMs:15*60*1000,limit:adminAccountMutationLimit,keyGenerator:req=>String(req.user.id),standardHeaders:true,legacyHeaders:false});
 app.get("/api/users",auth,roles("admin"),(_req,res)=>{
  const users=db.prepare("SELECT id,username,role,active,mfa_enabled,must_change_password,created_at,last_login_at FROM users ORDER BY id").all();
  res.json({users:users.map(user=>({...user,mfa_required:mfaRequiredRoles.has(user.role)}))});

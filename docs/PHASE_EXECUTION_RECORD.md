@@ -1,14 +1,12 @@
 # Phase Execution Record
 
-## Current-head CI follow-up — 2026-11-08 UTC
+## Windows CI runner follow-up — 2026-11-08 UTC
 
-- PR #4 head: `ee3bda3e1ebc57528159a7692c247c5d29eb0986` (Draft, not merged).
-- Changed `.github/workflows/test.yml` to run the Windows backup job on `windows-2022`, which provides the stable Visual Studio 2022 toolchain expected by `node-gyp`. The prior `windows-latest` image exposed Visual Studio 18, which the installed `node-gyp` could not detect; `npm ci` therefore failed before backup/restore or PowerShell tests ran.
+- Runner fix commit: `ee3bda3e1ebc57528159a7692c247c5d29eb0986`; later commits in this PR update documentation only.
+- Changed `.github/workflows/test.yml` to run the Windows backup job on `windows-2022`, which provides the stable Visual Studio 2022 toolchain expected by `node-gyp`. The prior `windows-latest` image exposed Visual Studio 18, which the installed `node-gyp` could not detect; `npm ci` failed before backup/restore or PowerShell tests ran.
 - This is a CI runner compatibility adjustment; no dependency versions, application behavior, test assertions, or production configuration were changed.
-- CAP System Checks and CodeQL for this exact head are pending/not yet confirmed. The Windows backup/restore result must be observed on this exact SHA before the issue is considered resolved.
-- Historical CI records below remain historical and must not be read as validation of this newer head.
+- The live PR checks must finish on the latest branch tip before this issue is considered resolved. Historical CI records below remain historical and do not validate later commits.
 - `external_adapters_enabled: false`; Gate 8 remains Open; no Go-Live or institutional acceptance is claimed.
-
 
 **Recorded:** 2026-11-08 (UTC)  
 **Branch:** `fix/retention-audit-atomicity`  

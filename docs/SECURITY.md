@@ -82,3 +82,9 @@ Recipient-level authorization for Restricted and Private alerts is not implement
 
 - [DELIVERY_RECIPIENT_SCOPE_AUDIT.md](DELIVERY_RECIPIENT_SCOPE_AUDIT.md) records the source-level inventory of enqueue, outbox reads, claim, receipt, retry, background maintenance, worker behavior, webhook inbox separation, and residual recipient-grant gates.
 - Delivery state transitions now enforce Public scope in their SQL predicates as defense in depth; the background worker remains paused when legacy non-Public outbox rows exist. External adapters remain disabled.
+
+
+## Role authorization audit
+
+- [ROLE_AUTHORIZATION_AUDIT.md](ROLE_AUTHORIZATION_AUDIT.md) records the route-level and workflow-level review for Reviewer, Approver, Forecaster, Publisher, Viewer, and Admin, including unresolved separation-of-duties decisions.
+- Forecaster submission is restricted to the draft author or an administrator; the API integration suite covers cross-forecaster submission denial.

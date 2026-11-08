@@ -215,6 +215,20 @@ test("opt-in recipient grants isolate same-role alert reads, exports and deliver
   assert.match(exportB.text, /TENANT_B_ONLY_HEADLINE/);
   assert.equal(exportA.status, 200);
   assert.doesNotMatch(exportA.text, /TENANT_B_ONLY_HEADLINE/);
+  assert.equal((await request(`/api/alert-recipient-grants/${readGrant.data.id}`, {
+    token: admin, method: "PATCH", body: { status: "revoked" }
+  })).status, 200);
+  assert.equal((await request(`/api/alerts/${alertId}`, {
+    token: forecasterB, organizationId: orgB.data.id
+  })).status, 404, "revoking a read grant immediately removes detail access");
+  const revokedListB = await request("/api/alerts?scope=Restricted", {
+    token: forecasterB, organizationId: orgB.data.id
+  });
+  assert.ok(!revokedListB.data.alerts.some(row => row.id === alertId));
+  const revokedExportB = await request("/api/alerts/export.csv?scope=Restricted", {
+    token: forecasterB, organizationId: orgB.data.id
+  });
+  assert.doesNotMatch(revokedExportB.text, /TENANT_B_ONLY_HEADLINE/);
 
   const outboxB = await request("/api/delivery/outbox", { token: publisherB, organizationId: orgB.data.id });
   const outboxA = await request("/api/delivery/outbox", { token: publisherA, organizationId: orgA.data.id });
@@ -237,4 +251,15 @@ test("opt-in recipient grants isolate same-role alert reads, exports and deliver
   assert.equal((await request(`/api/delivery/outbox/${deliveryId}/retry`, {
     token: publisherB, method: "POST", organizationId: orgB.data.id
   })).status, 200);
+  assert.equal((await request(`/api/alert-recipient-grants/${deliverGrant.data.id}`, {
+    token: admin, method: "PATCH", body: { status: "revoked" }
+  })).status, 200);
+  const revokedOutboxB = await request("/api/delivery/outbox", {
+    token: publisherB, organizationId: orgB.data.id
+  });
+  assert.ok(!revokedOutboxB.data.deliveries.some(row => row.id === deliveryId),
+    "revoking a deliver grant immediately removes the outbox row from the recipient view");
+  assert.equal((await request(`/api/delivery/outbox/${deliveryId}/claim`, {
+    token: publisherB, method: "POST", organizationId: orgB.data.id
+  })).status, 404);
 });

@@ -97,8 +97,11 @@ test("Restricted and Private legacy alerts are denied across authenticated and p
   const finalPassword = "Isolation-Role-Password-Final-2026!";
   for (const [username, role] of [
     ["iso_forecaster", "forecaster"],
+    ["iso_forecaster_b", "forecaster"],
     ["iso_reviewer", "reviewer"],
-    ["iso_publisher", "publisher"]
+    ["iso_reviewer_b", "reviewer"],
+    ["iso_publisher", "publisher"],
+    ["iso_publisher_b", "publisher"]
   ]) {
     assert.equal((await request("/api/users", {
       token: admin, method: "POST", body: { username, password: tempPassword, role }
@@ -106,8 +109,37 @@ test("Restricted and Private legacy alerts are denied across authenticated and p
   }
   const activate = async username => changePassword(await login(username, tempPassword), tempPassword, finalPassword);
   const forecaster = await activate("iso_forecaster");
+  const forecasterB = await activate("iso_forecaster_b");
   const reviewer = await activate("iso_reviewer");
+  const reviewerB = await activate("iso_reviewer_b");
   const publisher = await activate("iso_publisher");
+  const publisherB = await activate("iso_publisher_b");
+
+  const organizationA = await request("/api/organizations", {
+    token: admin, method: "POST", body: { slug: "isolation-org-a", name: "Isolation Organization A" }
+  });
+  const organizationB = await request("/api/organizations", {
+    token: admin, method: "POST", body: { slug: "isolation-org-b", name: "Isolation Organization B" }
+  });
+  assert.equal(organizationA.status, 201);
+  assert.equal(organizationB.status, 201);
+  const accountRows = (await request("/api/users", { token: admin })).data.users;
+  const userAId = accountRows.find(row => row.username === "iso_forecaster").id;
+  const userBId = accountRows.find(row => row.username === "iso_forecaster_b").id;
+  const memberA = await request(`/api/organizations/${organizationA.data.id}/memberships`, {
+    token: admin, method: "POST", body: { user_id: userAId }
+  });
+  const memberB = await request(`/api/organizations/${organizationB.data.id}/memberships`, {
+    token: admin, method: "POST", body: { user_id: userBId }
+  });
+  assert.equal(memberA.status, 201);
+  assert.equal(memberB.status, 201);
+  assert.equal((await request(`/api/organization-memberships/${memberA.data.id}`, {
+    token: admin, method: "PATCH", body: { status: "active" }
+  })).status, 200);
+  assert.equal((await request(`/api/organization-memberships/${memberB.data.id}`, {
+    token: admin, method: "PATCH", body: { status: "active" }
+  })).status, 200);
 
   const publicCreate = await request("/api/alerts", {
     token: forecaster, method: "POST", body: {
@@ -119,6 +151,11 @@ test("Restricted and Private legacy alerts are denied across authenticated and p
   });
   assert.equal(publicCreate.status, 201);
   const publicId = publicCreate.data.id;
+  assert.equal((await request(`/api/alerts/${publicId}/owner-organization`, {
+    token: admin, method: "POST", body: { organization_id: organizationA.data.id }
+  })).status, 200);
+  assert.equal((await request(`/api/alerts/${publicId}`, { token: forecasterB })).status, 200,
+    "Public alerts remain globally readable by the same role across organizations by explicit policy");
   assert.equal((await request(`/api/alerts/${publicId}/submit`, { token: forecaster, method: "POST", body: {} })).status, 200);
   assert.equal((await request(`/api/alerts/${publicId}/approve`, { token: reviewer, method: "POST", body: {} })).status, 200);
   assert.equal((await request(`/api/alerts/${publicId}/publish`, { token: publisher, method: "POST", body: {} })).status, 200);
@@ -138,6 +175,8 @@ test("Restricted and Private legacy alerts are denied across authenticated and p
     "Private", null, "ops@example.test duty@example.test", "Private event", "unique-private-xyz",
     "PRIVATE_SECRET_DESCRIPTION", "Private zone", "pending", ""
   ).lastInsertRowid);
+  db.prepare("UPDATE alerts SET owner_organization_id=? WHERE id IN (?,?)")
+    .run(organizationA.data.id, restrictedId, privateId);
   appendAuditLog(db, { userId: null, alertId: privateId, action: "private_scope_fixture", details: "PRIVATE_AUDIT_SECRET" });
   const deliveryId = Number(db.prepare("INSERT INTO delivery_outbox(alert_id,channel,payload,status) VALUES(?,'cap_feed','PRIVATE_DELIVERY_SECRET','queued')")
     .run(privateId).lastInsertRowid);
@@ -188,21 +227,26 @@ test("Restricted and Private legacy alerts are denied across authenticated and p
   assert.ok(!(list.data.alerts || []).some(alert => alert.id === restrictedId || alert.id === privateId));
   for (const id of [restrictedId, privateId]) {
     assert.equal((await request(`/api/alerts/${id}`, { token: forecaster })).status, 404);
+    assert.equal((await request(`/api/alerts/${id}`, { token: forecasterB })).status, 404,
+      "same-role user in Organization B cannot read Organization A non-Public alert by direct ID");
     assert.equal((await request(`/api/alerts/0${id}`, { token: forecaster })).status, 404);
     assert.equal((await request(`/api/alerts/${id}/cap.xml`, { token: forecaster })).status, 404);
+    assert.equal((await request(`/api/alerts/${id}/cap.xml`, { token: forecasterB })).status, 404);
     assert.equal((await request(`/api/alerts/${id}/relations`, { token: forecaster })).status, 404);
     assert.equal((await request(`/api/alerts/${id}/versions`, { token: reviewer })).status, 404);
+    assert.equal((await request(`/api/alerts/${id}/versions`, { token: reviewerB })).status, 404);
     assert.equal((await request(`/api/alerts/${id}/timeline`, { token: reviewer })).status, 404);
+    assert.equal((await request(`/api/alerts/${id}/timeline`, { token: reviewerB })).status, 404);
   }
 
   const exportResponse = await fetch(base + "/api/alerts/export.csv", {
-    headers: { Authorization: "Bearer " + forecaster }
+    headers: { Authorization: "Bearer " + forecasterB }
   });
   const exportText = await exportResponse.text();
   assert.equal(exportResponse.status, 200);
   for (const needle of sensitiveNeedles) assert.ok(!exportText.includes(needle), "CSV export leaked " + needle);
 
-  const reviewQueue = await request("/api/review/queue", { token: reviewer });
+  const reviewQueue = await request("/api/review/queue", { token: reviewerB });
   assert.equal(reviewQueue.status, 200);
   assert.ok(!(reviewQueue.data.queue || []).some(row => row.id === restrictedId || row.id === privateId));
   assert.ok(!JSON.stringify(reviewQueue.data).includes("Authorized agencies only"));
@@ -217,27 +261,27 @@ test("Restricted and Private legacy alerts are denied across authenticated and p
   const auditCsvText = await auditCsv.text();
   assert.ok(!auditCsvText.includes("PRIVATE_AUDIT_SECRET"));
 
-  const outbox = await request("/api/delivery/outbox", { token: publisher });
+  const outbox = await request("/api/delivery/outbox", { token: publisherB });
   assert.equal(outbox.status, 200);
   assert.ok(!(outbox.data.deliveries || []).some(row => row.id === deliveryId));
   assert.equal((await request(`/api/delivery/outbox/${deliveryId}/claim`, {
-    token: publisher, method: "POST"
+    token: publisherB, method: "POST"
   })).status, 404);
   assert.equal((await request(`/api/delivery/outbox/${deliveryId}/retry`, {
-    token: publisher, method: "POST"
+    token: publisherB, method: "POST"
   })).status, 404, "non-Public outbox entries must not be manually retried");
   assert.equal((await request(`/api/delivery/outbox/${deliveryId}/receipt`, {
-    token: publisher, method: "POST",
+    token: publisherB, method: "POST",
     body: { status: "delivered", leaseToken: "123e4567-e89b-42d3-a456-426614174000" }
   })).status, 404, "non-Public outbox entries must not accept delivery receipts");
   assert.equal((await request("/api/delivery/process-retries", {
-    token: publisher, method: "POST"
+    token: publisherB, method: "POST"
   })).status, 403);
   assert.equal((await request("/api/delivery/recover-stale", {
-    token: publisher, method: "POST", body: { staleMinutes: 10 }
+    token: publisherB, method: "POST", body: { staleMinutes: 10 }
   })).status, 403, "global stale recovery remains blocked while legacy non-Public rows exist");
 
-  const metrics = await request("/api/health/metrics", { token: publisher });
+  const metrics = await request("/api/health/metrics", { token: publisherB });
   assert.equal(metrics.status, 200);
   assert.equal(metrics.data.metrics.alerts_by_workflow.pending || 0, 0,
     "metrics must not reveal legacy Restricted/Private pending alerts");

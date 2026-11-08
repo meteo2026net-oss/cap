@@ -263,6 +263,23 @@ test("API enforces role separation, public-feed filtering and account deactivati
   assert.equal((await request(`/api/users/${adminUserId}/password-reset`, {
     token: admin, method: "POST", body: {}
   })).status, 409, "an administrator must not reset their own password through the assisted workflow");
+  const peerAdminCreate = await request("/api/users", {
+    token: admin, method: "POST",
+    body: { username: "peer-admin", role: "admin", password: "Initial-Temporary-Password-2026!" }
+  });
+  assert.equal(peerAdminCreate.status, 201, "the existing account provisioning policy currently permits administrator creation");
+  const peerAdminReset = await request(`/api/users/${peerAdminCreate.data.id}/password-reset`, {
+    token: admin, method: "POST", body: {}
+  });
+  assert.equal(peerAdminReset.status, 403,
+    "an administrator must not receive a peer administrator temporary password");
+  assert.equal(peerAdminReset.data.temporary_password, undefined,
+    "peer administrator recovery must never disclose a temporary credential to the requesting administrator");
+  const peerAdminLogin = await request("/api/auth/login", {
+    method: "POST", body: { username: "peer-admin", password: "Initial-Temporary-Password-2026!" }
+  });
+  assert.equal(peerAdminLogin.status, 200,
+    "a denied peer-admin reset must leave the target administrator credentials unchanged");
   assert.equal((await request("/api/users/999999/password-reset", {
     token: admin, method: "POST", body: {}
   })).status, 404, "password reset must report an unknown account without changing any credentials");

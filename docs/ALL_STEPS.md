@@ -28,7 +28,7 @@
 |---|--------|--------|----------------|
 | 6 | إعداد خطة اختبار القبول | **جاهزة** | [ISOLATED_ACCEPTANCE_TEST_PACK.md](ISOLATED_ACCEPTANCE_TEST_PACK.md) |
 | 7 | تحديد المؤسستين التجريبيتين وهوياتهما | **جاهزة** | `accept-org-a` · `accept-org-b` |
-| 8 | تجهيز الحسابات والأدوار والصلاحيات التجريبية | **جاهزة** | جدول الهويات في حزمة القبول |
+| 8 | تجهيز الحسابات والأدوار والصلاحيات التجريبية | **جاهزة** | جدول الهويات + `npm run acceptance:bootstrap-tenants` |
 | 9 | تجهيز مستقبلات Webhook وموصلات اختبار معزولة | **جاهزة** | مصادر per-org + `tools/cap-receivers` — بلا إرسال خارجي |
 | 10 | إعداد معايير النجاح والفشل وتوثيق الأدلة | **جاهزة** | Pass/Fail في الحزمة + [ACCEPTANCE_EVIDENCE_LOG_TEMPLATE.md](ACCEPTANCE_EVIDENCE_LOG_TEMPLATE.md) |
 

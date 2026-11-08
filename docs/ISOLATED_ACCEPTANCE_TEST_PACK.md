@@ -42,6 +42,19 @@ Create via admin API (`POST /api/organizations`) or equivalent admin UI path.
 
 ---
 
+## 2b. Automated bootstrap (optional)
+
+With the server running and admin password available:
+
+```bash
+ACCEPT_BASE_URL=http://127.0.0.1:8095 \
+ACCEPT_ADMIN_USER=admin \
+ACCEPT_ADMIN_PASSWORD='your-admin-password' \
+npm run acceptance:bootstrap-tenants
+```
+
+Creates orgs, users, active memberships, and org-bound webhook sources. Prints one-time passwords/secrets to stdout — store offline. Refuses to run if `external_adapters_enabled` is true. Does not close Gate 8.
+
 ## 3. Test identities and roles
 
 Password policy: use strong unique test secrets; never production passwords.

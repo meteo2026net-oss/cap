@@ -11,6 +11,7 @@
 **Execution matrix (phases 3–5):** [`ACCEPTANCE_EXECUTION_MATRIX.md`](ACCEPTANCE_EXECUTION_MATRIX.md)  
 **Isolated two-tenant technical pack:** [`ISOLATED_ACCEPTANCE_TEST_PACK.md`](ISOLATED_ACCEPTANCE_TEST_PACK.md)  
 **Software completion record:** [`SOFTWARE_COMPLETION.md`](SOFTWARE_COMPLETION.md)  
+**Institutional evidence workbook (forms only):** [`INSTITUTIONAL_EVIDENCE_WORKBOOK.md`](INSTITUTIONAL_EVIDENCE_WORKBOOK.md)  
 **Canonical institutional acceptance register (Gate 8 only):**  
 [`INSTITUTIONAL_ACCEPTANCE_EVIDENCE.md`](INSTITUTIONAL_ACCEPTANCE_EVIDENCE.md)  
 No other document may mark Gate 8 closed. CI, README, and PR state are not acceptance evidence.

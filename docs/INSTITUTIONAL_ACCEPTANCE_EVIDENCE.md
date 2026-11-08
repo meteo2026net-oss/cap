@@ -9,6 +9,10 @@
 **Institutional Gate 8:** **Open** — this file is the sole register
 **external_adapters_enabled:** **false**
 
+## Evidence collection forms
+
+Detailed forms for Phase 4 steps 17–25: [INSTITUTIONAL_EVIDENCE_WORKBOOK.md](INSTITUTIONAL_EVIDENCE_WORKBOOK.md). Completing a form does not change Status in this register.
+
 ## How to use
 
 For each row:

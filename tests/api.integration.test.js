@@ -1947,6 +1947,18 @@ test("API enforces role separation, public-feed filtering and account deactivati
   assert.ok(!publicFeed.data.alerts.some(alert => feedControlIdentifiers.includes(alert.identifier)),
     "CAP Ack and Error control messages must never appear in the public warning feed");
 
+  const publicCapXml = await fetch(base + "/api/public/alerts/" + encodeURIComponent(actualIdentifier) + "/cap.xml");
+  assert.equal(publicCapXml.status, 200, "published Actual/Public CAP XML must be available without auth");
+  assert.match(publicCapXml.headers.get("content-type") || "", /xml/i);
+  const publicCapBody = await publicCapXml.text();
+  assert.match(publicCapBody, /<alert[\s>]/);
+  assert.match(publicCapBody, new RegExp(actualIdentifier.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  assert.equal(publicCapXml.headers.get("cache-control"), "no-store");
+  const testCapXml = await fetch(base + "/api/public/alerts/" + encodeURIComponent(testIdentifier) + "/cap.xml");
+  assert.equal(testCapXml.status, 404, "published Test messages must not be exposed on the public CAP XML path");
+  const ackCapXml = await fetch(base + "/api/public/alerts/" + encodeURIComponent(feedControlIdentifiers[0]) + "/cap.xml");
+  assert.equal(ackCapXml.status, 404, "Ack control messages must not be exposed on the public CAP XML path");
+
   const expiredIdentifier = await createAndPublish("Actual", "2020-01-01T00:00:00Z");
   const feedAfterExpiry = await request("/api/public/alerts");
   assert.ok(!feedAfterExpiry.data.alerts.some(alert => alert.identifier === expiredIdentifier),

@@ -40,6 +40,7 @@ Legend: **Done** = automated evidence in repo/CI · **Partial** = core present, 
 | Item | Status |
 |------|--------|
 | Leaflet map, draw polygon/circle, GeoJSON import preview | **Done** (UI) |
+| Public CAP XML by identifier (Actual/Public only) | **Done** |
 | CAP area/polygon/circle/geocode validation | **Done** |
 | Org-bound webhook sources, HMAC, replay | **Done** |
 | Inbox review + org isolation | **Done** |

@@ -65,3 +65,9 @@ This temporary policy does not create recipient entitlements and is not a substi
 - `GET /api/webhooks/inbox` — admin global; non-admin membership-scoped
 - `PATCH /api/webhooks/inbox/:id/review` — reviewed/rejected; membership required for non-admin
 
+## Public feeds (unauthenticated)
+
+- `GET /api/public/alerts` — JSON list of published Actual Public Alert/Update/Cancel (non-expired)
+- `GET /api/public/alerts.geojson` — GeoJSON of the same set
+- `GET /api/public/alerts/:identifier/cap.xml` — single CAP 1.2 XML document when the identifier is in that set; Test/Exercise/Ack/Error and non-Public return 404
+

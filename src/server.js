@@ -1743,6 +1743,24 @@ app.get("/api/public/alerts", (req,res)=>{
  const rows=db.prepare("SELECT identifier,sender,sent,status,msg_type,scope,references_text,event,category,response_type,urgency,severity,certainty,effective,onset,expires,headline,description,instruction,area_desc,polygon,circle,language,info_json FROM alerts WHERE workflow='published' AND scope='Public' AND status='Actual' AND msg_type IN ('Alert','Update','Cancel') AND (expires IS NULL OR expires='' OR julianday(expires)>julianday('now')) ORDER BY sent DESC LIMIT 100").all();
  res.json({alerts:rows.map(row=>{const {info_json,...alert}=row;return {...alert,info_blocks:info_json?JSON.parse(info_json):[]};})});
 });
+// Public CAP XML by identifier: only published Actual Public Alert/Update/Cancel that are not expired.
+app.get("/api/public/alerts/:identifier/cap.xml", (req,res)=>{
+ res.set("Cache-Control","no-store");
+ res.set("Pragma","no-cache");
+ const identifier=String(req.params.identifier||"").trim();
+ if(!identifier || identifier.length>200) return res.status(400).json({error:"Invalid CAP identifier"});
+ const row=db.prepare(`SELECT * FROM alerts WHERE identifier=? AND workflow='published' AND scope='Public' AND status='Actual'
+  AND msg_type IN ('Alert','Update','Cancel')
+  AND (expires IS NULL OR expires='' OR julianday(expires)>julianday('now'))`).get(identifier);
+ if(!row) return res.status(404).json({error:"Public CAP message not found"});
+ try {
+  const xml=buildCapXml(rowToCap(row));
+  res.type("application/xml").send(xml);
+ } catch(error) {
+  console.error("Public CAP XML export failed:",error);
+  res.status(500).json({error:"Unable to generate the public CAP XML message"});
+ }
+});
 app.get("/api/audit/verify",auth,roles("admin","reviewer","approver"),(_req,res)=>{
  res.set("Cache-Control","no-store");
  res.set("Pragma","no-cache");

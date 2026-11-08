@@ -545,7 +545,7 @@ app.post("/api/users/:id/password-reset",auth,roles("admin"),adminPasswordResetL
  const passwordHash=bcrypt.hashSync(temporaryPassword,12);
  try {
   const reset=db.transaction(()=>{
-   const target=db.prepare("SELECT id,username,active FROM users WHERE id=?").get(id);
+   const target=db.prepare("SELECT id,username,role,active FROM users WHERE id=?").get(id);
    if(!target) return {kind:"missing"};
    if(!target.active) return {kind:"inactive"};
    // A single administrator must not receive another administrator's temporary credential.

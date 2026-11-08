@@ -2,7 +2,7 @@
 
 ## Current mainline (test platform)
 
-Software phases through organization-bound webhooks, operational retention, and local receivers are implemented on branch `fix/retention-audit-atomicity` (PR #4, Draft). Verified head with green CAP system checks + CodeQL: `28fee082a0a6` (docs pin `1b009b2`).
+Software phases through organization-bound webhooks, operational retention, and local receivers are implemented on branch `fix/retention-audit-atomicity` (PR #4, Draft). Software verification head (CAP system checks + CodeQL success): `53ee894ba0894bb92017c95f238d0af2290f2b4c`. Documentation/register alignment head: `5d928d955910d29a4936f765704f1c67df7126eb`. Institutional Gate 8 remains Open — canonical register: [`INSTITUTIONAL_ACCEPTANCE_EVIDENCE.md`](INSTITUTIONAL_ACCEPTANCE_EVIDENCE.md).
 
 ### CAP and lifecycle
 - CAP 1.2 Alert / Update / Cancel / Ack / Error with references and OASIS XSD checks
@@ -26,6 +26,8 @@ Software phases through organization-bound webhooks, operational retention, and 
 - Namespace enforcement, DTD rejection, Arabic content, dedupe, Update-before-Alert ordering
 
 ## Explicit non-goals
+- Gate 8 institutional acceptance is tracked only in `INSTITUTIONAL_ACCEPTANCE_EVIDENCE.md` and is **Open**
+
 - External CAP / email / SMS / government-gateway delivery remains disabled
 - Not institutionally certified for public warning issuance
 - Restricted / Private recipient grants are not a substitute for organizational go-live acceptance

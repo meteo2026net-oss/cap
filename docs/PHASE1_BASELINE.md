@@ -2,7 +2,9 @@
 
 **Gate:** Stabilize the current revision before adding new functions.  
 **Reference branch:** `fix/retention-audit-atomicity`  
-**Reference SHA:** `b991d5c411b81a6fe18bc9112c91f7206b809f08`  
+**Reference SHA (Phase 1 close-out):** `b991d5c411b81a6fe18bc9112c91f7206b809f08`  
+**Superseding branch heads:** software CI `53ee894ba0894bb92017c95f238d0af2290f2b4c`; docs/register alignment `5d928d955910d29a4936f765704f1c67df7126eb`  
+**Gate 8 register:** [`INSTITUTIONAL_ACCEPTANCE_EVIDENCE.md`](INSTITUTIONAL_ACCEPTANCE_EVIDENCE.md) (Open — not closed by Phase 1)  
 **PR:** [#4](https://github.com/meteo2026net-oss/cap/pull/4) — **Draft**, not merged  
 **Base (main):** `f9b0f1fe8eca2d73070a8870eb325586090b9f7d`  
 **CI on reference SHA:** CAP system checks **success**, CodeQL **success**

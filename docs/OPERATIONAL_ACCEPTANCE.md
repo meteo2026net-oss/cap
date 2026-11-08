@@ -3,7 +3,7 @@
 > This document separates **software behaviors already exercised in automated tests** from **institutional go-live decisions** that this repository cannot complete on its own.
 > External delivery adapters remain disabled (`external_adapters_enabled: false`). Do not treat a green CI run as authority to issue public warnings.
 >
-> Latest automated verification head on `fix/retention-audit-atomicity`: `53ee894ba0894bb92017c95f238d0af2290f2b4c` (CAP system checks + CodeQL success). Gate 8 institutional items remain Open; CI does not close them.
+> Latest automated verification head on `fix/retention-audit-atomicity`: `53ee894ba0894bb92017c95f238d0af2290f2b4c` (CAP system checks + CodeQL success). Documentation head: `5d928d955910d29a4936f765704f1c67df7126eb`. Gate 8 is tracked solely in [`INSTITUTIONAL_ACCEPTANCE_EVIDENCE.md`](INSTITUTIONAL_ACCEPTANCE_EVIDENCE.md) (all rows Open); CI does not close them.
 
 ## A. Verified in automated tests (local / CI)
 
@@ -29,6 +29,8 @@
 **Current CAP scope boundary:** Until recipient-level grants are implemented, the application now fails closed for Restricted and Private scopes. Authenticated lists, detail/XML/history/relations, exports, statistics, review queues, audit listing/export, and delivery views are restricted to Public data; non-Public direct IDs are concealed as 404. New structurally valid Restricted/Private creation and scope promotion are blocked. Structurally incomplete requests continue to fail CAP validation with HTTP 400 and are not persisted. Global delivery retry/recovery is blocked while non-Public outbox rows exist. Regression tests cover both validation and authorization outcomes; CI evidence for the latest head is pending. Existing non-Public rows remain in storage and must not be treated as available or authorized. This temporary Public-only mode is not a completed recipient authorization system.
 
 ## B. Requires institutional acceptance (not claimed by CI)
+
+**Canonical evidence register:** [`INSTITUTIONAL_ACCEPTANCE_EVIDENCE.md`](INSTITUTIONAL_ACCEPTANCE_EVIDENCE.md). Do not mark these items accepted from section A tests or a green workflow run.
 
 **Recipient model remains outstanding:** non-Public rows are currently denied by a temporary Public-only API policy. This prevents accidental disclosure but does not provide recipient-level entitlements. Existing non-Public records remain stored and inaccessible through the normal API; institutional recipient grants, identity mapping, grant/revoke audit, and independent review are still required before Restricted/Private workflows can be re-enabled.
 

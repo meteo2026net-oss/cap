@@ -100,6 +100,8 @@ A valid checkpoint detects deletion or rollback of the anchored tail. The checkp
 
 ## 7. Go-live acceptance gates
 
+**Canonical institutional register:** [INSTITUTIONAL_ACCEPTANCE_EVIDENCE.md](INSTITUTIONAL_ACCEPTANCE_EVIDENCE.md). Gate 8 closes only when that register’s final acceptance row is Accepted with Evidence ID, Date, and Approver. This readiness checklist is supporting guidance; it does not replace the register.
+
 Go-live is blocked until all applicable items below have named evidence and an accountable approver:
 
 1. [ ] Authorized institution signs off on policy, roles, coverage, and operational ownership.

@@ -1,9 +1,11 @@
-# Institutional Acceptance Evidence Register (Gate 8)
+# Institutional Acceptance Evidence Register (Gate 8) — CANONICAL
 
-This register is **independent of CI**.  
-Filling a cell requires an artifact owned by the institution (signed report, ticket, policy ID, meeting record)—not a commit message or a green workflow run.
+> **This is the sole reference register for institutional / Gate 8 acceptance.**  
+> Other documents may link here; they must not mark Gate 8 rows Accepted on their own.  
+> Automated tests, CodeQL, documentation commits, and PR #4 Draft status are **not** acceptance evidence.
 
-**Repository head at last software verification:** `53ee894ba0894bb92017c95f238d0af2290f2b4c`  
+**Software verification head (CI green):** `53ee894ba0894bb92017c95f238d0af2290f2b4c`  
+**Documentation alignment head:** `5d928d955910d29a4936f765704f1c67df7126eb`  
 **PR #4:** Draft — not an acceptance vehicle  
 **external_adapters_enabled:** false  
 
@@ -11,9 +13,9 @@ Filling a cell requires an artifact owned by the institution (signed report, tic
 
 For each row:
 
-1. Leave **Status** as `Open` until evidence exists.  
+1. Leave **Status** as `Open` until institutional evidence exists.  
 2. Set **Status** to `Accepted` only with **Evidence ID**, **Date**, and **Approver**.  
-3. Never set `Accepted` because automated tests passed.
+3. Never set `Accepted` because automated tests passed or a doc was committed.
 
 ## Register
 
@@ -39,7 +41,7 @@ For each row:
 - Do not issue Actual public warnings from this system under institutional authority.  
 - Do not enable external delivery adapters in configuration or code paths used for operations.  
 - Do not treat Restricted/Private as production-ready recipient authorization.  
-- Do not close Gate 8 in `GATE_STATUS.md` until row 14 is Accepted with evidence.
+- Do not close Gate 8 in `GATE_STATUS.md` until row 14 is Accepted with evidence recorded in **this** file.
 
 ## Relationship to software evidence
 

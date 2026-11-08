@@ -2,7 +2,7 @@
 
 Arabic-first CAP 1.2 weather-warning management system for institutional operations centres. It covers the full internal lifecycle from draft authorship through review, approval, internal publication, audit, and controlled delivery outbox handling.
 
-**Not approved for operational public warning issuance.** Use only Test/Exercise data and private deployments until the institutional go-live gates in [Operational readiness](docs/OPERATIONAL_READINESS.md) are completed and independently accepted. See the [CAP 1.2 conformance matrix](docs/CAP_CONFORMANCE_MATRIX.md) for automated coverage boundaries.
+**Not approved for operational public warning issuance.** Use only Test/Exercise data and private deployments until the institutional go-live gates are completed and independently accepted. Gate 8 evidence is tracked only in [Institutional acceptance evidence register](docs/INSTITUTIONAL_ACCEPTANCE_EVIDENCE.md) (currently **Open**). See also [Operational readiness](docs/OPERATIONAL_READINESS.md), [Gate status](docs/GATE_STATUS.md), and the [CAP 1.2 conformance matrix](docs/CAP_CONFORMANCE_MATRIX.md) for automated coverage boundaries.
 
 ## Run locally
 

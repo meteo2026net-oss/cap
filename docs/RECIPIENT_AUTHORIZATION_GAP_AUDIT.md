@@ -185,3 +185,30 @@ This inventory was checked against `src/server.js`, `src/delivery.js`, `src/deli
 5. **The current worker has no principal context.** It is safe only because it performs Public-only maintenance and pauses globally when any non-Public outbox row exists. It cannot safely become a recipient-aware dispatcher by adding a role or group check in the HTTP API alone; background jobs must evaluate persisted source, tenant, membership, grant expiry, and revocation state themselves.
 
 No code or schema changes are implied by this inventory. These are policy and implementation gates, not permission to activate non-Public access.
+
+
+## 10. Implementation checkpoint — 2026-11-08
+
+The follow-up branch now contains organization, membership, recipient-group, alert-owner, and recipient-grant schema/API primitives. These are staged administrative controls, not end-to-end tenant authorization:
+
+- Organization, membership, group, and grant management endpoints remain platform-admin-only.
+- Alert list/detail, CAP XML, CSV export, relations, review/version/timeline, audit-linked alert views, delivery outbox, and worker maintenance still rely on the temporary Public-only boundary. The grant predicate is **not** wired into those disclosure/action paths.
+- Public alerts remain globally readable by authenticated roles under the current Public-feed policy. This is intentional and must not be described as an organization-level IDOR fix.
+- A same-role cross-organization API regression fixture now exercises Forecaster, Reviewer, and Publisher identities in separate organizations. Its negative assertions cover direct IDs and Public-only concealment of legacy non-Public rows; positive Public visibility is asserted as the current global policy. This is a containment test, not proof that authorized Restricted/Private reads work.
+- Grant unit tests cover direct-user, organization, and group predicates, including same-role users in different organizations. The API integration test rejects a direct grant that misrepresents a user from Organization A as a member of Organization B.
+
+### Surfaces that remain explicitly unscoped
+
+1. **Webhook ingress/inbox:** inbound signatures authenticate the configured shared secret, not an organization. Inbox rows and reviewer access remain global; source-to-organization attribution and tenant-scoped cursors/review are not implemented. Do not claim webhook IDOR isolation.
+2. **Audit events without an alert:** the hash chain and audit list remain global operational records. Membership/group/grant events can contain organization and account details; an explicit tenant/platform event visibility policy and schema attribution are still required.
+3. **Retention:** current retention remains a global platform operation; tenant-specific legal holds and retention policies are not implemented.
+4. **Metrics:** admin/publisher operational aggregates remain platform-wide and Public-only for alert data. This is not a tenant-scoped metrics design.
+5. **Delivery worker:** the worker has no user or tenant principal. It is limited to Public rows and pauses global queue maintenance if any non-Public outbox row exists. This fail-closed stop is not a recipient-aware dispatcher.
+
+### Current validation status
+
+- The previous exact PR head `2ddab0757740a573933410404b7eeec47101be93` had 217 passing and 5 failing Node tests; CodeQL and the Windows backup/restore job succeeded, while the CAP system test job failed at `npm test`.
+- Follow-up commits corrected the observed test-fixture and lifecycle-timing issues and added same-role cross-organization scope coverage. The current head at this checkpoint is `d77c7898912036595344e1dd89043377e0172b61`; its CI result has not yet been returned. Do not treat predecessor checks as validation of this head.
+- Restricted/Private remain blocked. `external_adapters_enabled: false` remains unchanged. No real CAP message or external webhook was sent.
+
+The next authorization gate is to define trusted webhook-source attribution and audit-event visibility, then apply a single deny-by-default organization/grant policy to every listed API and background path before any non-Public access is enabled.

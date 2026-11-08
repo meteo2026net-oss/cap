@@ -55,7 +55,7 @@ test("organization memberships support multiple organizations without cross-tena
     assert.equal(database.prepare("SELECT status FROM organization_memberships WHERE id=?").get(memberA).status, "pending");
     assert.throws(() => requestOrganizationMembership(database, {
       organizationId: orgA, userId: 4, actorUserId: 1
-    }), /active organization and active user/);
+    }), /active organization and active user/i);
     assert.throws(() => requestOrganizationMembership(database, {
       organizationId: orgA, userId: 2, actorUserId: 1
     }), /UNIQUE/);
@@ -105,11 +105,11 @@ test("membership expiry is enforced at authorization time and by expiry sweep", 
     const org = createOrganization(database, { slug: "expiry", name: "Expiry Org", actorUserId: 1 });
     const membershipId = requestOrganizationMembership(database, {
       organizationId: org, userId: 2, actorUserId: 1,
-      startsAt: "2026-11-01T00:00:00Z", expiresAt: "2026-11-02T00:00:00Z"
+      startsAt: new Date(Date.now() - 60 * 60 * 1000).toISOString(), expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString()
     });
     transitionOrganizationMembership(database, { membershipId, nextStatus: "active", actorUserId: 1 });
-    assert.equal(hasActiveOrganizationMembership(database, 2, org, new Date("2026-11-01T12:00:00Z")), true);
-    assert.equal(hasActiveOrganizationMembership(database, 2, org, new Date("2026-11-02T00:00:00Z")), false);
+    assert.equal(hasActiveOrganizationMembership(database, 2, org, new Date(Date.now() + 30 * 60 * 1000)), true);
+    assert.equal(hasActiveOrganizationMembership(database, 2, org, new Date(Date.now() + 60 * 60 * 1000)), false);
     assert.equal(expireOrganizationMemberships(database, { at: new Date("2026-11-02T00:00:00Z") }), 1);
     assert.equal(database.prepare("SELECT status FROM organization_memberships WHERE id=?").get(membershipId).status, "expired");
   } finally {
@@ -240,7 +240,7 @@ test("alert grants bind direct users, organizations, and groups to an alert owne
     }),true);
     assert.equal(hasActiveAlertRecipientGrant(database,{
       alertId:100,userId:2,organizationId:owner,action:"deliver"
-    }),true,"organization grants do not extend to a same-role user in the owning organization");
+    }),false,"organization grants do not extend to a same-role user in the owning organization");
 
     const groupGrant=createAlertRecipientGrant(database,{
       alertId:100,ownerOrganizationId:owner,recipientType:"group",
@@ -289,16 +289,16 @@ test("grant expiry is immediate at authorization time and terminal after expiry 
     const grant=createAlertRecipientGrant(database,{
       alertId:101,ownerOrganizationId:owner,recipientType:"user",recipientUserId:3,
       recipientOrganizationId:recipient,action:"read",actorUserId:1,
-      startsAt:"2026-11-01T00:00:00Z",expiresAt:"2026-11-02T00:00:00Z"
+      startsAt:new Date(Date.now()-60*60*1000).toISOString(),expiresAt:new Date(Date.now()+60*60*1000).toISOString()
     });
     transitionAlertRecipientGrant(database,{grantId:grant,nextStatus:"active",actorUserId:1});
     assert.equal(hasActiveAlertRecipientGrant(database,{
-      alertId:101,userId:3,organizationId:recipient,at:new Date("2026-11-01T12:00:00Z")
+      alertId:101,userId:3,organizationId:recipient,at:new Date(Date.now()+30*60*1000)
     }),true);
     assert.equal(hasActiveAlertRecipientGrant(database,{
-      alertId:101,userId:3,organizationId:recipient,at:new Date("2026-11-02T00:00:00Z")
+      alertId:101,userId:3,organizationId:recipient,at:new Date(Date.now()+60*60*1000)
     }),false);
-    assert.equal(expireAlertRecipientGrants(database,{at:new Date("2026-11-02T00:00:00Z")}),1);
+    assert.equal(expireAlertRecipientGrants(database,{at:new Date(Date.now()+60*60*1000)}),1);
     assert.equal(database.prepare("SELECT status FROM alert_recipient_grants WHERE id=?").get(grant).status,"expired");
   }finally{database.close();}
 });

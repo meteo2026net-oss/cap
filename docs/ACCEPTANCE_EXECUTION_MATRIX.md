@@ -33,7 +33,7 @@ Maps the full acceptance checklist to **what the repository can prove**, **what 
 
 | Step | Automated evidence (repo/CI) | Operator (isolated host) | Engineering close? |
 |------|------------------------------|--------------------------|--------------------|
-| **11 Isolation / IDOR** | `tests/cap-scope-isolation.integration.test.js`, `tests/recipient-auth.integration.test.js`, `tests/recipient-grant-enforcement.integration.test.js` | Pack scenarios I1–I3 | **Yes if CI + operator I1–I2 PASS** |
+| **11 Isolation / IDOR** | `tests/cap-scope-isolation.integration.test.js`, `tests/recipient-auth.integration.test.js`, `tests/recipient-grant-enforcement.integration.test.js`, `tests/acceptance-two-tenant.integration.test.js` | Pack scenarios I1–I3 | **Yes if CI + operator I1–I2 PASS** |
 | **12 Alert lifecycle** | `tests/cap-lifecycle.integration.test.js`, `tests/api.integration.test.js`, interop lifecycle | Pack L1–L4 on Org A | **Yes if CI + L1–L4 PASS** |
 | **13 Roles / sessions** | API integration (deactivate, 403 matrix, MFA), `login_failed` audit | Pack R1–R3 | **Yes if CI + R1–R2 PASS** |
 | **14 Webhook / outbox / workers** | webhook tests, `tests/delivery.test.js`, retention atomicity, worker internal-only | Pack W1–W3; confirm health `external_adapters_enabled:false` | **Yes if CI + W1–W3 PASS** |

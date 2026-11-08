@@ -1529,8 +1529,9 @@ app.use("/api/delivery",auth,(req,res,next)=>{
  const deliveryId=Number(deliveryIdSegment);
  const idMatch=normalizedPath.startsWith("/api/delivery/outbox/") && Number.isSafeInteger(deliveryId) && deliveryId>0 ? [null,deliveryId] : null;
  if(idMatch){
-  const row=db.prepare("SELECT a.scope FROM delivery_outbox d JOIN alerts a ON a.id=d.alert_id WHERE d.id=?").get(idMatch[1]);
-  if(row && row.scope!=="Public") return res.status(404).json({error:"Delivery not found"});
+  const row=db.prepare("SELECT a.id,a.scope FROM delivery_outbox d JOIN alerts a ON a.id=d.alert_id WHERE d.id=?").get(idMatch[1]);
+  if(row && row.scope!=="Public" && !canAccessAlertForRequest(req,row,"deliver"))
+   return res.status(404).json({error:"Delivery not found"});
  }
  if(req.method==="POST" && ["/api/delivery/process-retries","/api/delivery/recover-stale"].includes(normalizedPath)){
   if(hasNonPublicDeliveryOutbox(db)) return res.status(403).json({error:"Global delivery maintenance is blocked while non-Public alert recipients are not authorized",code:"SCOPE_AUTHORIZATION_UNCONFIGURED"});
@@ -1545,16 +1546,17 @@ app.use("/api/delivery",(_req,res,next)=>{
 app.get("/api/delivery/outbox",auth,roles("admin","publisher"),(req,res)=>{
  const status=req.query.status;
  if(status!==undefined && !["queued","sending","delivered","failed","dead_letter"].includes(status)) return res.status(400).json({error:"Invalid delivery status filter"});
+ const visibility=alertScopePredicate(req,"a","deliver");
  const rows=db.prepare(`SELECT d.id,d.alert_id,d.channel,CASE WHEN d.dead_letter_at IS NOT NULL THEN 'dead_letter' ELSE d.status END AS status,d.attempts,d.max_attempts,d.next_attempt_at,d.dead_letter_at,d.external_id,d.last_error,d.created_at,d.updated_at,d.last_attempt_at,d.delivered_at,a.identifier,a.headline
   FROM delivery_outbox d JOIN alerts a ON a.id=d.alert_id
-  WHERE a.scope='Public' AND (? IS NULL OR (?='dead_letter' AND d.dead_letter_at IS NOT NULL) OR (?<>'dead_letter' AND d.status=? AND d.dead_letter_at IS NULL)) ORDER BY d.created_at DESC LIMIT 500`).all(status ?? null,status ?? null,status ?? null,status ?? null);
+  WHERE ${visibility.sql} AND (? IS NULL OR (?='dead_letter' AND d.dead_letter_at IS NOT NULL) OR (?<>'dead_letter' AND d.status=? AND d.dead_letter_at IS NULL)) ORDER BY d.created_at DESC LIMIT 500`).all(...visibility.params,status ?? null,status ?? null,status ?? null,status ?? null);
  const counts=db.prepare(`SELECT
   COALESCE(SUM(CASE WHEN d.dead_letter_at IS NOT NULL THEN 1 ELSE 0 END),0) AS dead_letter,
   COALESCE(SUM(CASE WHEN d.dead_letter_at IS NULL AND d.status='queued' THEN 1 ELSE 0 END),0) AS queued,
   COALESCE(SUM(CASE WHEN d.dead_letter_at IS NULL AND d.status='sending' THEN 1 ELSE 0 END),0) AS sending,
   COALESCE(SUM(CASE WHEN d.dead_letter_at IS NULL AND d.status='failed' THEN 1 ELSE 0 END),0) AS failed,
   COALESCE(SUM(CASE WHEN d.dead_letter_at IS NULL AND d.status='delivered' THEN 1 ELSE 0 END),0) AS delivered
-  FROM delivery_outbox d JOIN alerts a ON a.id=d.alert_id WHERE a.scope='Public'`).get();
+  FROM delivery_outbox d JOIN alerts a ON a.id=d.alert_id WHERE ${visibility.sql}`).get(...visibility.params);
  res.json({deliveries:rows,counts,external_adapters_enabled:false});
 });
 app.post("/api/delivery/process-retries",auth,roles("admin","publisher"),(req,res)=>{
@@ -1583,7 +1585,7 @@ app.post("/api/delivery/outbox/:id/claim",auth,roles("admin","publisher"),(req,r
  const deliveryId=Number(req.params.id);
  if(!Number.isSafeInteger(deliveryId) || deliveryId<1) return res.status(400).json({error:"Invalid delivery id"});
  const delivery=db.transaction(()=>{
-  const claimed=claimDelivery(db,deliveryId);
+  const claimed=claimDelivery(db,deliveryId,{userId:req.user.id,organizationId:recipientOrganizationContext(req)});
   if(!claimed) return null;
   audit(req.user.id,claimed.alert_id,"delivery_claimed",`Claimed outbox entry ${claimed.id}; no external transmission is performed by this endpoint`);
   return claimed;
@@ -1598,7 +1600,7 @@ app.post("/api/delivery/outbox/:id/receipt",auth,roles("admin","publisher"),(req
   const receiptSchema=z.object({status:z.enum(["delivered","failed"]),leaseToken:z.string().uuid(),externalId:z.string().max(256).optional(),details:z.string().max(2000).optional()});
   const data=receiptSchema.parse(req.body);
   const delivery=db.transaction(()=>{
-   const recorded=recordDeliveryReceipt(db,deliveryId,data);
+   const recorded=recordDeliveryReceipt(db,deliveryId,data,{userId:req.user.id,organizationId:recipientOrganizationContext(req)});
    if(!recorded) return null;
    audit(req.user.id,recorded.alert_id,"delivery_"+recorded.status,`Receipt recorded for outbox entry ${recorded.id}`);
    return recorded;
@@ -1611,7 +1613,7 @@ app.post("/api/delivery/outbox/:id/retry",auth,roles("admin","publisher"),(req,r
  const deliveryId=Number(req.params.id);
  if(!Number.isSafeInteger(deliveryId) || deliveryId<1) return res.status(400).json({error:"Invalid delivery id"});
  const delivery=db.transaction(()=>{
-  const retried=retryDelivery(db,deliveryId);
+  const retried=retryDelivery(db,deliveryId,{userId:req.user.id,organizationId:recipientOrganizationContext(req)});
   if(!retried) return null;
   audit(req.user.id,retried.alert_id,"delivery_retry_queued",`Requeued outbox entry ${retried.id}`);
   return retried;

@@ -645,9 +645,11 @@ app.use("/api/alerts",auth,(req,res,next)=>{
  if(idMatch){
   const existing=db.prepare("SELECT scope FROM alerts WHERE id=?").get(idMatch[1]);
   if(existing && existing.scope!=="Public") return res.status(404).json({error:"Alert not found"});
-  if(req.method==="PATCH" && req.body?.scope==="Restricted")
+  if(req.method==="PATCH" && req.body?.scope==="Restricted" &&
+     typeof (req.body.restriction ?? existing?.restriction)==="string" && (req.body.restriction ?? existing?.restriction).trim())
    return res.status(403).json({error:"Changing an alert to Restricted is disabled until recipient authorization is configured",code:"SCOPE_AUTHORIZATION_UNCONFIGURED"});
-  if(req.method==="PATCH" && req.body?.scope==="Private")
+  if(req.method==="PATCH" && req.body?.scope==="Private" &&
+     typeof (req.body.addresses ?? existing?.addresses)==="string" && (req.body.addresses ?? existing?.addresses).trim())
    return res.status(403).json({error:"Changing an alert to Private is disabled until recipient authorization is configured",code:"SCOPE_AUTHORIZATION_UNCONFIGURED"});
  }
  next();

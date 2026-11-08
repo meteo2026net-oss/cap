@@ -2,7 +2,7 @@
 
 ## Current mainline (test platform)
 
-Software phases through organization-bound webhooks, operational retention, and local receivers are implemented on branch `fix/retention-audit-atomicity` (PR #4, Draft). Software verification head (CAP system checks + CodeQL success): `53ee894ba0894bb92017c95f238d0af2290f2b4c`. Documentation/register alignment head: `604e3e167afbcbd2afb6146f86d92e25e623da5a`. Institutional Gate 8 remains Open — canonical register: [`INSTITUTIONAL_ACCEPTANCE_EVIDENCE.md`](INSTITUTIONAL_ACCEPTANCE_EVIDENCE.md).
+Software phases through organization-bound webhooks, operational retention, and local receivers are implemented on branch `fix/retention-audit-atomicity` (PR #4, Draft). Software verification head (CAP system checks + CodeQL success): `53ee894ba0894bb92017c95f238d0af2290f2b4c`. Documentation/register alignment head: `3050acf1b88a4c73ac891aa3c896bb7fc8be536a`. Institutional Gate 8 remains Open — canonical register: [`INSTITUTIONAL_ACCEPTANCE_EVIDENCE.md`](INSTITUTIONAL_ACCEPTANCE_EVIDENCE.md).
 
 ### CAP and lifecycle
 - CAP 1.2 Alert / Update / Cancel / Ack / Error with references and OASIS XSD checks

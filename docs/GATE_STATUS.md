@@ -1,7 +1,7 @@
 # Project Gate Status
 
 **Branch:** `fix/retention-audit-atomicity`  
-**Documentation head:** `3050acf1b88a4c73ac891aa3c896bb7fc8be536a`  
+**Documentation head:** `54a002e75242f37ac618f6e4b8e4d71f00632db7`  
 **Last head with CAP system checks + CodeQL success (software verification):** `53ee894ba0894bb92017c95f238d0af2290f2b4c`  
 **PR #4:** open, **Draft**, not merged — https://github.com/meteo2026net-oss/cap/pull/4  
 **external_adapters_enabled:** **false**

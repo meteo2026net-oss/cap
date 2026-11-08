@@ -251,7 +251,7 @@ export function installRecipientSchema(database) {
       CHECK(owner_organization_id <> recipient_organization_id OR recipient_type='user'),
       CHECK(
         (recipient_type='user' AND recipient_user_id IS NOT NULL
-          AND recipient_organization_id IS NULL AND recipient_group_id IS NULL) OR
+          AND recipient_organization_id IS NOT NULL AND recipient_group_id IS NULL) OR
         (recipient_type='organization' AND recipient_user_id IS NULL
           AND recipient_organization_id IS NOT NULL AND recipient_group_id IS NULL) OR
         (recipient_type='group' AND recipient_user_id IS NULL

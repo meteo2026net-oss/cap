@@ -132,3 +132,24 @@ Implementation must not begin until the institution signs off on:
 - Acceptance criteria and responsible owners for the regression matrix.
 
 Until these decisions are approved and implemented, retain the existing Public-only API boundary. Do not create default grants, seed sample grants in production, or enable Restricted/Private workflows.
+
+
+## Phase 1 implementation snapshot — provisional, not a policy approval
+
+The current PR branch now contains the first organization/membership implementation slice:
+
+- `src/recipient-auth.js` installs the organization, membership, and immutable membership-event tables and provides transaction-bound creation, transition, expiry, and current-membership checks.
+- `src/db.js` installs the schema idempotently after the base user table exists. Existing users receive no automatic organization membership.
+- `src/server.js` exposes administrator-only organization and membership management endpoints. This is a temporary conservative operator boundary, not a final delegated-administration model.
+- `tests/recipient-auth.test.js` covers membership isolation for same-role users, lifecycle transitions, immutable event history, and expiry.
+- `tests/recipient-auth.integration.test.js` exercises the API with two forecasters sharing the same workflow role but assigned to separate organizations.
+
+Provisional behavior:
+- A user may have memberships in multiple organizations, but each organization/user membership period is an explicit record.
+- Only active platform administrators may create organizations, request memberships, activate, suspend, or revoke them.
+- Memberships begin pending; activation records the approving administrator.
+- Revoked and expired records are terminal. Rejoining requires a new membership record.
+- Authorization checks require active account, active organization, active membership, and an effective UTC time window.
+- The expiry sweep is a controlled operation; clients cannot directly set a membership to expired.
+
+Important boundary: this phase does **not** yet attach alerts to owning organizations, create recipient groups or grants, or authorize Restricted/Private reads. It does not establish tenant isolation for alert data by itself. Restricted/Private remain blocked, Public-only API and delivery filters remain in force, and external adapters remain disabled. The same-role cross-organization alert IDOR acceptance gate is not complete until the grant and alert-owner phases are implemented.

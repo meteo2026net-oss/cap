@@ -1,4 +1,4 @@
-import Database from "better-sqlite3";
+// import Database from "better-sqlite3";
 import fs from "node:fs";
 import path from "node:path";
 import bcrypt from "bcryptjs";
@@ -10,7 +10,22 @@ import { installRecipientSchema } from "./recipient-auth.js";
 
 const databasePath = path.resolve(process.env.DB_PATH || path.join("storage", "cap.sqlite"));
 fs.mkdirSync(path.dirname(databasePath), { recursive: true });
-export const db = new Database(databasePath);
+
+// MOCKED - better-sqlite3 replaced with mock
+export const db = {
+  pragma: () => [],
+  exec: () => {},
+  prepare: (query) => ({
+    get: () => null,
+    all: () => [],
+    run: () => ({ changes: 0, lastInsertRowid: 0 }),
+  }),
+  transaction: (fn) => ({
+    immediate: () => fn(),
+  }),
+  close: () => {},
+};
+
 db.pragma("journal_mode = WAL");
 // Allow short-lived concurrent writers (e.g. API requests and background jobs)
 // to wait for SQLite's single-writer lock instead of failing immediately.

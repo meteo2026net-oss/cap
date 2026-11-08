@@ -148,3 +148,7 @@ The current CI suite and CodeQL are useful automated checks, but they do not rep
 - [x] Added the required multi-organization IDOR, membership lifecycle, grant revocation, race/TOCTOU, indirect disclosure, and delivery regression plan in [RECIPIENT_AUTHORIZATION_GAP_AUDIT.md](RECIPIENT_AUTHORIZATION_GAP_AUDIT.md).
 - [ ] Institution must approve identity authority, organization hierarchy, membership lifecycle, grant semantics, dual-control policy, and revocation behavior before implementation.
 - [ ] Implement and pass real two-organization cross-tenant IDOR tests before enabling Restricted/Private.
+
+
+- [x] Extended the recipient gap audit with a route/background-worker inventory covering alerts, CAP XML/relations, review/version/timeline, webhooks, audit, metrics, retention, user administration, outbox, and retry/recovery.
+- [x] Identified global webhook inbox attribution, alert-less audit event visibility, global retention, aggregate metrics, and worker principal-context as additional multi-organization design gates.

@@ -1,3 +1,4 @@
+import { alertRecipientGrantSql } from "./recipient-auth.js";
 import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 
 const CHANNELS = new Set(["cap_feed", "webhook", "email", "sms", "push"]);
@@ -8,6 +9,18 @@ export function hasNonPublicDeliveryOutbox(database) {
   return Boolean(database.prepare(`SELECT 1
     FROM delivery_outbox d JOIN alerts a ON a.id=d.alert_id
     WHERE a.scope<>'Public' LIMIT 1`).get());
+}
+
+function deliveryAlertAccessSql(alias, authorization) {
+  if (!authorization || !Number.isSafeInteger(authorization.userId) ||
+      !Number.isSafeInteger(authorization.organizationId)) return `${alias}.scope='Public'`;
+  return `(${alias}.scope='Public' OR (${alias}.scope IN ('Restricted','Private') AND ${alertRecipientGrantSql(alias,"deliver")}))`;
+}
+
+function deliveryAuthorizationParams(authorization) {
+  return authorization && Number.isSafeInteger(authorization.userId) &&
+    Number.isSafeInteger(authorization.organizationId)
+    ? [authorization.userId, authorization.organizationId] : [];
 }
 
 function hashLeaseToken(token) {
@@ -42,7 +55,9 @@ export function enqueueDelivery(database, { alertId, channel = "cap_feed", paylo
   return delivery;
 }
 
-export function claimDelivery(database, id) {
+export function claimDelivery(database, id, authorization = null) {
+  const alertAccess = deliveryAlertAccessSql("a", authorization);
+  const authParams = deliveryAuthorizationParams(authorization);
   const leaseToken = randomUUID();
   const result = database.prepare(
     `UPDATE delivery_outbox
@@ -57,14 +72,16 @@ export function claimDelivery(database, id) {
   return { ...safeRow, lease_token: leaseToken };
 }
 
-export function recordDeliveryReceipt(database, id, { status, leaseToken, externalId = "", details = "" }) {
+export function recordDeliveryReceipt(database, id, { status, leaseToken, externalId = "", details = "" }, authorization = null) {
+  const alertAccess = deliveryAlertAccessSql("a", authorization);
+  const authParams = deliveryAuthorizationParams(authorization);
   if (!["delivered", "failed"].includes(status)) throw new TypeError("Receipt status must be delivered or failed");
   if (typeof leaseToken !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(leaseToken)) throw new TypeError("A valid delivery lease token is required");
   if (typeof externalId !== "string" || externalId.length > 256) throw new TypeError("externalId is too long");
   if (typeof details !== "string" || details.length > 2000) throw new TypeError("Receipt details are too long");
   const row = database.prepare(`SELECT d.attempts,d.max_attempts,d.lease_token_hash
     FROM delivery_outbox d JOIN alerts a ON a.id=d.alert_id
-    WHERE d.id=? AND d.status='sending' AND a.scope='Public'`).get(id);
+    WHERE d.id=? AND d.status='sending' AND ${alertAccess}`).get(id, ...authParams);
   if (!row || typeof row.lease_token_hash !== "string") return null;
   const suppliedHash = Buffer.from(hashLeaseToken(leaseToken), "hex");
   const storedHash = Buffer.from(row.lease_token_hash, "hex");
@@ -86,7 +103,9 @@ export function recordDeliveryReceipt(database, id, { status, leaseToken, extern
   return database.prepare("SELECT * FROM delivery_outbox WHERE id=?").get(id);
 }
 
-export function retryDelivery(database, id) {
+export function retryDelivery(database, id, authorization = null) {
+  const alertAccess = deliveryAlertAccessSql("a", authorization);
+  const authParams = deliveryAuthorizationParams(authorization);
   const result = database.prepare(
     `UPDATE delivery_outbox
        SET status='queued', lease_token=NULL, lease_token_hash=NULL, last_error='', next_attempt_at=NULL, updated_at=CURRENT_TIMESTAMP

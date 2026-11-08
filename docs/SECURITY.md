@@ -67,3 +67,7 @@ Do not authorize operational use until the responsible institution has completed
 - CAP conformance and end-to-end interoperability tests with intended receiving systems;
 - role separation, approval policy, audit retention, and incident-response approval;
 - operational training, monitoring, support ownership, and change-management procedures.
+
+
+## Temporary Public-only CAP scope boundary
+Recipient-level authorization for Restricted and Private alerts is not implemented. The application therefore fails closed: authenticated API collection, statistics, review, audit, delivery, export, and alert-linked detail paths expose Public alerts only. Direct identifiers for non-Public alerts are concealed as not found. New non-Public messages and valid scope promotions are blocked until an institution-approved recipient-grant model exists. Structurally incomplete CAP requests are still rejected by CAP validation and are not persisted; the temporary scope denial applies after required scope fields are present. Legacy non-Public records remain stored but are not available through the application API. This is a containment measure, not a recipient authorization implementation.

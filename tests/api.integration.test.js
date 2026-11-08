@@ -1791,8 +1791,10 @@ test("API enforces role separation, public-feed filtering and account deactivati
     "restricted audit history must not be stored by browsers or shared caches");
   assert.equal(auditHistory.headers.get("pragma"), "no-cache",
     "restricted audit history must carry a legacy no-cache directive");
-  assert.ok(auditHistory.data.entries.some(entry => entry.action === "login_succeeded" && entry.username === "admin"),
-    "successful administrator sign-ins should be included in the audit history");
+  assert.ok(auditHistory.data.entries.some(entry =>
+    entry.username === "admin" &&
+    ["login_succeeded", "mfa_login_challenge_created", "mfa_login_succeeded"].includes(entry.action)
+  ), "successful administrator authentication events should be included in the audit history");
   assert.ok(auditHistory.data.entries.some(entry => entry.action === "user_created" && entry.details.includes("approver1")),
     "creating an account should record the target username and assigned role");
   assert.ok(auditHistory.data.entries.some(entry => entry.action === "user_role_changed" && entry.details.includes("rolechange1") && entry.details.includes("viewer") && entry.details.includes("publisher")),

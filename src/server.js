@@ -17,7 +17,7 @@ import { applyOperationalRetentionWithAudit, collectOperationalMetrics } from ".
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { consumeRecoveryCode, decryptTotpSecret, encryptTotpSecret, generateRecoveryCodes, generateTotpSecret, hashRecoveryCode, verifyTotp } from "./mfa.js";
 import { verifyAndConsumeWebhook } from "./webhook-replay.js";
-import { createOrganization, createRecipientGroup, expireOrganizationMemberships, expireRecipientGroupMemberships, requestOrganizationMembership, requestRecipientGroupMembership, transitionOrganizationMembership, transitionRecipientGroupMembership } from "./recipient-auth.js";
+import { assignAlertOrganizationOwner, createAlertRecipientGrant, createOrganization, createRecipientGroup, expireAlertRecipientGrants, expireOrganizationMemberships, expireRecipientGroupMemberships, requestOrganizationMembership, requestRecipientGroupMembership, transitionAlertRecipientGrant, transitionOrganizationMembership, transitionRecipientGroupMembership } from "./recipient-auth.js";
 
 const app = express();
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -690,6 +690,88 @@ app.patch("/api/recipient-group-memberships/:id",auth,roles("admin"),adminAccoun
   if(/Group membership not found/.test(error.message)) return res.status(404).json({error:"Group membership not found"});
   if(/not permitted|changed concurrently/.test(error.message)) return res.status(409).json({error:error.message});
   return res.status(400).json({error:error.message});
+ }
+});
+
+
+app.post("/api/alerts/:id/owner-organization",auth,roles("admin"),adminAccountMutationLimiter,(req,res)=>{
+ const alertId=Number(req.params.id);
+ if(!Number.isSafeInteger(alertId)||alertId<1) return res.status(400).json({error:"Invalid alert id"});
+ try {
+  const data=z.object({organization_id:z.number().int().positive()}).parse(req.body);
+  const result=assignAlertOrganizationOwner(db,{alertId,organizationId:data.organization_id,actorUserId:req.user.id});
+  audit(req.user.id,alertId,"alert_organization_owner_assigned",`Assigned alert to organization ${data.organization_id}`);
+  return res.status(200).json({ok:true,...result});
+ } catch(error) {
+  if(/Unassigned alert and active organization/.test(error.message)) return res.status(409).json({error:"Alert is missing, already assigned, or organization is inactive"});
+  return res.status(400).json({error:error.message});
+ }
+});
+app.get("/api/alerts/:id/grants",auth,roles("admin"),(req,res)=>{
+ const alertId=Number(req.params.id);
+ if(!Number.isSafeInteger(alertId)||alertId<1) return res.status(400).json({error:"Invalid alert id"});
+ const alert=db.prepare("SELECT id,owner_organization_id FROM alerts WHERE id=?").get(alertId);
+ if(!alert) return res.status(404).json({error:"Alert not found"});
+ const grants=db.prepare(`
+  SELECT g.id,g.alert_id,g.owner_organization_id,g.recipient_type,g.recipient_user_id,
+   g.recipient_organization_id,g.recipient_group_id,g.action,g.status,g.starts_at,g.expires_at,
+   g.created_by,g.approved_by,g.created_at,g.updated_at
+  FROM alert_recipient_grants g WHERE g.alert_id=? ORDER BY g.id DESC
+ `).all(alertId);
+ return res.json({alert,grants});
+});
+app.post("/api/alerts/:id/grants",auth,roles("admin"),adminAccountMutationLimiter,(req,res)=>{
+ const alertId=Number(req.params.id);
+ if(!Number.isSafeInteger(alertId)||alertId<1) return res.status(400).json({error:"Invalid alert id"});
+ try {
+  const data=z.object({
+   owner_organization_id:z.number().int().positive(),
+   recipient_type:z.enum(["user","organization","group"]),
+   recipient_user_id:z.number().int().positive().optional().nullable(),
+   recipient_organization_id:z.number().int().positive(),
+   recipient_group_id:z.number().int().positive().optional().nullable(),
+   action:z.enum(["read","deliver"]),
+   starts_at:z.string().datetime({offset:true}).optional().nullable(),
+   expires_at:z.string().datetime({offset:true}).optional().nullable()
+  }).parse(req.body);
+  const id=createAlertRecipientGrant(db,{
+   alertId,ownerOrganizationId:data.owner_organization_id,
+   recipientType:data.recipient_type,recipientUserId:data.recipient_user_id??null,
+   recipientOrganizationId:data.recipient_organization_id,
+   recipientGroupId:data.recipient_group_id??null,action:data.action,
+   actorUserId:req.user.id,startsAt:data.starts_at??null,expiresAt:data.expires_at??null
+  });
+  audit(req.user.id,alertId,"alert_recipient_grant_created",`Created ${data.action} grant ${id} for ${data.recipient_type}`);
+  return res.status(201).json({id,alert_id:alertId,status:"pending"});
+ } catch(error) {
+  if(error.code==="SQLITE_CONSTRAINT_UNIQUE") return res.status(409).json({error:"An equivalent open grant already exists"});
+  if(/valid recipient|owned alert|FOREIGN KEY|CHECK constraint/.test(error.message)) return res.status(404).json({error:"Alert ownership or recipient target is not valid"});
+  return res.status(400).json({error:error.message});
+ }
+});
+app.patch("/api/alert-recipient-grants/:id",auth,roles("admin"),adminAccountMutationLimiter,(req,res)=>{
+ const grantId=Number(req.params.id);
+ if(!Number.isSafeInteger(grantId)||grantId<1) return res.status(400).json({error:"Invalid grant id"});
+ try {
+  const data=z.object({status:z.enum(["active","suspended","revoked"])}).parse(req.body);
+  const result=transitionAlertRecipientGrant(db,{grantId,nextStatus:data.status,actorUserId:req.user.id});
+  audit(req.user.id,result.alertId,"alert_recipient_grant_"+data.status,
+   `Changed grant ${grantId} from ${result.previousStatus} to ${result.status}`);
+  return res.json({ok:true,...result});
+ } catch(error) {
+  if(/Grant not found/.test(error.message)) return res.status(404).json({error:"Grant not found"});
+  if(/not permitted|changed concurrently/.test(error.message)) return res.status(409).json({error:error.message});
+  return res.status(400).json({error:error.message});
+ }
+});
+app.post("/api/alert-recipient-grants/expire",auth,roles("admin"),adminAccountMutationLimiter,(req,res)=>{
+ try {
+  const expired=expireAlertRecipientGrants(db);
+  if(expired>0) audit(req.user.id,null,"alert_recipient_grants_expired",`Expired ${expired} alert recipient grants`);
+  return res.json({ok:true,expired});
+ } catch(error) {
+  console.error("Alert recipient grant expiry sweep failed:",error);
+  return res.status(500).json({error:"Unable to expire alert recipient grants safely"});
  }
 });
 

@@ -1,0 +1,123 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import Database from "better-sqlite3";
+import {
+  createOrganization,
+  expireOrganizationMemberships,
+  hasActiveOrganizationMembership,
+  installRecipientSchema,
+  requestOrganizationMembership,
+  transitionOrganizationMembership
+} from "../src/recipient-auth.js";
+
+function fixture() {
+  const database = new Database(":memory:");
+  database.pragma("foreign_keys = ON");
+  database.exec(`
+    CREATE TABLE users (
+      id INTEGER PRIMARY KEY,
+      username TEXT NOT NULL UNIQUE,
+      password_hash TEXT NOT NULL,
+      role TEXT NOT NULL CHECK(role IN ('admin','forecaster','reviewer','approver','publisher','viewer')),
+      active INTEGER NOT NULL DEFAULT 1
+    );
+    INSERT INTO users(id,username,password_hash,role,active) VALUES
+      (1,'admin','x','admin',1),
+      (2,'a_forecaster','x','forecaster',1),
+      (3,'b_forecaster','x','forecaster',1),
+      (4,'inactive_forecaster','x','forecaster',0);
+  `);
+  installRecipientSchema(database);
+  return database;
+}
+
+test("organization memberships support multiple organizations without cross-tenant identity substitution", () => {
+  const database = fixture();
+  try {
+    const orgA = createOrganization(database, { slug: "org-a", name: "Organization A", actorUserId: 1 });
+    const orgB = createOrganization(database, { slug: "org-b", name: "Organization B", actorUserId: 1 });
+    const memberA = requestOrganizationMembership(database, { organizationId: orgA, userId: 2, actorUserId: 1 });
+    const memberB = requestOrganizationMembership(database, { organizationId: orgB, userId: 3, actorUserId: 1 });
+    assert.equal(database.prepare("SELECT status FROM organization_memberships WHERE id=?").get(memberA).status, "pending");
+    assert.throws(() => requestOrganizationMembership(database, {
+      organizationId: orgA, userId: 4, actorUserId: 1
+    }), /active organization and active user/);
+    assert.throws(() => requestOrganizationMembership(database, {
+      organizationId: orgA, userId: 2, actorUserId: 1
+    }), /UNIQUE/);
+    transitionOrganizationMembership(database, { membershipId: memberA, nextStatus: "active", actorUserId: 1 });
+    transitionOrganizationMembership(database, { membershipId: memberB, nextStatus: "active", actorUserId: 1 });
+    assert.equal(hasActiveOrganizationMembership(database, 2, orgA), true);
+    assert.equal(hasActiveOrganizationMembership(database, 2, orgB), false);
+    assert.equal(hasActiveOrganizationMembership(database, 3, orgB), true);
+    assert.equal(hasActiveOrganizationMembership(database, 3, orgA), false);
+  } finally {
+    database.close();
+  }
+});
+
+test("membership lifecycle is audited and terminal revocation cannot be resurrected", () => {
+  const database = fixture();
+  try {
+    const org = createOrganization(database, { slug: "lifecycle", name: "Lifecycle Org", actorUserId: 1 });
+    const membershipId = requestOrganizationMembership(database, { organizationId: org, userId: 2, actorUserId: 1 });
+    transitionOrganizationMembership(database, { membershipId, nextStatus: "active", actorUserId: 1 });
+    transitionOrganizationMembership(database, { membershipId, nextStatus: "suspended", actorUserId: 1 });
+    assert.equal(hasActiveOrganizationMembership(database, 2, org), false);
+    transitionOrganizationMembership(database, { membershipId, nextStatus: "active", actorUserId: 1 });
+    transitionOrganizationMembership(database, { membershipId, nextStatus: "revoked", actorUserId: 1 });
+    assert.equal(hasActiveOrganizationMembership(database, 2, org), false);
+    assert.throws(() => transitionOrganizationMembership(database, {
+      membershipId, nextStatus: "active", actorUserId: 1
+    }), /not permitted/);
+    const events = database.prepare(
+      "SELECT event_type,from_status,to_status FROM organization_membership_events WHERE membership_id=? ORDER BY id"
+    ).all(membershipId);
+    assert.deepEqual(events.map(event => event.event_type), [
+      "membership_requested","membership_activated","membership_suspended",
+      "membership_reactivated","membership_revoked"
+    ]);
+    assert.throws(() => database.prepare(
+      "UPDATE organization_membership_events SET to_status='active' WHERE membership_id=?"
+    ).run(membershipId), /immutable/);
+  } finally {
+    database.close();
+  }
+});
+
+test("membership expiry is enforced at authorization time and by expiry sweep", () => {
+  const database = fixture();
+  try {
+    const org = createOrganization(database, { slug: "expiry", name: "Expiry Org", actorUserId: 1 });
+    const membershipId = requestOrganizationMembership(database, {
+      organizationId: org, userId: 2, actorUserId: 1,
+      startsAt: "2026-11-01T00:00:00Z", expiresAt: "2026-11-02T00:00:00Z"
+    });
+    transitionOrganizationMembership(database, { membershipId, nextStatus: "active", actorUserId: 1 });
+    assert.equal(hasActiveOrganizationMembership(database, 2, org, new Date("2026-11-01T12:00:00Z")), true);
+    assert.equal(hasActiveOrganizationMembership(database, 2, org, new Date("2026-11-02T00:00:00Z")), false);
+    assert.equal(expireOrganizationMemberships(database, { at: new Date("2026-11-02T00:00:00Z") }), 1);
+    assert.equal(database.prepare("SELECT status FROM organization_memberships WHERE id=?").get(membershipId).status, "expired");
+  } finally {
+    database.close();
+  }
+});
+
+test("membership mutations require an active administrator and reject invalid windows", () => {
+  const database = fixture();
+  try {
+    assert.throws(() => createOrganization(database, {
+      slug: "bad-org", name: "Bad Org", actorUserId: 2
+    }), /active administrator/);
+    const org = createOrganization(database, { slug: "valid-org", name: "Valid Org", actorUserId: 1 });
+    assert.throws(() => requestOrganizationMembership(database, {
+      organizationId: org, userId: 2, actorUserId: 1,
+      startsAt: "2026-11-03T00:00:00Z", expiresAt: "2026-11-02T00:00:00Z"
+    }), /later than its start/);
+    assert.throws(() => requestOrganizationMembership(database, {
+      organizationId: org, userId: 2, actorUserId: 2
+    }), /active administrator/);
+  } finally {
+    database.close();
+  }
+});

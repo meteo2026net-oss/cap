@@ -95,6 +95,12 @@ CREATE INDEX IF NOT EXISTS idx_delivery_alert ON delivery_outbox(alert_id);
 
 `);
 
+ // Alerts created before tenant ownership was introduced remain unassigned; never infer or backfill a tenant.
+ const alertOwnerColumns = db.prepare("PRAGMA table_info(alerts)").all().map(column => column.name);
+ if (!alertOwnerColumns.includes("owner_organization_id")) {
+  db.exec("ALTER TABLE alerts ADD COLUMN owner_organization_id INTEGER REFERENCES organizations(id) ON DELETE RESTRICT");
+ }
+
  // Install recipient authorization entities before any tenant-aware route or worker is loaded.
  installRecipientSchema(db);
 

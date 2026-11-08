@@ -113,3 +113,11 @@ Source review and regression coverage were extended on the current follow-up bra
 This hardening closes the direct peer-admin credential handoff path; it does not implement dual control. A single administrator can still create another administrator or promote an existing account to admin, and can still reset non-admin accounts. The institution must decide whether privileged-role grants, demotions, account recovery, and sensitive non-admin resets require a second approver, verified out-of-band identity checks, target notification, or a supervised credential handoff. Until that policy and workflow are approved and implemented, administrator provisioning remains a single-actor trust boundary and must be treated as a governance risk.
 
 The new rate limit is an abuse-control measure, not an approval quorum. No account has been promoted, demoted, activated, deactivated, or reset as part of this code change. No MFA deployment policy was changed; an empty MFA_REQUIRED_ROLES setting still means MFA is not mandatory by default.
+
+
+## Follow-up role authorization audit
+
+- The detailed role-by-role route and workflow review is maintained in [ROLE_AUTHORIZATION_AUDIT.md](ROLE_AUTHORIZATION_AUDIT.md).
+- Forecaster draft submission now enforces the same ownership boundary as draft editing: only the author or an administrator may submit a draft. A cross-forecaster negative API test covers this.
+- Reviewer and Approver still share approve and return route permissions. A distinct review-complete/approval handoff and conflict-of-interest policy remain institutional decisions; this change does not invent that policy.
+- Publisher access includes internal outbox operations and operational metrics; Viewer remains read-only for authenticated Public alert views; Admin remains a broad operational override.

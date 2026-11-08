@@ -177,6 +177,65 @@ test("organization membership API enforces admin control and same-role tenant me
     token: admin, method: "PATCH", body: { status: "active" }
   })).status, 409, "revoked group membership cannot be resurrected");
 
+  const alert = await request("/api/alerts", {
+    token: forecasterA, method: "POST",
+    body: {
+      event: "Tenant isolation test",
+      headline: "Tenant A test alert",
+      description: "Synthetic integration-test alert",
+      area_desc: "Test area",
+      status: "Test",
+      scope: "Public"
+    }
+  });
+  assert.equal(alert.status, 201, "forecaster can create an isolated test alert");
+  assert.equal((await request(`/api/alerts/${alert.data.id}/owner-organization`, {
+    token: admin, method: "POST", body: { organization_id: organizationA.data.id }
+  })).status, 200, "an unassigned alert can receive one explicit owner");
+  assert.equal((await request(`/api/alerts/${alert.data.id}/owner-organization`, {
+    token: admin, method: "POST", body: { organization_id: organizationB.data.id }
+  })).status, 409, "alert ownership cannot be reassigned");
+
+  const wrongTenantGrant = await request(`/api/alerts/${alert.data.id}/grants`, {
+    token: admin, method: "POST",
+    body: {
+      owner_organization_id: organizationA.data.id,
+      recipient_type: "user",
+      recipient_user_id: 2,
+      recipient_organization_id: organizationB.data.id,
+      action: "read"
+    }
+  });
+  assert.equal(wrongTenantGrant.status, 404,
+    "a same-role user from organization A cannot receive a direct grant through organization B");
+
+  const directGrant = await request(`/api/alerts/${alert.data.id}/grants`, {
+    token: admin, method: "POST",
+    body: {
+      owner_organization_id: organizationA.data.id,
+      recipient_type: "user",
+      recipient_user_id: 3,
+      recipient_organization_id: organizationB.data.id,
+      action: "read"
+    }
+  });
+  assert.equal(directGrant.status, 201);
+  assert.equal((await request(`/api/alert-recipient-grants/${directGrant.data.id}`, {
+    token: admin, method: "PATCH", body: { status: "active" }
+  })).status, 200, "grant activation rechecks current organization membership");
+  const alertGrants = await request(`/api/alerts/${alert.data.id}/grants`, { token: admin });
+  assert.equal(alertGrants.status, 200);
+  assert.deepEqual(alertGrants.data.grants.map(grant => grant.recipient_user_id), [3]);
+  assert.equal((await request(`/api/alerts/${alert.data.id}/grants`, {
+    token: forecasterB
+  })).status, 403, "same-role recipients cannot enumerate administrative grant records");
+  assert.equal((await request(`/api/alert-recipient-grants/${directGrant.data.id}`, {
+    token: admin, method: "PATCH", body: { status: "revoked" }
+  })).status, 200);
+  assert.equal((await request(`/api/alert-recipient-grants/${directGrant.data.id}`, {
+    token: admin, method: "PATCH", body: { status: "active" }
+  })).status, 409, "revoked grants cannot be resurrected");
+
   const revoked = await request(`/api/organization-memberships/${membershipA.data.id}`, {
     token: admin, method: "PATCH", body: { status: "revoked" }
   });

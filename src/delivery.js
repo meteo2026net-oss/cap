@@ -29,9 +29,17 @@ export function enqueueDelivery(database, { alertId, channel = "cap_feed", paylo
   }
   database.prepare(
     `INSERT OR IGNORE INTO delivery_outbox (alert_id, channel, payload, status, max_attempts)
-     VALUES (?, ?, ?, 'queued', ?)`
-  ).run(Number(alertId), channel, payload, maxAttempts);
-  return database.prepare("SELECT * FROM delivery_outbox WHERE alert_id=? AND channel=?").get(Number(alertId), channel);
+     SELECT ?, ?, ?, 'queued', ? WHERE EXISTS (
+       SELECT 1 FROM alerts WHERE id=? AND scope='Public'
+     )`
+  ).run(Number(alertId), channel, payload, maxAttempts, Number(alertId));
+  const delivery = database.prepare(`SELECT d.* FROM delivery_outbox d
+    JOIN alerts a ON a.id=d.alert_id
+    WHERE d.alert_id=? AND d.channel=? AND a.scope='Public'`).get(Number(alertId), channel);
+  if (!delivery) {
+    throw new TypeError("Delivery enqueue is restricted to existing Public alerts until recipient authorization is configured");
+  }
+  return delivery;
 }
 
 export function claimDelivery(database, id) {
@@ -94,7 +102,7 @@ export function processDueRetries(database) {
     const due = database.prepare(
       `SELECT d.id,d.alert_id FROM delivery_outbox d JOIN alerts a ON a.id=d.alert_id
        WHERE a.scope='Public' AND d.status='failed' AND d.dead_letter_at IS NULL AND d.attempts >= d.max_attempts
-       ORDER BY id ASC LIMIT ${MAINTENANCE_BATCH_SIZE}`
+       ORDER BY d.id ASC LIMIT ${MAINTENANCE_BATCH_SIZE}`
     ).all();
     if (due.length) {
       const ids = due.map(row => row.id);
@@ -109,7 +117,7 @@ export function processDueRetries(database) {
       `SELECT d.id,d.alert_id FROM delivery_outbox d JOIN alerts a ON a.id=d.alert_id
        WHERE a.scope='Public' AND d.status='failed' AND d.dead_letter_at IS NULL AND d.attempts < d.max_attempts
          AND d.next_attempt_at IS NOT NULL AND julianday(d.next_attempt_at) <= julianday('now')
-       ORDER BY id ASC LIMIT ${MAINTENANCE_BATCH_SIZE}`
+       ORDER BY d.id ASC LIMIT ${MAINTENANCE_BATCH_SIZE}`
     ).all();
     if (ready.length) {
       const ids = ready.map(row => row.id);
@@ -136,7 +144,7 @@ export function recoverStaleDeliveries(database, staleMinutes = 10) {
       `SELECT d.id,d.alert_id,d.attempts,d.max_attempts FROM delivery_outbox d JOIN alerts a ON a.id=d.alert_id
        WHERE a.scope='Public' AND d.status='sending' AND d.last_attempt_at IS NOT NULL
          AND julianday(d.last_attempt_at) <= julianday('now', ?)
-       ORDER BY id ASC LIMIT ${MAINTENANCE_BATCH_SIZE}`
+       ORDER BY d.id ASC LIMIT ${MAINTENANCE_BATCH_SIZE}`
     ).all(`-${staleMinutes} minutes`);
     if (stale.length) {
       const ids = stale.map(row => row.id);

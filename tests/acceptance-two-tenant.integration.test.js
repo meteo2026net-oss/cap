@@ -43,7 +43,7 @@ test("acceptance pack: two-tenant webhook isolation and public test lifecycle", 
       CAP_WEBHOOK_INGRESS_ENABLED: "true",
       CAP_WEBHOOK_SECRET: "acceptance-pack-legacy-secret-at-least-32-bytes",
       API_RATE_LIMIT: "5000",
-      ADMIN_ACCOUNT_MUTATION_LIMIT: "2000",
+      ADMIN_ACCOUNT_MUTATION_LIMIT: "1000",
     },
     stdio: ["ignore", "pipe", "pipe"],
   });

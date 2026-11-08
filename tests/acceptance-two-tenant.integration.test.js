@@ -335,14 +335,14 @@ test("acceptance pack: two-tenant webhook isolation and public test lifecycle", 
     const insertRestricted = auditDb.prepare(`
       INSERT INTO alerts
         (identifier,sender,sent,status,msg_type,scope,restriction,addresses,event,category,
-         urgency,severity,certainty,headline,description,area_desc,workflow,references_text)
-      VALUES (?,?,?,'Test','Alert',?,?,?,?,'Met','Expected','Moderate','Likely',?,?,?, ?,?)
+         urgency,severity,certainty,headline,description,area_desc,circle,workflow,references_text)
+      VALUES (?,?,?,'Test','Alert',?,?,?,?,'Met','Expected','Moderate','Likely',?,?,?,?,?,?)
     `);
     restrictedAlertId = Number(insertRestricted.run(
       "restricted-audit-" + Date.now(), "audit-fixture@example.test", new Date().toISOString(),
       "Restricted", "Authorized recipients only", null, "Restricted audit event",
       "Restricted audit fixture headline", "RESTRICTED_AUDIT_DESCRIPTION", "Restricted test area",
-      "pending", ""
+      "33.5,36.2 8", "pending", ""
     ).lastInsertRowid);
     auditDb.prepare(`UPDATE organization_memberships SET expires_at=?
       WHERE user_id=? AND organization_id=? AND status='active'`)

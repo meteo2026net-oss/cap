@@ -38,7 +38,7 @@ Maps the full acceptance checklist to **what the repository can prove**, **what 
 | **13 Roles / sessions** | API integration (deactivate, 403 matrix, MFA), `login_failed` audit | Pack R1–R3 | **Yes if CI + R1–R2 PASS** |
 | **14 Webhook / outbox / workers** | webhook tests, `tests/delivery.test.js`, retention atomicity, worker internal-only | Pack W1–W3; confirm health `external_adapters_enabled:false` | **Yes if CI + W1–W3 PASS** |
 | **15 Restricted / Private** | Public-only boundary tests; no operational enablement | Confirm non-Public not on public feed; **do not** treat as accepted recipient model | **Boundary tested; operational acceptance = Gate 8 row 4 only** |
-| **16 CAP 1.2 report** | `tests/cap-schema.test.js`, `cap.test.js`, `cap-semantic.test.js`, phase7 receivers | Attach CI URL / `npm test` log to technical evidence folder | **Technical report yes; not CAP certification** |
+| **16 CAP 1.2 report** | `tests/cap-schema.test.js`, `cap.test.js`, `cap-semantic.test.js`, phase7 receivers | [CAP_TECHNICAL_CONFORMANCE_REPORT.md](CAP_TECHNICAL_CONFORMANCE_REPORT.md) + CI URL | **Technical report filed; not CAP certification** |
 
 ### Phase 3 command (isolated host)
 

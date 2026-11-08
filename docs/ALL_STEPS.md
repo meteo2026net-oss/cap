@@ -43,7 +43,7 @@
 | 13 | صلاحيات المديرين والمستخدمين والمستلمين | **آلي: نُفّذ عبر CI** (يدوي: R1–R3) | أدوار/جلسات · CI `639e11a` |
 | 14 | Webhook وOutbox وWorkers ومعالجة الفشل | **آلي: نُفّذ عبر CI** (يدوي: W1–W3) | adapters=false · CI `639e11a` |
 | 15 | Restricted وPrivate وفق نموذج معتمد دون فتح تشغيلي افتراضي | **حدود برمجية: CI** · قبول تشغيلي Open | Public-only · السجل بند 4 Open |
-| 16 | التوافق مع CAP 1.2 وإعداد تقرير النتائج | **تقرير فني عبر CI** · ليس شهادة | `PHASE_EXECUTION_RECORD.md` · ليس شهادة CAP |
+| 16 | التوافق مع CAP 1.2 وإعداد تقرير النتائج | **تقرير فني** | [CAP_TECHNICAL_CONFORMANCE_REPORT.md](CAP_TECHNICAL_CONFORMANCE_REPORT.md) · ليس شهادة CAP |
 
 تفاصيل الربط: [ACCEPTANCE_EXECUTION_MATRIX.md](ACCEPTANCE_EXECUTION_MATRIX.md)
 

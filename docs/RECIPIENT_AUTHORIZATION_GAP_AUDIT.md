@@ -5,7 +5,7 @@ Review type: source/schema/test inspection. No recipient schema, membership data
 
 ## 1. Executive conclusion
 
-<badge>Public-only containment remains active</badge>
+Status: Public-only containment remains active.
 
 The repository does **not** currently implement a multi-organization recipient authorization model. The existing protections are a scope boundary, not tenant isolation or recipient grants:
 

@@ -277,7 +277,7 @@ test("alert grants bind direct users, organizations, and groups to an alert owne
   }
 });
 
-test("grant expiry is immediate at authorization time and terminal after expiry sweep",()=>{
+test("grant expiry is immediate at authorization time and terminal after expiry sweep",async()=>{
   const database=fixture();
   try{
     const owner=createOrganization(database,{slug:"expiry-owner",name:"Expiry Owner",actorUserId:1});
@@ -286,19 +286,21 @@ test("grant expiry is immediate at authorization time and terminal after expiry 
     transitionOrganizationMembership(database,{membershipId:membership,nextStatus:"active",actorUserId:1});
     database.prepare("INSERT INTO alerts(id) VALUES(101)").run();
     assignAlertOrganizationOwner(database,{alertId:101,organizationId:owner,actorUserId:1});
+    const expiresAt=new Date(Date.now()+250);
     const grant=createAlertRecipientGrant(database,{
       alertId:101,ownerOrganizationId:owner,recipientType:"user",recipientUserId:3,
       recipientOrganizationId:recipient,action:"read",actorUserId:1,
-      startsAt:new Date(Date.now()-60*60*1000).toISOString(),expiresAt:new Date(Date.now()+60*60*1000).toISOString()
+      startsAt:new Date(Date.now()-60*60*1000).toISOString(),expiresAt:expiresAt.toISOString()
     });
     transitionAlertRecipientGrant(database,{grantId:grant,nextStatus:"active",actorUserId:1});
     assert.equal(hasActiveAlertRecipientGrant(database,{
-      alertId:101,userId:3,organizationId:recipient,at:new Date(Date.now()+30*60*1000)
+      alertId:101,userId:3,organizationId:recipient,at:new Date(Date.now()+100)
     }),true);
     assert.equal(hasActiveAlertRecipientGrant(database,{
-      alertId:101,userId:3,organizationId:recipient,at:new Date(Date.now()+60*60*1000)
+      alertId:101,userId:3,organizationId:recipient,at:expiresAt
     }),false);
-    assert.equal(expireAlertRecipientGrants(database,{at:new Date(Date.now()+60*60*1000)}),1);
+    await new Promise(resolve=>setTimeout(resolve,350));
+    assert.equal(expireAlertRecipientGrants(database,{at:expiresAt}),1);
     assert.equal(database.prepare("SELECT status FROM alert_recipient_grants WHERE id=?").get(grant).status,"expired");
   }finally{database.close();}
 });

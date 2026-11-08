@@ -29,11 +29,57 @@ test("global delivery maintenance detects non-Public outbox records", () => {
  try {
   assert.equal(hasNonPublicDeliveryOutbox(db), false);
   db.prepare("INSERT INTO alerts(id,identifier,scope) VALUES(2,'private-alert','Private')").run();
-  enqueueDelivery(db,{alertId:2,payload:"private payload"});
+  db.prepare("INSERT INTO delivery_outbox(alert_id,channel,payload) VALUES(2,'cap_feed','legacy private payload')").run();
   assert.equal(hasNonPublicDeliveryOutbox(db), true,
    "a legacy non-Public outbox row must pause global retry and stale-lease maintenance");
   db.prepare("DELETE FROM delivery_outbox WHERE alert_id=2").run();
   assert.equal(hasNonPublicDeliveryOutbox(db), false);
+ } finally { db.close(); }
+});
+
+
+test("delivery enqueue rejects missing and non-Public alerts", () => {
+ const db=fixture();
+ try {
+  db.prepare("INSERT INTO alerts(id,identifier,scope) VALUES(2,'restricted-alert','Restricted'),(3,'private-alert','Private')").run();
+  for (const alertId of [2,3,999]) {
+   assert.throws(() => enqueueDelivery(db,{alertId,payload:"must not queue"}),
+    /existing Public alerts/);
+  }
+  assert.equal(db.prepare("SELECT COUNT(*) AS count FROM delivery_outbox").get().count,0);
+ } finally { db.close(); }
+});
+
+test("all delivery state transitions and background maintenance fail closed for non-Public alerts", () => {
+ const db=fixture();
+ try {
+  db.prepare("INSERT INTO alerts(id,identifier,scope) VALUES(2,'private-alert','Private'),(3,'restricted-alert','Restricted')").run();
+  const insert=db.prepare(`INSERT INTO delivery_outbox
+   (alert_id,channel,payload,status,attempts,max_attempts,next_attempt_at,last_attempt_at,lease_token_hash)
+   VALUES(?,?,?,?,?,?,?,?,?)`);
+  const privateQueued=Number(insert.run(2,"cap_feed","private queued","queued",0,5,null,null,null).lastInsertRowid);
+  const restrictedFailed=Number(insert.run(3,"email","restricted due retry","failed",1,5,"2000-01-01 00:00:00",null,null).lastInsertRowid);
+  const privateDead=Number(insert.run(2,"sms","private dead letter","failed",5,5,"2000-01-01 00:00:00",null,null).lastInsertRowid);
+  const privateStale=Number(insert.run(2,"webhook","private stale lease","sending",1,5,null,"2000-01-01 00:00:00",null).lastInsertRowid);
+  const leaseToken="123e4567-e89b-42d3-a456-426614174000";
+  const privateReceipt=Number(insert.run(3,"push","restricted receipt","sending",1,5,null,new Date().toISOString(),
+   createHash("sha256").update(leaseToken).digest("hex")).lastInsertRowid);
+
+  assert.equal(claimDelivery(db,privateQueued),null,"non-Public queued entries cannot be claimed");
+  assert.equal(retryDelivery(db,restrictedFailed),null,"non-Public failed entries cannot be manually retried");
+  assert.equal(recordDeliveryReceipt(db,privateReceipt,{status:"delivered",leaseToken}),null,
+   "non-Public entries cannot accept delivery receipts");
+
+  const retries=processDueRetries(db);
+  assert.deepEqual(retries.requeued,[],"non-Public due retries must not be requeued");
+  assert.deepEqual(retries.deadLettered,[],"non-Public entries must not be moved by retry maintenance");
+  const recovered=recoverStaleDeliveries(db,10);
+  assert.deepEqual(recovered.recovered,[],"non-Public stale leases must not be recovered");
+  assert.deepEqual(recovered.deadLettered,[],"non-Public stale leases must not be dead-lettered");
+
+  const states=db.prepare("SELECT id,status,dead_letter_at FROM delivery_outbox ORDER BY id").all();
+  assert.deepEqual(states.map(row=>row.status),["queued","failed","failed","sending","sending"]);
+  assert.ok(states.every(row=>row.dead_letter_at===null));
  } finally { db.close(); }
 });
 

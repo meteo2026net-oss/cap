@@ -64,8 +64,8 @@ export function claimDelivery(database, id, authorization = null) {
        SET status='sending', attempts=attempts+1, last_attempt_at=CURRENT_TIMESTAMP,
            lease_token=NULL, lease_token_hash=?, next_attempt_at=NULL, updated_at=CURRENT_TIMESTAMP
      WHERE id=? AND status='queued' AND attempts < max_attempts AND dead_letter_at IS NULL
-       AND EXISTS (SELECT 1 FROM alerts a WHERE a.id=delivery_outbox.alert_id AND a.scope='Public')`
-  ).run(hashLeaseToken(leaseToken), id);
+       AND EXISTS (SELECT 1 FROM alerts a WHERE a.id=delivery_outbox.alert_id AND ${alertAccess})`
+  ).run(hashLeaseToken(leaseToken), id, ...authParams);
   if (!result.changes) return null;
   const row = database.prepare("SELECT * FROM delivery_outbox WHERE id=?").get(id);
   const { lease_token_hash: _leaseTokenHash, ...safeRow } = row;
@@ -96,9 +96,9 @@ export function recordDeliveryReceipt(database, id, { status, leaseToken, extern
            delivered_at=CASE WHEN ?='delivered' THEN CURRENT_TIMESTAMP ELSE delivered_at END,
            updated_at=CURRENT_TIMESTAMP
      WHERE id=? AND status='sending' AND lease_token_hash=?
-       AND EXISTS (SELECT 1 FROM alerts a WHERE a.id=delivery_outbox.alert_id AND a.scope='Public')`
+       AND EXISTS (SELECT 1 FROM alerts a WHERE a.id=delivery_outbox.alert_id AND ${alertAccess})`
   ).run(status, externalId, status === "failed" ? details : "", status, terminal ? 1 : 0,
-        delaySeconds, terminal ? 1 : 0, status, id, row.lease_token_hash);
+        delaySeconds, terminal ? 1 : 0, status, id, row.lease_token_hash, ...authParams);
   if (!result.changes) return null;
   return database.prepare("SELECT * FROM delivery_outbox WHERE id=?").get(id);
 }
@@ -110,8 +110,8 @@ export function retryDelivery(database, id, authorization = null) {
     `UPDATE delivery_outbox
        SET status='queued', lease_token=NULL, lease_token_hash=NULL, last_error='', next_attempt_at=NULL, updated_at=CURRENT_TIMESTAMP
      WHERE id=? AND status='failed' AND dead_letter_at IS NULL AND attempts < max_attempts
-       AND EXISTS (SELECT 1 FROM alerts a WHERE a.id=delivery_outbox.alert_id AND a.scope='Public')`
-  ).run(id);
+       AND EXISTS (SELECT 1 FROM alerts a WHERE a.id=delivery_outbox.alert_id AND ${alertAccess})`
+  ).run(id, ...authParams);
   if (!result.changes) return null;
   return database.prepare("SELECT * FROM delivery_outbox WHERE id=?").get(id);
 }

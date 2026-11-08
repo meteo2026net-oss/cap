@@ -121,3 +121,33 @@ test("membership mutations require an active administrator and reject invalid wi
     database.close();
   }
 });
+
+
+test("SQLite guards reject forged membership actors and premature expiry", () => {
+  const database = fixture();
+  try {
+    assert.throws(() => database.prepare(
+      "INSERT INTO organizations(slug,name,created_by) VALUES('forged-org','Forged Org',2)"
+    ).run(), /Active administrator required/);
+    const org = createOrganization(database, { slug: "guarded-org", name: "Guarded Org", actorUserId: 1 });
+    assert.throws(() => database.prepare(`
+      INSERT INTO organization_memberships
+        (organization_id,user_id,status,created_by)
+      VALUES(?,2,'pending',2)
+    `).run(org), /Pending membership requires an active administrator/);
+    const membershipId = requestOrganizationMembership(database, {
+      organizationId: org, userId: 2, actorUserId: 1,
+      expiresAt: "2030-01-01T00:00:00Z"
+    });
+    assert.throws(() => database.prepare(`
+      UPDATE organization_memberships SET status='active',approved_by=2,updated_by=2
+      WHERE id=?
+    `).run(membershipId), /Membership state change lacks valid authority/);
+    assert.throws(() => database.prepare(`
+      UPDATE organization_memberships SET status='expired',updated_by=NULL
+      WHERE id=?
+    `).run(membershipId), /Membership state change lacks valid authority or expiry/);
+  } finally {
+    database.close();
+  }
+});

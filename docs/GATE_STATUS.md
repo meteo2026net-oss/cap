@@ -1,12 +1,11 @@
 # Project Gate Status
 
-> **Current-head refresh — 2026-11-08 UTC**
-> - Current PR #4 head: `ee3bda3e1ebc57528159a7692c247c5d29eb0986` (Draft, not merged).
-> - This head changes only the Windows CI runner selection to `windows-2022` so `node-gyp` can use the stable Visual Studio 2022 toolchain for `better-sqlite3`.
-> - CAP System Checks and CodeQL for this exact head are **pending/not yet confirmed**. The previous Windows job failed during dependency installation on `windows-latest`; backup/restore tests did not run.
-> - Do not treat predecessor CI success as validation of this head. Reclassify only after both workflows finish on this exact SHA.
-> - `external_adapters_enabled: false`; Gate 8 remains Open; no merge or external delivery.
+> **Windows CI runner follow-up — 2026-11-08 UTC**
 
+- Runner fix commit: `ee3bda3e1ebc57528159a7692c247c5d29eb0986`; subsequent commits in this PR update the status records only.
+- The Windows backup job now targets `windows-2022` so `node-gyp` can use the stable Visual Studio 2022 toolchain for `better-sqlite3`.
+- The earlier `windows-latest` run failed during dependency installation; backup/restore tests did not run. The runner change must be verified by the live PR checks on the latest branch tip.
+- Do not treat predecessor CI success as validation of the latest tip. `external_adapters_enabled: false`; Gate 8 remains Open; no merge or external delivery.
 
 **Branch:** `fix/retention-audit-atomicity`  
 **PR #4 head (current tip):** `26e7cf45889cffdb0fd9b3be2c6a750755e235d0` (Draft, not merged)

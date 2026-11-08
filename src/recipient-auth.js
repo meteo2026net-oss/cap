@@ -180,7 +180,7 @@ export function transitionOrganizationMembership(database, {
   membershipId, nextStatus, actorUserId
 }) {
   requireActiveAdmin(database, actorUserId);
-  if (!ALLOWED_TRANSITIONS[nextStatus]) throw new TypeError("Unsupported membership state.");
+  if (!ALLOWED_TRANSITIONS[nextStatus] || nextStatus === "expired") throw new TypeError("Expiry is system-managed; use the expiry sweep.");
   const transition = database.transaction(() => {
     const current = database.prepare(
       "SELECT id,status,organization_id,user_id FROM organization_memberships WHERE id=?"

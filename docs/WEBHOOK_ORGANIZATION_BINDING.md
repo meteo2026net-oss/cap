@@ -2,7 +2,7 @@
 
 ## Baseline
 - Branch: `fix/retention-audit-atomicity`
-- SHA: `6bbeef60d6314c00b33f7348db30ab91e543acae` (pre-change) then subsequent commits on the same branch
+- SHA progression: `6bbeef6` (org fail-closed) → `1440a6a`/`20a389d` (source registry + ingress) → `c04ce3f` (integration test alignment with org-scoped audit visibility)
 - PR: https://github.com/meteo2026net-oss/cap/pull/4 (Draft)
 
 ## Ingress rules
@@ -19,3 +19,15 @@
 - `GET /api/webhook-sources`
 - `POST /api/webhook-sources` (returns secret once)
 - `POST /api/webhook-sources/:id/disable`
+
+## Inbox access
+- Administrators see the global inbox.
+- Reviewers / non-admins see only rows whose `organization_id` matches an **active** membership of the caller.
+- Review mutations require the same membership (or admin).
+- Rows without `organization_id` (legacy test inserts) are invisible to non-admins.
+
+## Explicit non-goals
+- No external CAP transport, email, SMS, or government-gateway delivery.
+- `external_adapters_enabled` remains `false` in health and delivery responses.
+- Secrets are encrypted at rest with the same key material used for MFA TOTP secrets; rotate via disable + create.
+

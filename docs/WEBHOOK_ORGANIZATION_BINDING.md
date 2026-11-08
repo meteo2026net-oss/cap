@@ -2,7 +2,7 @@
 
 ## Baseline
 - Branch: `fix/retention-audit-atomicity`
-- SHA progression: `6bbeef6` (org fail-closed) → `1440a6a`/`20a389d` (source registry + ingress) → `c04ce3f` (integration test alignment with org-scoped audit visibility)
+- Final verified head on this branch: `28fee082a0a6bbc120e44b5e625f29ec6b61b45c` (CAP system checks + CodeQL success). Progression: `6bbeef6` → org-bound sources → integration alignment → green CI.
 - PR: https://github.com/meteo2026net-oss/cap/pull/4 (Draft)
 
 ## Ingress rules

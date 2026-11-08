@@ -828,6 +828,41 @@ export function transitionAlertRecipientGrant(database, { grantId, nextStatus, a
   return transition.immediate();
 }
 
+export function alertRecipientGrantSql(alertAlias = "a", action = "read") {
+  if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(alertAlias)) throw new TypeError("Invalid alert SQL alias");
+  if (!["read", "deliver"].includes(action)) throw new TypeError("Invalid recipient grant action");
+  return `EXISTS (
+    SELECT 1 FROM alert_recipient_grants grant_row
+    JOIN organizations owner ON owner.id=grant_row.owner_organization_id AND owner.status='active'
+    JOIN organizations recipient ON recipient.id=grant_row.recipient_organization_id AND recipient.status='active'
+    JOIN organization_memberships m ON m.organization_id=recipient.id AND m.user_id=?
+      AND m.status='active'
+    JOIN users u ON u.id=m.user_id AND u.active=1
+    WHERE grant_row.alert_id=${alertAlias}.id
+      AND grant_row.owner_organization_id=${alertAlias}.owner_organization_id
+      AND grant_row.status='active' AND grant_row.action='${action}'
+      AND grant_row.recipient_organization_id=?
+      AND (grant_row.starts_at IS NULL OR julianday(grant_row.starts_at)<=julianday('now'))
+      AND (grant_row.expires_at IS NULL OR julianday(grant_row.expires_at)>julianday('now'))
+      AND (m.starts_at IS NULL OR julianday(m.starts_at)<=julianday('now'))
+      AND (m.expires_at IS NULL OR julianday(m.expires_at)>julianday('now'))
+      AND (
+        (grant_row.recipient_type='user' AND grant_row.recipient_user_id=m.user_id) OR
+        grant_row.recipient_type='organization' OR
+        (grant_row.recipient_type='group' AND EXISTS (
+          SELECT 1 FROM recipient_group_memberships gm
+          JOIN recipient_groups g ON g.id=gm.group_id AND g.organization_id=gm.organization_id
+          WHERE gm.group_id=grant_row.recipient_group_id
+            AND gm.organization_id=grant_row.recipient_organization_id
+            AND gm.user_id=m.user_id AND gm.status='active' AND g.status='active'
+            AND gm.organization_membership_id=m.id
+            AND (gm.starts_at IS NULL OR julianday(gm.starts_at)<=julianday('now'))
+            AND (gm.expires_at IS NULL OR julianday(gm.expires_at)>julianday('now'))
+        ))
+      )
+  )`;
+}
+
 export function hasActiveAlertRecipientGrant(database, {
   alertId, userId, organizationId, action = "read", at = new Date()
 }) {

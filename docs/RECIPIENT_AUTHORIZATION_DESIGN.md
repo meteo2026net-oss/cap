@@ -57,7 +57,22 @@ Illustrative policy, not current behavior:
 - Apply revocations immediately to subsequent requests. Define behavior for in-flight requests and queued deliveries explicitly.
 - Never allow an admin role to bypass scope checks by default. If emergency break-glass access is approved, make it separately permissioned, time-limited, reasoned, notified, and audited.
 
-## 5. Mandatory enforcement inventory
+## 5. Role and recipient boundary
+
+Recipient grants and workflow roles must remain independent authorization dimensions:
+
+- A role grants an action capability (for example, draft authoring, review, approval, publication, or delivery operations); it does not grant access to every alert in that scope.
+- A recipient grant grants access to a particular alert or approved recipient set; it does not grant permission to create, review, approve, publish, or administer accounts.
+- Every request involving a non-Public alert must pass both checks: the user's current workflow-role permission and the alert's current recipient-scope grant.
+- A Viewer with a valid recipient grant remains read-only. A Forecaster with a grant may still edit only drafts they own unless a separately approved administrative exception applies.
+- A Reviewer or Approver without a matching grant must not see the alert, its existence, identifiers, review history, or related audit metadata.
+- A Publisher must have both the Publisher workflow permission and the required scope grant before publication or queue operations. Queue membership must not be treated as recipient authorization.
+- Admin must not bypass scope checks by default. Any break-glass exception must be separately approved, time-limited, justified, independently reviewed, and audited.
+- The current Reviewer/Approver route permissions overlap. The institution must decide whether review and approval are separate authorities, define the handoff/quorum, and ensure the same person cannot satisfy both stages where policy requires independent actors. See [ROLE_AUTHORIZATION_AUDIT.md](ROLE_AUTHORIZATION_AUDIT.md).
+
+This boundary is important: adding recipient grants must not accidentally widen role permissions, and adding a workflow role must not implicitly widen recipient visibility.
+
+## 6. Mandatory enforcement inventory
 
 The same policy must protect every path that can disclose or act on alert-linked data:
 
@@ -72,7 +87,7 @@ The same policy must protect every path that can disclose or act on alert-linked
 
 For multi-alert endpoints, filter at the SQL query boundary before pagination, counts, ordering, export generation, or aggregation. Do not fetch a broad result set and filter only in application memory. For detail endpoints, consistently conceal unauthorized records (for example, 404) where the approved API contract requires non-disclosure.
 
-## 6. Required regression matrix
+## 7. Required regression matrix
 
 Use at least two organizations, three users, two recipient groups, and multiple alerts. Include Public, Restricted, and Private fixtures. Test:
 
@@ -93,7 +108,7 @@ Use at least two organizations, three users, two recipient groups, and multiple 
 
 Negative tests must assert both the response and the absence of side effects or leaked markers. Do not weaken existing CAP structural validation to implement authorization.
 
-## 7. Operational controls
+## 8. Operational controls
 
 - Separate grant administration from ordinary alert authoring and publishing.
 - Require MFA for privileged and recipient-administration roles as defined by policy.
@@ -103,7 +118,7 @@ Negative tests must assert both the response and the absence of side effects or 
 - Define break-glass procedures, maximum duration, review deadlines, and post-event notification.
 - Keep external delivery adapters disabled until recipient selection and authorization are independently verified end-to-end.
 
-## 8. Approval gates
+## 9. Approval gates
 
 Implementation must not begin until the institution signs off on:
 - Identity authority and verification process.

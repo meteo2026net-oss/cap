@@ -1971,7 +1971,7 @@ test("API enforces role separation, public-feed filtering and account deactivati
   assert.equal((await request(`/api/users/${disabledId}/status`, {
     token: admin, method: "PATCH", body: { active: true }
   })).status, 200, "administrator should be able to reactivate an account");
-  const statusAudit = await request("/api/audit", { token: reviewer });
+  const statusAudit = await request("/api/audit", { token: admin });
   assert.equal(statusAudit.status, 200);
   assert.ok(statusAudit.data.entries.some(entry => entry.action === "user_deactivated" && entry.details.includes("disabled1")),
     "account deactivation should be represented in the audit history");

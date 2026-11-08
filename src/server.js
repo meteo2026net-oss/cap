@@ -539,9 +539,9 @@ app.get("/api/organizations",auth,roles("admin"),(_req,res)=>{
 app.post("/api/organizations",auth,roles("admin"),adminAccountMutationLimiter,(req,res)=>{
  try {
   const data=organizationSchema.parse(req.body);
-  const id=db.transaction(()=>createOrganization(db,{
+  const id=createOrganization(db,{
    slug:data.slug,name:data.name,actorUserId:req.user.id
-  })).immediate();
+  });
   audit(req.user.id,null,"organization_created",`Created organization ${data.slug}`);
   res.status(201).json({id,slug:data.slug.toLowerCase(),name:data.name,status:"active"});
  } catch(error) {

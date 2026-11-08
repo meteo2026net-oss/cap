@@ -148,8 +148,17 @@ test("Restricted and Private legacy alerts are denied across authenticated and p
     "reviewer access to the global webhook inbox is disabled once organizations exist without source attribution");
   const webhookDenied = await request("/api/webhooks/inbox", { token: reviewerB });
   assert.equal(webhookDenied.data.code, "WEBHOOK_TENANT_ATTRIBUTION_UNCONFIGURED");
+  const webhookReviewDenied = await request("/api/webhooks/inbox/999/review", {
+    token: reviewerB, method: "PATCH", body: { status: "reviewed", note: "cross-tenant attempt" }
+  });
+  assert.equal(webhookReviewDenied.status, 403,
+    "review mutations are blocked along with global inbox enumeration");
   assert.equal((await request("/api/webhooks/inbox", { token: admin })).status, 200,
     "platform administrators retain the global inbox for controlled triage");
+  const adminAudit = await request("/api/audit?limit=500", { token: admin });
+  assert.ok((adminAudit.data.entries || []).some(entry =>
+    entry.action === "organization_created" && entry.details.includes("isolation-org-a")),
+    "platform administrators retain global audit visibility");
   const scopedAudit = await request("/api/audit?limit=500", { token: reviewerB });
   assert.equal(scopedAudit.status, 200);
   assert.ok(!(scopedAudit.data.entries || []).some(entry =>

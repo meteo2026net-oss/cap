@@ -212,3 +212,16 @@ The follow-up branch now contains organization, membership, recipient-group, ale
 - Restricted/Private remain blocked. `external_adapters_enabled: false` remains unchanged. No real CAP message or external webhook was sent.
 
 The next authorization gate is to define trusted webhook-source attribution and audit-event visibility, then apply a single deny-by-default organization/grant policy to every listed API and background path before any non-Public access is enabled.
+
+
+## 11. Fail-closed protections for unscoped operational views
+
+A follow-up route audit added temporary protections when at least one organization exists:
+
+- Reviewer access to `GET /api/webhooks/inbox` and `PATCH /api/webhooks/inbox/:id/review` is denied with `WEBHOOK_TENANT_ATTRIBUTION_UNCONFIGURED`. Platform Admin retains global triage access. In single-tenant installations with no organizations configured, the existing Reviewer workflow remains available.
+- For non-admin audit readers (Reviewer/Approver), `GET /api/audit` and `GET /api/audit/export.csv` exclude alert-less global events whenever organizations are configured. They can still see alert-linked Public events. Platform Admin retains global audit visibility. `GET /api/audit/verify` remains an integrity-only response and does not return event rows.
+- These are temporary deny-by-default mitigations. They do not implement source-to-organization webhook attribution or tenant-scoped audit event storage. Admin remains a platform-wide trust boundary.
+
+The same-role cross-organization integration fixture now creates active memberships for Forecaster, Reviewer, and Publisher accounts in both organizations. It verifies that Reviewer B cannot enumerate or mutate the unscoped webhook inbox, cannot see Organization A's alert-less lifecycle events through audit list/export, and that platform Admin retains the intended global operational view. It also checks direct-ID, XML, relations, versions, timeline, list/export, and outbox boundaries for legacy non-Public alerts.
+
+The delivery worker remains intentionally global but Public-only, with global maintenance paused whenever a non-Public outbox row exists. This is a containment mechanism, not tenant-aware background authorization.

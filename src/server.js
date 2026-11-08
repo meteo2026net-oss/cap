@@ -17,7 +17,7 @@ import { applyOperationalRetentionWithAudit, collectOperationalMetrics } from ".
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { consumeRecoveryCode, decryptTotpSecret, encryptTotpSecret, generateRecoveryCodes, generateTotpSecret, hashRecoveryCode, verifyTotp } from "./mfa.js";
 import { verifyAndConsumeWebhook } from "./webhook-replay.js";
-import { createOrganization, expireOrganizationMemberships, requestOrganizationMembership, transitionOrganizationMembership } from "./recipient-auth.js";
+import { createOrganization, createRecipientGroup, expireOrganizationMemberships, expireRecipientGroupMemberships, requestOrganizationMembership, requestRecipientGroupMembership, transitionOrganizationMembership, transitionRecipientGroupMembership } from "./recipient-auth.js";
 
 const app = express();
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -595,6 +595,104 @@ app.post("/api/organizations/memberships/expire",auth,roles("admin"),adminAccoun
   return res.status(500).json({error:"Unable to expire memberships safely"});
  }
 });
+
+const recipientGroupSchema=z.object({
+ slug:z.string().min(2).max(80).regex(/^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,78}[a-zA-Z0-9])$/),
+ name:z.string().min(2).max(200)
+});
+app.get("/api/organizations/:id/groups",auth,roles("admin"),(req,res)=>{
+ const organizationId=Number(req.params.id);
+ if(!Number.isSafeInteger(organizationId)||organizationId<1) return res.status(400).json({error:"Invalid organization id"});
+ const organization=db.prepare("SELECT id FROM organizations WHERE id=?").get(organizationId);
+ if(!organization) return res.status(404).json({error:"Organization not found"});
+ const groups=db.prepare(`
+  SELECT g.id,g.organization_id,g.slug,g.name,g.status,g.created_at,
+   (SELECT COUNT(*) FROM recipient_group_memberships gm
+    JOIN organization_memberships m ON m.id=gm.organization_membership_id
+    WHERE gm.group_id=g.id AND gm.status='active' AND m.status='active'
+      AND (gm.starts_at IS NULL OR julianday(gm.starts_at)<=julianday('now'))
+      AND (gm.expires_at IS NULL OR julianday(gm.expires_at)>julianday('now'))) AS active_members
+  FROM recipient_groups g WHERE g.organization_id=? ORDER BY g.id
+ `).all(organizationId);
+ res.json({groups});
+});
+app.post("/api/organizations/:id/groups",auth,roles("admin"),adminAccountMutationLimiter,(req,res)=>{
+ const organizationId=Number(req.params.id);
+ if(!Number.isSafeInteger(organizationId)||organizationId<1) return res.status(400).json({error:"Invalid organization id"});
+ try {
+  const data=recipientGroupSchema.parse(req.body);
+  const id=createRecipientGroup(db,{organizationId,slug:data.slug,name:data.name,actorUserId:req.user.id});
+  audit(req.user.id,null,"recipient_group_created",`Created recipient group ${data.slug} in organization ${organizationId}`);
+  return res.status(201).json({id,organization_id:organizationId,slug:data.slug.toLowerCase(),name:data.name,status:"active"});
+ } catch(error) {
+  if(error.code==="SQLITE_CONSTRAINT_UNIQUE") return res.status(409).json({error:"Recipient group slug already exists in this organization"});
+  if(/Active organization not found/.test(error.message)) return res.status(404).json({error:"Organization not found"});
+  return res.status(400).json({error:error.message});
+ }
+});
+app.get("/api/recipient-groups/:groupId/memberships",auth,roles("admin"),(req,res)=>{
+ const groupId=Number(req.params.groupId);
+ if(!Number.isSafeInteger(groupId)||groupId<1) return res.status(400).json({error:"Invalid recipient group id"});
+ const group=db.prepare("SELECT id,organization_id FROM recipient_groups WHERE id=?").get(groupId);
+ if(!group) return res.status(404).json({error:"Recipient group not found"});
+ const memberships=db.prepare(`
+  SELECT gm.id,gm.group_id,gm.organization_id,gm.user_id,u.username,
+   gm.organization_membership_id,gm.status,gm.starts_at,gm.expires_at,
+   gm.created_by,gm.approved_by,gm.created_at,gm.updated_at
+  FROM recipient_group_memberships gm JOIN users u ON u.id=gm.user_id
+  WHERE gm.group_id=? ORDER BY gm.id DESC
+ `).all(groupId);
+ res.json({memberships});
+});
+app.post("/api/recipient-groups/:groupId/memberships",auth,roles("admin"),adminAccountMutationLimiter,(req,res)=>{
+ const groupId=Number(req.params.groupId);
+ if(!Number.isSafeInteger(groupId)||groupId<1) return res.status(400).json({error:"Invalid recipient group id"});
+ try {
+  const data=z.object({
+   organization_membership_id:z.number().int().positive(),
+   starts_at:z.string().datetime({offset:true}).optional().nullable(),
+   expires_at:z.string().datetime({offset:true}).optional().nullable()
+  }).parse(req.body);
+  const id=requestRecipientGroupMembership(db,{
+   groupId,organizationMembershipId:data.organization_membership_id,actorUserId:req.user.id,
+   startsAt:data.starts_at??null,expiresAt:data.expires_at??null
+  });
+  audit(req.user.id,null,"recipient_group_membership_requested",`Requested group membership ${id} for organization membership ${data.organization_membership_id}`);
+  return res.status(201).json({id,group_id:groupId,status:"pending"});
+ } catch(error) {
+  if(error.code==="SQLITE_CONSTRAINT_UNIQUE") return res.status(409).json({error:"An open membership already exists for this user and group"});
+  if(/Active group and matching organization membership/.test(error.message)) return res.status(404).json({error:"Group or active organization membership not found"});
+  return res.status(400).json({error:error.message});
+ }
+});
+app.post("/api/recipient-groups/memberships/expire",auth,roles("admin"),adminAccountMutationLimiter,(req,res)=>{
+ try {
+  const expired=expireRecipientGroupMemberships(db);
+  if(expired>0) audit(req.user.id,null,"recipient_group_memberships_expired",`Expired ${expired} recipient group memberships`);
+  return res.json({ok:true,expired});
+ } catch(error) {
+  console.error("Recipient group membership expiry sweep failed:",error);
+  return res.status(500).json({error:"Unable to expire recipient group memberships safely"});
+ }
+});
+app.patch("/api/recipient-group-memberships/:id",auth,roles("admin"),adminAccountMutationLimiter,(req,res)=>{
+ const membershipId=Number(req.params.id);
+ if(!Number.isSafeInteger(membershipId)||membershipId<1) return res.status(400).json({error:"Invalid group membership id"});
+ try {
+  const data=z.object({status:z.enum(["active","suspended","revoked"])}).parse(req.body);
+  const result=transitionRecipientGroupMembership(db,{
+   membershipId,nextStatus:data.status,actorUserId:req.user.id
+  });
+  audit(req.user.id,null,"recipient_group_membership_"+data.status,
+   `Changed group membership ${membershipId} in group ${result.groupId} from ${result.previousStatus} to ${result.status}`);
+  return res.json({ok:true,...result});
+ } catch(error) {
+  if(/Group membership not found/.test(error.message)) return res.status(404).json({error:"Group membership not found"});
+  if(/not permitted|changed concurrently/.test(error.message)) return res.status(409).json({error:error.message});
+  return res.status(400).json({error:error.message});
+ }
+});
+
 app.patch("/api/organization-memberships/:id",auth,roles("admin"),adminAccountMutationLimiter,(req,res)=>{
  const membershipId=Number(req.params.id);
  if(!Number.isSafeInteger(membershipId)||membershipId<1) return res.status(400).json({error:"Invalid membership id"});

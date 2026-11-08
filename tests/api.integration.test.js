@@ -41,7 +41,8 @@ test("API enforces role separation, public-feed filtering and account deactivati
       CAP_WEBHOOK_SECRET: "integration-webhook-secret-that-is-at-least-32-bytes",
       MFA_ENCRYPTION_KEY: "a".repeat(64),
       MFA_REQUIRED_ROLES: "admin,approver,publisher",
-      API_RATE_LIMIT: "2000"
+      API_RATE_LIMIT: "2000",
+      ADMIN_ACCOUNT_MUTATION_LIMIT: "1000"
     },
     stdio: "ignore"
   });
@@ -537,6 +538,7 @@ test("API enforces role separation, public-feed filtering and account deactivati
 
 
   await createUser("forecaster1", "forecaster");
+  await createUser("forecaster2", "forecaster");
   await createUser("reviewer1", "reviewer");
   await createUser("publisher1", "publisher");
   await createUser("approver1", "approver");
@@ -602,6 +604,7 @@ test("API enforces role separation, public-feed filtering and account deactivati
 
 
   const forecaster = await login("forecaster1", "Temporary-Password-2026!");
+  const forecaster2 = await login("forecaster2", "Temporary-Password-2026!");
   const reviewer = await login("reviewer1", "Temporary-Password-2026!");
   const publisherInitialSession = await login("publisher1", "Temporary-Password-2026!");
   const publisher = await enrollMfa(publisherInitialSession, "Temporary-Password-2026!");
@@ -793,6 +796,9 @@ test("API enforces role separation, public-feed filtering and account deactivati
     assert.equal((await request(`/api/alerts/${id}/submit`, {
       token: viewer, method: "POST", body: {}
     })).status, 403, "viewers must not submit warnings for review");
+    assert.equal((await request(`/api/alerts/${id}/submit`, {
+      token: forecaster2, method: "POST", body: {}
+    })).status, 403, "a different forecaster must not submit another user's draft");
     const concurrentSubmissions = await Promise.all([
       request(`/api/alerts/${id}/submit`, { token: forecaster, method: "POST", body: {} }),
       request(`/api/alerts/${id}/submit`, { token: forecaster, method: "POST", body: {} })

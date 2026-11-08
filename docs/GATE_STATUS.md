@@ -1,6 +1,6 @@
 # Project Gate Status (Software Evidence)
 
-Last verified head: `b991d5c411b81a6fe18bc9112c91f7206b809f08`  
+Last verified head: `187b944` (docs); feature heads `6319372` / `0e95012` pending CI  
 PR #4: Draft (not merged)  
 `external_adapters_enabled`: **false**
 
@@ -31,6 +31,7 @@ Legend: **Done** = automated evidence in repo/CI · **Partial** = core present, 
 | Item | Status |
 |------|--------|
 | Auth, sessions, MFA, roles | **Done** |
+| Failed login audit (`login_failed`) | **Done** |
 | Organizations + membership | **Done** |
 | IDOR / cross-tenant tests | **Done** — scope isolation + recipient tests |
 | Deactivated session invalidation | **Done** |

@@ -32,6 +32,7 @@ async function fixture() {
       reviewed_at TEXT
     );
     CREATE TABLE alerts (id INTEGER PRIMARY KEY, workflow TEXT, scope TEXT);
+    CREATE TABLE organizations (id INTEGER PRIMARY KEY, slug TEXT);
     CREATE TABLE audit_log (id INTEGER PRIMARY KEY, alert_id INTEGER, action TEXT);
   `);
   return { root, db };
@@ -81,7 +82,8 @@ test("collectOperationalMetrics reports queue and database health", async () => 
     db.prepare(`INSERT INTO delivery_outbox(alert_id,channel,payload,status,created_at,updated_at)
       VALUES (1,'cap_feed','{}','queued',datetime('now'),datetime('now')),
              (2,'cap_feed','private-payload','queued',datetime('now'),datetime('now'))`).run();
-    db.prepare("INSERT INTO audit_log(alert_id,action) VALUES (1,'public_event'), (2,'private_event')").run();
+    db.prepare("INSERT INTO organizations(slug) VALUES ('tenant-a')").run();
+    db.prepare("INSERT INTO audit_log(alert_id,action) VALUES (1,'public_event'), (2,'private_event'), (NULL,'tenant_membership_event')").run();
     const metrics = collectOperationalMetrics(db);
     assert.equal(metrics.database.quick_check, "ok");
     assert.equal(metrics.delivery_outbox.queued, 1, "queue metrics must exclude non-Public deliveries");

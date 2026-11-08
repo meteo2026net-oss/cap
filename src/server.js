@@ -583,7 +583,17 @@ app.post("/api/organizations/:id/memberships",auth,roles("admin"),adminAccountMu
   return res.status(400).json({error:error.message});
  }
 });
-app.post("/api/organizations/memberships/expire",auth,roles("admin"),adminAccountMutationLimiter,(req,res)=>{\n try {\n  const expired=expireOrganizationMemberships(db);\n  if(expired>0) audit(req.user.id,null,"organization_memberships_expired",`Expired ${expired} organization memberships`);\n  return res.json({ok:true,expired});\n } catch(error) {\n  console.error("Membership expiry sweep failed:",error);\n  return res.status(500).json({error:"Unable to expire memberships safely"});\n }\n});\napp.patch("/api/organization-memberships/:id",auth,roles("admin"),adminAccountMutationLimiter,(req,res)=>{
+app.post("/api/organizations/memberships/expire",auth,roles("admin"),adminAccountMutationLimiter,(req,res)=>{
+ try {
+  const expired=expireOrganizationMemberships(db);
+  if(expired>0) audit(req.user.id,null,"organization_memberships_expired",`Expired ${expired} organization memberships`);
+  return res.json({ok:true,expired});
+ } catch(error) {
+  console.error("Membership expiry sweep failed:",error);
+  return res.status(500).json({error:"Unable to expire memberships safely"});
+ }
+});
+app.patch("/api/organization-memberships/:id",auth,roles("admin"),adminAccountMutationLimiter,(req,res)=>{
  const membershipId=Number(req.params.id);
  if(!Number.isSafeInteger(membershipId)||membershipId<1) return res.status(400).json({error:"Invalid membership id"});
  try {

@@ -365,7 +365,11 @@ app.post("/api/auth/login",loginLimiter,(req,res)=>{
  const user = db.prepare("SELECT * FROM users WHERE username=?").get(username);
  const passwordHash = user?.active ? user.password_hash : DUMMY_PASSWORD_HASH;
  const passwordMatches = bcrypt.compareSync(password, passwordHash);
- if (!user || !user.active || !passwordMatches) return res.status(401).json({error:"Invalid credentials"});
+ if (!user || !user.active || !passwordMatches) {
+  // Record failed authentication without distinguishing unknown vs wrong password in the client response.
+  try { audit(user && user.active ? user.id : null, null, "login_failed", "Authentication failed"); } catch {}
+  return res.status(401).json({error:"Invalid credentials"});
+ }
  if (user.mfa_enabled) {
   const challengeId = randomUUID();
   const expiresAt = Date.now() + 5 * 60 * 1000;

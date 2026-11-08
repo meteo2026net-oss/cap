@@ -69,6 +69,40 @@ export function installRecipientSchema(database) {
     CREATE INDEX IF NOT EXISTS idx_membership_events_subject
       ON organization_membership_events(subject_user_id,id DESC);
 
+    CREATE TRIGGER IF NOT EXISTS organization_create_admin_guard
+    BEFORE INSERT ON organizations
+    WHEN NOT EXISTS (
+      SELECT 1 FROM users u WHERE u.id=NEW.created_by AND u.active=1 AND u.role='admin'
+    )
+    BEGIN SELECT RAISE(ABORT, 'Active administrator required to create organization'); END;
+
+    CREATE TRIGGER IF NOT EXISTS membership_create_admin_guard
+    BEFORE INSERT ON organization_memberships
+    WHEN NEW.status <> 'pending'
+      OR NOT EXISTS (
+        SELECT 1 FROM users actor WHERE actor.id=NEW.created_by AND actor.active=1 AND actor.role='admin'
+      )
+      OR NOT EXISTS (
+        SELECT 1 FROM users subject WHERE subject.id=NEW.user_id AND subject.active=1
+      )
+      OR NOT EXISTS (
+        SELECT 1 FROM organizations org WHERE org.id=NEW.organization_id AND org.status='active'
+      )
+    BEGIN SELECT RAISE(ABORT, 'Pending membership requires an active administrator, user, and organization'); END;
+
+    CREATE TRIGGER IF NOT EXISTS membership_update_admin_guard
+    BEFORE UPDATE OF status ON organization_memberships
+    WHEN (NEW.status <> 'expired' AND NOT EXISTS (
+        SELECT 1 FROM users actor WHERE actor.id=NEW.updated_by AND actor.active=1 AND actor.role='admin'
+      ))
+      OR (NEW.status='active' AND NOT EXISTS (
+        SELECT 1 FROM users approver WHERE approver.id=NEW.approved_by AND approver.active=1 AND approver.role='admin'
+      ))
+      OR (NEW.status='expired' AND (
+        OLD.expires_at IS NULL OR julianday(OLD.expires_at)>julianday('now')
+      ))
+    BEGIN SELECT RAISE(ABORT, 'Membership state change lacks valid authority or expiry'); END;
+
     CREATE TRIGGER IF NOT EXISTS membership_identity_immutable
     BEFORE UPDATE OF organization_id,user_id,created_by ON organization_memberships
     BEGIN

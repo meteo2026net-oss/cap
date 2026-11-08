@@ -3,11 +3,15 @@ import assert from "node:assert/strict";
 import Database from "better-sqlite3";
 import {
   createOrganization,
+  createRecipientGroup,
   expireOrganizationMemberships,
   hasActiveOrganizationMembership,
+  hasActiveRecipientGroupMembership,
   installRecipientSchema,
   requestOrganizationMembership,
-  transitionOrganizationMembership
+  requestRecipientGroupMembership,
+  transitionOrganizationMembership,
+  transitionRecipientGroupMembership
 } from "../src/recipient-auth.js";
 
 function fixture() {

@@ -96,11 +96,33 @@ test("Restricted and Private scope fields survive export/import", () => {
   assert.equal(privateMsg.addresses, "ops@example.test duty@example.test");
 });
 
-test("parseCapXml rejects malformed and semantically invalid documents", () => {
+test("parseCapXml rejects malformed, wrong-namespace and unsafe XML documents", () => {
   assert.throws(() => parseCapXml("<not-cap/>"), /alert element|well-formed|CAP/i);
   assert.throws(() => parseCapXml("not xml at all"), /well-formed|CAP/i);
-  const broken = buildCapXml(base).replace("<severity>Moderate</severity>", "<severity>Critical</severity>");
+  const valid = buildCapXml(base);
+  const broken = valid.replace("<severity>Moderate</severity>", "<severity>Critical</severity>");
   assert.throws(() => parseCapXml(broken), /Invalid CAP|severity/i);
+  const missingNamespace = valid.replace(' xmlns="urn:oasis:names:tc:emergency:cap:1.2"', "");
+  assert.throws(() => parseCapXml(missingNamespace), /CAP 1.2 namespace/i);
+  const wrongNamespace = valid.replace("urn:oasis:names:tc:emergency:cap:1.2", "urn:example:not-cap");
+  assert.throws(() => parseCapXml(wrongNamespace), /CAP 1.2 namespace/i);
+  const unrelatedNamespaceDeclaration = valid.replace(
+    'xmlns="urn:oasis:names:tc:emergency:cap:1.2"',
+    'xmlns="urn:example:not-cap" xmlns:unused="urn:oasis:names:tc:emergency:cap:1.2"'
+  );
+  assert.throws(() => parseCapXml(unrelatedNamespaceDeclaration), /CAP 1.2 namespace/i);
+  const foreignNamespaceChild = valid.replace(
+    "<event>Interop rainfall</event>",
+    '<foreign:event xmlns:foreign="urn:example:not-cap">Interop rainfall</foreign:event>'
+  );
+  assert.throws(() => parseCapXml(foreignNamespaceChild), /CAP 1.2 namespace/i);
+  const prefixedNamespace = valid
+    .replace('xmlns="urn:oasis:names:tc:emergency:cap:1.2"', 'xmlns:cap="urn:oasis:names:tc:emergency:cap:1.2"')
+    .replace(/<(\/?)([A-Za-z][\w.-]*)(?=[\s/>])/g, (_match, slash, name) => `<${slash}cap:${name}`);
+  const prefixed = parseCapXml(prefixedNamespace);
+  assert.equal(prefixed.identifier, base.identifier, "prefixed CAP 1.2 elements must parse identically");
+  const withDtd = '<!DOCTYPE alert [<!ENTITY x "blocked">]>' + valid;
+  assert.throws(() => parseCapXml(withDtd), /DTD and entity declarations/i);
 });
 
 test("simulated external CAP receiver accepts exported XML and emits Ack reference", () => {

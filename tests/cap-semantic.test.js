@@ -115,6 +115,38 @@ test("semantic: Update Cancel Ack Error require well-formed references triplets"
   }
 });
 
+test("semantic: reference timestamps reject impossible dates and timezone offsets", () => {
+  for (const sent of [
+    "2026-02-30T09:00:00-00:00",
+    "2026-11-07T09:00:00+14:01",
+    "2026-11-07T09:00:00+15:00",
+    "2026-11-07T25:00:00-00:00"
+  ]) {
+    assert.throws(
+      () => validateAlert(derived("Update", {
+        references_text: `semantic@example.test,urn:uuid:invalid,${sent}`
+      })),
+      /timestamp|out-of-range/i,
+      sent
+    );
+  }
+});
+
+test("semantic: multiple reference timezone forms normalize consistently and preserve order", () => {
+  const references_text = [
+    "sender-one@example.test,urn:uuid:one,2026-11-07T10:00:00+01:00",
+    "sender-two@example.test,urn:uuid:two,2026-11-07T04:00:00-05:00",
+    "sender-three@example.test,urn:uuid:three,2026-11-07T09:00:00Z"
+  ].join(" ");
+  const xml = buildCapXml(derived("Update", { references_text }));
+  const expected = [
+    "sender-one@example.test,urn:uuid:one,2026-11-07T09:00:00-00:00",
+    "sender-two@example.test,urn:uuid:two,2026-11-07T09:00:00-00:00",
+    "sender-three@example.test,urn:uuid:three,2026-11-07T09:00:00-00:00"
+  ].join(" ");
+  assert.match(xml, new RegExp(`<references>${expected}</references>`));
+});
+
 test("semantic: references preserve sender identifier sent components for derived types", () => {
   for (const msg_type of ["Update", "Cancel", "Ack", "Error"]) {
     const xml = buildCapXml(derived(msg_type));
@@ -264,4 +296,22 @@ test("semantic: multiple whitespace-separated references remain ordered and comp
   assert.equal(refs.length, 2);
   assert.equal(refs[0].split(",")[1], "urn:uuid:one");
   assert.equal(refs[1].split(",")[1], "urn:uuid:two");
+});
+
+test("semantic: derived references use the same normalized timestamp as the referenced alert", () => {
+  const sourceSent = "2026-11-07T10:00:00+01:00";
+  const sourceXml = buildCapXml({ ...baseAlert, sent: sourceSent });
+  const normalizedSent = sourceXml.match(/<sent>([^<]+)<\/sent>/)?.[1];
+  assert.equal(normalizedSent, "2026-11-07T09:00:00-00:00");
+
+  for (const msg_type of ["Update", "Cancel", "Ack", "Error"]) {
+    const derivedXml = buildCapXml({
+      ...baseAlert,
+      identifier: `urn:uuid:derived-${msg_type.toLowerCase()}`,
+      sent: "2026-11-07T11:00:00Z",
+      msg_type,
+      references_text: `${baseAlert.sender},${baseAlert.identifier},${sourceSent}`
+    });
+    assert.match(derivedXml, new RegExp(`<references>${baseAlert.sender},${baseAlert.identifier},2026-11-07T09:00:00-00:00</references>`), msg_type);
+  }
 });

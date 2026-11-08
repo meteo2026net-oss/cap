@@ -136,19 +136,17 @@ test("phase5: Ack/Error lifecycle, delivery retry, interop import and scope isol
     certainty: "Likely"
   });
 
-  const restricted = await publish({
-    event: "Phase5 restricted",
-    headline: "Phase5 restricted headline unique-p5-restricted",
-    description: "Restricted interop fixture",
-    area_desc: "Phase5 restricted area",
-    circle: "34.0,36.5 5",
-    status: "Actual",
-    scope: "Restricted",
-    restriction: "Authorized agencies only",
-    urgency: "Immediate",
-    severity: "Severe",
-    certainty: "Observed"
+  const deniedRestricted = await request("/api/alerts", {
+    token: forecaster, method: "POST", body: {
+      event: "Phase5 restricted", headline: "Phase5 restricted headline unique-p5-restricted",
+      description: "Restricted interop fixture", area_desc: "Phase5 restricted area",
+      circle: "34.0,36.5 5", status: "Actual", scope: "Restricted",
+      restriction: "Authorized agencies only", urgency: "Immediate", severity: "Severe", certainty: "Observed"
+    }
   });
+  assert.equal(deniedRestricted.status, 403);
+  assert.equal(deniedRestricted.data.code, "SCOPE_AUTHORIZATION_UNCONFIGURED");
+  const restricted = { id: 999999993, identifier: "urn:uuid:restricted-not-created" };
 
   // Ack and Error derivation + publication
   for (const msg_type of ["Ack", "Error"]) {

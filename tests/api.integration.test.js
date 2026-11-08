@@ -12,6 +12,8 @@ import { appendAuditLog } from "../src/audit.js";
 import { totpAt } from "../src/mfa.js";
 
 const serverEntry = fileURLToPath(new URL("../src/server.js", import.meta.url));
+// Parent-process crypto for webhook source bootstrap must match the child server key.
+if (!process.env.MFA_ENCRYPTION_KEY) process.env.MFA_ENCRYPTION_KEY = "a".repeat(64);
 
 async function reservePort() {
   const server = createServer();
@@ -41,7 +43,9 @@ test("API enforces role separation, public-feed filtering and account deactivati
       CAP_WEBHOOK_SECRET: "integration-webhook-secret-that-is-at-least-32-bytes",
       MFA_ENCRYPTION_KEY: "a".repeat(64),
       MFA_REQUIRED_ROLES: "admin,approver,publisher",
-      API_RATE_LIMIT: "2000"
+      API_RATE_LIMIT: "2000",
+      ADMIN_ACCOUNT_MUTATION_LIMIT: "1000",
+      ADMIN_PASSWORD_RESET_LIMIT: "1000"
     },
     stdio: "ignore"
   });
@@ -87,6 +91,14 @@ test("API enforces role separation, public-feed filtering and account deactivati
   assert.ok(csp.includes("object-src"));
   assert.ok(csp.includes("script-src"));
   assert.ok(csp.includes("script-src-attr 'none'"), "inline event handler attributes must be blocked");
+  for (const directive of ["img-src", "script-src", "style-src"]) {
+    const policy = csp.split(";").map(value => value.trim()).find(value => value.startsWith(directive + " "));
+    const allowedSources = new Set((policy || "").split(/\s+/).slice(1));
+    assert.equal(allowedSources.has("https://cdnjs.cloudflare.com"), true,
+      directive + " must permit the exact SRI-pinned Leaflet Draw CDN origin");
+    assert.equal(allowedSources.has("https://untrusted.example/https://cdnjs.cloudflare.com"), false,
+      directive + " must not accept a different origin that merely contains the CDN hostname");
+  }
   assert.equal(dashboard.headers.get("x-content-type-options"), "nosniff",
     "responses should prevent MIME type sniffing");
   assert.ok(dashboard.headers.get("referrer-policy"),
@@ -106,15 +118,85 @@ test("API enforces role separation, public-feed filtering and account deactivati
   const webhookTimestamp = Math.floor(Date.now() / 1000);
   const webhookBody = JSON.stringify({ provider: "synthetic-test", event: "inbound-test", alert: { headline: "Not an operational alert" } });
   const webhookSecret = "integration-webhook-secret-that-is-at-least-32-bytes";
+  const webhookSourceKey = "integration-source";
+  // Seed an organization-bound webhook source into the live test database before ingress checks.
+  {
+    const { createOrganization, installRecipientSchema, requestOrganizationMembership, transitionOrganizationMembership } = await import("../src/recipient-auth.js");
+    const { createWebhookSource, ensureWebhookSourcesSchema } = await import("../src/webhook-sources.js");
+    const database = new Database(path.join(cwd, "storage", "cap.sqlite"));
+    try {
+      installRecipientSchema(database);
+      ensureWebhookSourcesSchema(database);
+      const adminRow = database.prepare("SELECT id FROM users WHERE username='admin'").get();
+      assert.ok(adminRow, "admin user must exist before webhook source bootstrap");
+      let org = database.prepare("SELECT id FROM organizations WHERE slug='integration-org'").get();
+      if (!org) {
+        const orgId = createOrganization(database, { slug: "integration-org", name: "Integration Org", actorUserId: adminRow.id });
+        org = { id: orgId };
+      }
+      const membershipId = requestOrganizationMembership(database, {
+        organizationId: org.id, userId: adminRow.id, actorUserId: adminRow.id
+      });
+      try {
+        transitionOrganizationMembership(database, {
+          membershipId, nextStatus: "active", actorUserId: adminRow.id
+        });
+      } catch {}
+      const existingSource = database.prepare("SELECT id FROM webhook_sources WHERE source_key=?").get(webhookSourceKey);
+      if (!existingSource) {
+        createWebhookSource(database, {
+          organizationId: org.id,
+          sourceKey: webhookSourceKey,
+          secret: webhookSecret,
+          label: "integration",
+          actorUserId: adminRow.id
+        });
+      }
+    } finally {
+      database.close();
+    }
+  }
   const webhookSignature = createWebhookSignature(webhookSecret, webhookTimestamp, webhookBody);
   const sendWebhook = (body, timestamp = webhookTimestamp, signature = webhookSignature, contentType = "application/json") =>
     fetch(base + "/api/webhooks/inbound", {
       method: "POST",
-      headers: { "Content-Type": contentType, "X-Webhook-Timestamp": String(timestamp), "X-Webhook-Signature": signature },
+      headers: {
+        "Content-Type": contentType,
+        "X-Webhook-Timestamp": String(timestamp),
+        "X-Webhook-Signature": signature,
+        "X-Webhook-Source": webhookSourceKey
+      },
       body
     });
-  const acceptedWebhook = await sendWebhook(webhookBody);
-  assert.equal(acceptedWebhook.status, 202, "valid signed webhook should be accepted into the inbox");
+  // Missing source header must be rejected before signature checks.
+  const missingSource = await fetch(base + "/api/webhooks/inbound", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Webhook-Timestamp": String(webhookTimestamp),
+      "X-Webhook-Signature": webhookSignature
+    },
+    body: webhookBody
+  });
+  assert.equal(missingSource.status, 401, "webhooks without X-Webhook-Source must be rejected");
+  const unknownSource = await fetch(base + "/api/webhooks/inbound", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Webhook-Timestamp": String(webhookTimestamp),
+      "X-Webhook-Signature": webhookSignature,
+      "X-Webhook-Source": "unknown-source"
+    },
+    body: webhookBody
+  });
+  assert.equal(unknownSource.status, 401, "unknown webhook sources must be rejected");
+  const concurrentWebhookResponses = await Promise.all(
+    Array.from({ length: 8 }, () => sendWebhook(webhookBody))
+  );
+  const concurrentWebhookStatuses = concurrentWebhookResponses.map(response => response.status).sort((a, b) => a - b);
+  assert.deepEqual(concurrentWebhookStatuses, [202, 401, 401, 401, 401, 401, 401, 401],
+    "concurrent replay of one signed webhook must atomically accept exactly one request");
+  const acceptedWebhook = concurrentWebhookResponses.find(response => response.status === 202);
   const acceptedWebhookData = await acceptedWebhook.json();
   assert.equal(acceptedWebhookData.accepted, true);
   assert.equal(acceptedWebhookData.status, "pending");
@@ -179,6 +261,18 @@ test("API enforces role separation, public-feed filtering and account deactivati
     return confirmation.data.token;
   };
 
+  const oversizedJsonResponse = await fetch(base + "/api/auth/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ oversized: "x".repeat(1024 * 1024 + 1024) })
+  });
+  assert.equal(oversizedJsonResponse.status, 413,
+    "JSON request bodies above the global 1 MB parser limit must be rejected");
+  assert.match(oversizedJsonResponse.headers.get("content-type") || "", /application\/json/i,
+    "body-parser errors must use the API JSON error format");
+  assert.equal(oversizedJsonResponse.headers.get("cache-control"), "no-store",
+    "oversized authentication requests must not be cached");
+
   const malformedLogin = await request("/api/auth/login", {
     method: "POST", body: { username: { malformed: true }, password: "anything" }
   });
@@ -196,6 +290,14 @@ test("API enforces role separation, public-feed filtering and account deactivati
   let admin = await login("admin", "Integration-Test-Admin-Password-2026");
   assert.equal((await request("/api/users", { token: admin })).status, 403,
     "an administrator without required MFA must not access protected administrator operations");
+  for (const path of ["/api/alerts", "/api/alerts/stats", "/api/alerts/export.csv"]) {
+    const blocked = await request(path, { token: admin });
+    assert.equal(blocked.status, 403,
+      "required-MFA roles must not bypass enrollment through auth-only data route " + path);
+    assert.equal(blocked.data.code, "MFA_REQUIRED");
+  }
+  assert.equal((await request("/api/auth/mfa/status", { token: admin })).status, 200,
+    "MFA setup endpoints must remain available before enrollment");
   const adminMfaStatus = await request("/api/auth/mfa/status", { token: admin });
   assert.equal(adminMfaStatus.data.required, true);
   assert.equal(adminMfaStatus.headers.get("cache-control"), "no-store",
@@ -230,6 +332,23 @@ test("API enforces role separation, public-feed filtering and account deactivati
   assert.equal((await request(`/api/users/${adminUserId}/password-reset`, {
     token: admin, method: "POST", body: {}
   })).status, 409, "an administrator must not reset their own password through the assisted workflow");
+  const peerAdminCreate = await request("/api/users", {
+    token: admin, method: "POST",
+    body: { username: "peer-admin", role: "admin", password: "Initial-Temporary-Password-2026!" }
+  });
+  assert.equal(peerAdminCreate.status, 201, "the existing account provisioning policy currently permits administrator creation");
+  const peerAdminReset = await request(`/api/users/${peerAdminCreate.data.id}/password-reset`, {
+    token: admin, method: "POST", body: {}
+  });
+  assert.equal(peerAdminReset.status, 403,
+    "an administrator must not receive a peer administrator temporary password");
+  assert.equal(peerAdminReset.data.temporary_password, undefined,
+    "peer administrator recovery must never disclose a temporary credential to the requesting administrator");
+  const peerAdminLogin = await request("/api/auth/login", {
+    method: "POST", body: { username: "peer-admin", password: "Initial-Temporary-Password-2026!" }
+  });
+  assert.equal(peerAdminLogin.status, 200,
+    "a denied peer-admin reset must leave the target administrator credentials unchanged");
   assert.equal((await request("/api/users/999999/password-reset", {
     token: admin, method: "POST", body: {}
   })).status, 404, "password reset must report an unknown account without changing any credentials");
@@ -487,6 +606,7 @@ test("API enforces role separation, public-feed filtering and account deactivati
 
 
   await createUser("forecaster1", "forecaster");
+  await createUser("forecaster2", "forecaster");
   await createUser("reviewer1", "reviewer");
   await createUser("publisher1", "publisher");
   await createUser("approver1", "approver");
@@ -552,7 +672,28 @@ test("API enforces role separation, public-feed filtering and account deactivati
 
 
   const forecaster = await login("forecaster1", "Temporary-Password-2026!");
+  const forecaster2 = await login("forecaster2", "Temporary-Password-2026!");
   const reviewer = await login("reviewer1", "Temporary-Password-2026!");
+  // Grant reviewer membership on the integration organization so org-scoped webhook inbox access works.
+  {
+    const database = new Database(path.join(cwd, "storage", "cap.sqlite"));
+    try {
+      const { requestOrganizationMembership, transitionOrganizationMembership } = await import("../src/recipient-auth.js");
+      const adminRow = database.prepare("SELECT id FROM users WHERE username='admin'").get();
+      const reviewerRow = database.prepare("SELECT id FROM users WHERE username='reviewer1'").get();
+      const org = database.prepare("SELECT id FROM organizations WHERE slug='integration-org'").get();
+      if (adminRow && reviewerRow && org) {
+        const membershipId = requestOrganizationMembership(database, {
+          organizationId: org.id, userId: reviewerRow.id, actorUserId: adminRow.id
+        });
+        transitionOrganizationMembership(database, {
+          membershipId, nextStatus: "active", actorUserId: adminRow.id
+        });
+      }
+    } finally {
+      database.close();
+    }
+  }
   const publisherInitialSession = await login("publisher1", "Temporary-Password-2026!");
   const publisher = await enrollMfa(publisherInitialSession, "Temporary-Password-2026!");
   const publisherProfile = await request("/api/me", { token: publisher });
@@ -743,6 +884,9 @@ test("API enforces role separation, public-feed filtering and account deactivati
     assert.equal((await request(`/api/alerts/${id}/submit`, {
       token: viewer, method: "POST", body: {}
     })).status, 403, "viewers must not submit warnings for review");
+    assert.equal((await request(`/api/alerts/${id}/submit`, {
+      token: forecaster2, method: "POST", body: {}
+    })).status, 403, "a different forecaster must not submit another user's draft");
     const concurrentSubmissions = await Promise.all([
       request(`/api/alerts/${id}/submit`, { token: forecaster, method: "POST", body: {} }),
       request(`/api/alerts/${id}/submit`, { token: forecaster, method: "POST", body: {} })
@@ -1052,12 +1196,20 @@ test("API enforces role separation, public-feed filtering and account deactivati
     "fractional inbox cursors must be rejected");
   const paginationDatabase = new Database(path.join(cwd, "storage", "cap.sqlite"));
   try {
+    const orgRow = paginationDatabase.prepare("SELECT id FROM organizations WHERE slug='integration-org'").get();
+    assert.ok(orgRow, "integration-org must exist for org-scoped inbox pagination");
     const addInboxRow = paginationDatabase.prepare(
-      "INSERT INTO webhook_inbox (source_timestamp,signature_hash,payload_json,status) VALUES (?,?,?,'pending')"
+      "INSERT INTO webhook_inbox (source_timestamp,signature_hash,payload_json,status,organization_id,source_key) VALUES (?,?,?,'pending',?,?)"
     );
     const addPageRows = paginationDatabase.transaction(() => {
       for (let index = 0; index < 101; index++) {
-        addInboxRow.run(webhookTimestamp, "pagination-test-" + index, JSON.stringify({ page_test: index }));
+        addInboxRow.run(
+          webhookTimestamp,
+          "pagination-test-" + index,
+          JSON.stringify({ page_test: index }),
+          orgRow.id,
+          "pagination-source"
+        );
       }
     });
     addPageRows();
@@ -1194,29 +1346,56 @@ test("API enforces role separation, public-feed filtering and account deactivati
     "authenticated CAP XML exports must not be cacheable");
   assert.match(await capXml.text(), /<alert xmlns=/);
 
-  const restrictedMissing = await request("/api/alerts", {
-    token: forecaster, method: "POST", body: {
-      event: "Restricted storm", headline: "Internal storm advisory",
-      description: "Restricted distribution only", area_desc: "Ops zone",
-      circle: "33.5,36.2 10", scope: "Restricted", status: "Test"
-    }
-  });
-  assert.equal(restrictedMissing.status, 400,
-    "Restricted scope without restriction text must be rejected");
-  assert.match(restrictedMissing.data.error || "", /restriction/i);
+  // Simulate legacy non-Public rows already present before the fail-closed policy.
+  const scopeDb = new Database(path.join(cwd, "storage", "cap.sqlite"));
+  t.after(() => scopeDb.close());
+  const insertLegacyAlert = scopeDb.prepare(`INSERT INTO alerts
+    (identifier,sender,sent,status,msg_type,scope,restriction,addresses,event,category,urgency,severity,certainty,headline,description,area_desc,workflow,references_text)
+    VALUES (?,?,?,'Test','Alert',?,?,?,?,'Met','Expected','Moderate','Likely',?,?,?, ?,?)`);
+  const legacyRestrictedId = Number(insertLegacyAlert.run(
+    "legacy-restricted-" + Date.now(), "legacy@example.test", "2026-11-07T00:00:00.000Z",
+    "Restricted", "Internal distribution", null, "Restricted storm", "RESTRICTED_HEADLINE_MARKER",
+    "Restricted description", "Ops zone", "draft", ""
+  ).lastInsertRowid);
+  const legacyPrivateId = Number(insertLegacyAlert.run(
+    "legacy-private-" + Date.now(), "legacy@example.test", "2026-11-07T00:01:00.000Z",
+    "Private", null, "ops@example.test duty@example.test", "Private storm", "PRIVATE_HEADLINE_MARKER",
+    "Private description", "Duty desk", "pending", ""
+  ).lastInsertRowid);
+  const hiddenChildId = Number(insertLegacyAlert.run(
+    "legacy-private-child-" + Date.now(), "legacy@example.test", "2026-11-07T00:02:00.000Z",
+    "Private", null, "ops@example.test", "Private derived", "PRIVATE_CHILD_MARKER",
+    "Private child description", "Duty desk", "published",
+    `${actualRow.sender},${actualRow.identifier},${actualRow.sent}`
+  ).lastInsertRowid);
+  const publicWithPrivateFieldsId = Number(insertLegacyAlert.run(
+    "legacy-public-fields-" + Date.now(), "legacy@example.test", "2026-11-07T00:03:00.000Z",
+    "Public", "PUBLIC_SCOPE_RESTRICTION_MARKER", "PUBLIC_SCOPE_ADDRESSES_MARKER",
+    "Public legacy test", "Public legacy headline", "Public legacy description",
+    "Public zone", "pending", ""
+  ).lastInsertRowid);
+  scopeDb.prepare("UPDATE alerts SET circle='33.5,36.2 10' WHERE id=?").run(publicWithPrivateFieldsId);
+  scopeDb.prepare("INSERT INTO alert_versions(alert_id,version_no,change_type,snapshot_json) VALUES(?,1,'created',?)")
+    .run(publicWithPrivateFieldsId, JSON.stringify({
+      id: publicWithPrivateFieldsId, scope: "Public",
+      restriction: "PUBLIC_SCOPE_RESTRICTION_MARKER",
+      addresses: "PUBLIC_SCOPE_ADDRESSES_MARKER"
+    }));
+  scopeDb.prepare("UPDATE alerts SET restriction=?,addresses=? WHERE id=?")
+    .run("PUBLIC_SCOPE_RESTRICTION_MARKER", "PUBLIC_SCOPE_ADDRESSES_MARKER", actualRow.id);
+  const nextActualVersion = scopeDb.prepare("SELECT COALESCE(MAX(version_no),0)+1 AS n FROM alert_versions WHERE alert_id=?")
+    .get(actualRow.id).n;
+  scopeDb.prepare("INSERT INTO alert_versions(alert_id,version_no,change_type,snapshot_json) VALUES(?,?,'draft_updated',?)")
+    .run(actualRow.id, nextActualVersion, JSON.stringify({
+      id: actualRow.id, scope: "Public",
+      restriction: "PUBLIC_SCOPE_RESTRICTION_MARKER",
+      addresses: "PUBLIC_SCOPE_ADDRESSES_MARKER"
+    }));
+  appendAuditLog(scopeDb, { userId: null, alertId: legacyPrivateId, action: "private_scope_test", details: "PRIVATE_AUDIT_MARKER" });
+  const hiddenDeliveryId = Number(scopeDb.prepare(`INSERT INTO delivery_outbox(alert_id,channel,payload,status)
+    VALUES(?,'cap_feed','PRIVATE_DELIVERY_MARKER','queued')`).run(legacyPrivateId).lastInsertRowid);
 
-  const privateMissing = await request("/api/alerts", {
-    token: forecaster, method: "POST", body: {
-      event: "Private storm", headline: "Private storm advisory",
-      description: "Private recipients only", area_desc: "Duty desk",
-      circle: "33.5,36.2 10", scope: "Private", status: "Test"
-    }
-  });
-  assert.equal(privateMissing.status, 400,
-    "Private scope without addresses must be rejected");
-  assert.match(privateMissing.data.error || "", /addresses/i);
-
-  const restrictedOk = await request("/api/alerts", {
+  const restrictedCreate = await request("/api/alerts", {
     token: forecaster, method: "POST", body: {
       event: "Restricted storm", headline: "Internal storm advisory",
       description: "Restricted distribution only", area_desc: "Ops zone",
@@ -1224,9 +1403,9 @@ test("API enforces role separation, public-feed filtering and account deactivati
       restriction: "Internal distribution to authorized agencies only", status: "Test"
     }
   });
-  assert.equal(restrictedOk.status, 201, "Restricted scope with restriction text must be accepted");
-
-  const privateOk = await request("/api/alerts", {
+  assert.equal(restrictedCreate.status, 403, "new Restricted alerts must fail closed until recipient grants exist");
+  assert.equal(restrictedCreate.data.code, "SCOPE_AUTHORIZATION_UNCONFIGURED");
+  const privateCreate = await request("/api/alerts", {
     token: forecaster, method: "POST", body: {
       event: "Private storm", headline: "Private storm advisory",
       description: "Private recipients only", area_desc: "Duty desk",
@@ -1234,38 +1413,157 @@ test("API enforces role separation, public-feed filtering and account deactivati
       addresses: "ops@example.test duty@example.test", status: "Test"
     }
   });
-  assert.equal(privateOk.status, 201, "Private scope with addresses must be accepted");
+  assert.equal(privateCreate.status, 403, "new Private alerts must fail closed until recipient grants exist");
+  const nonPublicCountBeforeInvalidCreate = scopeDb.prepare("SELECT COUNT(*) AS n FROM alerts WHERE scope<>'Public'").get().n;
+  const incompleteRestrictedCreate = await request("/api/alerts", {
+    token: forecaster, method: "POST", body: {
+      event: "Incomplete restricted storm", headline: "Must fail CAP validation",
+      description: "No recipient description supplied", area_desc: "Ops zone",
+      circle: "33.5,36.2 10", scope: "Restricted", status: "Test"
+    }
+  });
+  assert.equal(incompleteRestrictedCreate.status, 400,
+    "incomplete Restricted CAP must fail structural validation rather than bypass it");
+  assert.equal(scopeDb.prepare("SELECT COUNT(*) AS n FROM alerts WHERE scope<>'Public'").get().n,
+    nonPublicCountBeforeInvalidCreate, "invalid non-Public CAP must not create a database row");
+  const trailingSlashRestrictedCreate = await request("/api/alerts/", {
+    token: forecaster, method: "POST", body: {
+      event: "Trailing slash restricted", headline: "Must not be created",
+      description: "Trailing slash path normalization regression", area_desc: "Ops zone",
+      circle: "33.5,36.2 10", scope: "Restricted",
+      restriction: "Internal distribution only", status: "Test"
+    }
+  });
+  assert.equal(trailingSlashRestrictedCreate.status, 403,
+    "optional trailing slash must not bypass the non-Public create guard");
+
+  const publicList = await request("/api/alerts?scope=Public", { token: forecaster });
+  assert.equal(publicList.status, 200);
+  assert.ok(publicList.data.alerts.every(alert => alert.scope === "Public"),
+    "internal alert pagination must return Public rows only");
+  assert.ok(!publicList.data.alerts.some(alert => [legacyRestrictedId, legacyPrivateId].includes(alert.id)));
+  assert.equal((await request("/api/alerts?scope=Restricted", { token: forecaster })).status, 403);
+  assert.equal((await request("/api/alerts/export.csv?scope=Private", { token: forecaster })).status, 403);
+  const invalidScopeFilter = await request("/api/alerts?scope=Worldwide", { token: forecaster });
+  assert.equal(invalidScopeFilter.status, 400, "invalid CAP scope filter values must still be rejected");
+  const publicCount = scopeDb.prepare("SELECT COUNT(*) AS count FROM alerts WHERE scope='Public'").get().count;
+  const visibleStats = await request("/api/alerts/stats", { token: forecaster });
+  assert.equal(visibleStats.status, 200);
+  assert.equal(visibleStats.data.stats.total, publicCount,
+    "statistics must not reveal counts of Restricted or Private alerts");
+  const csvExport = await fetch(base + "/api/alerts/export.csv", {
+    headers: { Authorization: "Bearer " + forecaster }
+  });
+  const scopeBoundaryCsvText = await csvExport.text();
+  assert.equal(csvExport.status, 200);
+  assert.ok(!scopeBoundaryCsvText.includes("legacy-restricted-") && !scopeBoundaryCsvText.includes("legacy-private-") &&
+    !scopeBoundaryCsvText.includes("RESTRICTED_HEADLINE_MARKER") && !scopeBoundaryCsvText.includes("PRIVATE_HEADLINE_MARKER"),
+    "CSV export must not contain non-Public alert identifiers or content");
+  assert.ok(!scopeBoundaryCsvText.includes("PUBLIC_SCOPE_RESTRICTION_MARKER") &&
+    !scopeBoundaryCsvText.includes("PUBLIC_SCOPE_ADDRESSES_MARKER") &&
+    !scopeBoundaryCsvText.includes('"restriction"') && !scopeBoundaryCsvText.includes('"addresses"'),
+    "Public-scope exports must not expose recipient-only CAP fields");
+  const publicDetailWithSensitiveFields = await request(`/api/alerts/${actualRow.id}`, { token: forecaster });
+  assert.equal(publicDetailWithSensitiveFields.status, 200);
+  assert.ok(!Object.hasOwn(publicDetailWithSensitiveFields.data.alert, "restriction") &&
+    !Object.hasOwn(publicDetailWithSensitiveFields.data.alert, "addresses"),
+    "Public alert detail must suppress recipient-only fields even on legacy rows");
+  const publicXmlWithSensitiveFields = await fetch(base + `/api/alerts/${actualRow.id}/cap.xml`, {
+    headers: { Authorization: "Bearer " + forecaster }
+  });
+  const publicXmlText = await publicXmlWithSensitiveFields.text();
+  assert.equal(publicXmlWithSensitiveFields.status, 200);
+  assert.ok(!publicXmlText.includes("PUBLIC_SCOPE_RESTRICTION_MARKER") &&
+    !publicXmlText.includes("PUBLIC_SCOPE_ADDRESSES_MARKER"),
+    "Public CAP XML must suppress recipient-only fields from legacy rows");
+  const publicVersionsWithSensitiveFields = await request(`/api/alerts/${actualRow.id}/versions`, { token: reviewer });
+  assert.equal(publicVersionsWithSensitiveFields.status, 200);
+  assert.ok(!JSON.stringify(publicVersionsWithSensitiveFields.data).includes("PUBLIC_SCOPE_RESTRICTION_MARKER") &&
+    !JSON.stringify(publicVersionsWithSensitiveFields.data).includes("PUBLIC_SCOPE_ADDRESSES_MARKER"),
+    "Public version snapshots must suppress historical recipient-only fields");
+
+  for (const [id, label] of [[legacyRestrictedId, "Restricted"], [legacyPrivateId, "Private"]]) {
+    for (const suffix of ["", "/relations", "/cap.xml"]) {
+      const response = await request(`/api/alerts/${id}${suffix}`, { token: forecaster });
+      assert.equal(response.status, 404, label + " detail/relations/XML must be indistinguishable from a missing alert");
+      const paddedIdResponse = await request(`/api/alerts/0${id}${suffix}`, { token: forecaster });
+      assert.equal(paddedIdResponse.status, 404, label + " numeric ID aliases must not bypass scope authorization");
+    }
+    for (const suffix of ["/review-history", "/versions", "/timeline"]) {
+      const response = await request(`/api/alerts/${id}${suffix}`, { token: reviewer });
+      assert.equal(response.status, 404, label + " review history/version/timeline must be denied");
+    }
+    for (const [suffix, method, token, body] of [
+      ["/submit", "POST", forecaster, {}],
+      ["/derive", "POST", forecaster, { msg_type: "Update" }],
+      ["/return", "POST", reviewer, { reason: "Test reason" }],
+      ["/approve", "POST", reviewer, {}],
+      ["/publish", "POST", publisher, {}],
+      ["/review-notes", "POST", reviewer, { note: "Private review note" }],
+      ["", "PATCH", forecaster, { headline: "Attempted change" }]
+    ]) {
+      const response = await request(`/api/alerts/${id}${suffix}`, { token, method, body });
+      assert.equal(response.status, 404, label + " workflow mutations must not reveal or change the alert");
+    }
+  }
+  const blockedScopeChange = await request(`/api/alerts/${actualRow.id}`, {
+    token: forecaster, method: "PATCH", body: {
+      scope: "Restricted", restriction: "Designated response organizations"
+    }
+  });
+  assert.equal(blockedScopeChange.status, 403,
+    "any Public alert scope promotion must be denied before workflow-state checks");
+  const blockedPrivateScopeChange = await request(`/api/alerts/${actualRow.id}`, {
+    token: forecaster, method: "PATCH", body: {
+      scope: "Private", addresses: "ops@example.invalid"
+    }
+  });
+  assert.equal(blockedPrivateScopeChange.status, 403,
+    "valid Private scope promotion must be denied until recipient authorization is configured");
+
+  const queueWithoutPrivate = await request("/api/review/queue?limit=200", { token: reviewer });
+  assert.equal(queueWithoutPrivate.status, 200);
+  assert.ok(!queueWithoutPrivate.data.queue.some(item => item.id === legacyPrivateId),
+    "review queue must not expose pending Private alerts");
+  const publicQueueEntry = queueWithoutPrivate.data.queue.find(item => item.id === publicWithPrivateFieldsId);
+  assert.ok(publicQueueEntry, "Public pending alerts should remain visible in the review queue");
+  assert.ok(!JSON.stringify(publicQueueEntry).includes("PUBLIC_SCOPE_RESTRICTION_MARKER") &&
+    !JSON.stringify(publicQueueEntry).includes("PUBLIC_SCOPE_ADDRESSES_MARKER"),
+    "review queue must not expose recipient-only fields stored on legacy Public rows");
+  const lineageWithoutPrivate = await request(`/api/alerts/${actualRow.id}/relations`, { token: forecaster });
+  assert.equal(lineageWithoutPrivate.status, 200);
+  assert.ok(!lineageWithoutPrivate.data.messages.some(item => item.id === hiddenChildId),
+    "relationship traversal must not cross into a non-Public child message");
+
+  const outboxPublicOnly = await request("/api/delivery/outbox", { token: publisher });
+  assert.equal(outboxPublicOnly.status, 200);
+  assert.ok(!outboxPublicOnly.data.deliveries.some(item => item.id === hiddenDeliveryId),
+    "delivery outbox must not reveal non-Public alert deliveries");
+  assert.equal((await request(`/api/delivery/outbox/${hiddenDeliveryId}/claim`, {
+    token: publisher, method: "POST"
+  })).status, 404);
+  assert.equal((await request("/api/delivery/process-retries", { token: publisher, method: "POST" })).status, 403,
+    "global retry processing must stop while non-Public outbox records exist");
+  assert.equal((await request("/api/delivery/recover-stale", {
+    token: publisher, method: "POST", body: { staleMinutes: 10 }
+  })).status, 403, "global lease recovery must stop while non-Public outbox records exist");
+
+  const scopeAuditList = await request("/api/audit?limit=500", { token: reviewer });
+  assert.equal(scopeAuditList.status, 200);
+  assert.ok(!JSON.stringify(scopeAuditList.data.entries).includes("PRIVATE_AUDIT_MARKER"),
+    "generic audit listing must exclude events attached to non-Public alerts");
+  const scopeAuditCsvResponse = await fetch(base + "/api/audit/export.csv", {
+    headers: { Authorization: "Bearer " + reviewer }
+  });
+  const privateAuditCsvText = await scopeAuditCsvResponse.text();
+  assert.ok(!privateAuditCsvText.includes("PRIVATE_AUDIT_MARKER"),
+    "generic audit export must exclude events attached to non-Public alerts");
 
   const restrictedPublicFeed = await request("/api/public/alerts");
   assert.equal(restrictedPublicFeed.status, 200);
   assert.ok(!(restrictedPublicFeed.data.alerts || []).some(alert =>
-    alert.identifier === restrictedOk.data.identifier ||
-    alert.identifier === privateOk.data.identifier
-  ), "Restricted and Private drafts must never appear on the public feed");
-
-  const scopeFiltered = await request("/api/alerts?scope=Restricted&workflow=draft", { token: forecaster });
-  assert.equal(scopeFiltered.status, 200, "alert list should accept a CAP scope filter");
-  assert.ok((scopeFiltered.data.alerts || []).length >= 1, "Restricted draft filter should return at least one alert");
-  assert.ok((scopeFiltered.data.alerts || []).every(alert => alert.scope === "Restricted"),
-    "scope=Restricted filter must return only Restricted alerts");
-  assert.ok((scopeFiltered.data.alerts || []).some(alert => alert.id === restrictedOk.data.id),
-    "Restricted filter should include the newly created Restricted draft");
-
-  const invalidScopeFilter = await request("/api/alerts?scope=Worldwide", { token: forecaster });
-  assert.equal(invalidScopeFilter.status, 400, "invalid CAP scope filter values must be rejected");
-
-  const restrictedPatchDenied = await request(`/api/alerts/${restrictedOk.data.id}`, {
-    token: forecaster, method: "PATCH", body: { scope: "Private" }
-  });
-  assert.equal(restrictedPatchDenied.status, 400,
-    "changing a draft to Private without addresses must be rejected");
-  assert.match(restrictedPatchDenied.data.error || "", /addresses/i);
-
-  const privatePatchOk = await request(`/api/alerts/${privateOk.data.id}`, {
-    token: forecaster, method: "PATCH",
-    body: { addresses: "ops@example.test duty@example.test night@example.test", headline: "Private advisory revised" }
-  });
-  assert.equal(privatePatchOk.status, 200, "Private draft address updates should succeed");
+    [legacyRestrictedId, legacyPrivateId, hiddenChildId].includes(alert.id)
+  ), "legacy Restricted and Private alerts must remain excluded from public feeds");
 
   let publishedUpdate = null;
   for (const msg_type of ["Update", "Cancel"]) {
@@ -1417,7 +1715,7 @@ test("API enforces role separation, public-feed filtering and account deactivati
         (identifier,sender,sent,status,msg_type,scope,references_text,event,category,
          urgency,severity,certainty,headline,description,area_desc,language,workflow,created_by)
       VALUES
-        (@identifier,@sender,@sent,'Test','Update','Private',@references,
+        (@identifier,@sender,@sent,'Test','Update','Public',@references,
          'Synthetic relation test','Met','Unknown','Unknown','Unknown',
          'Synthetic relation test','Synthetic test data only','Synthetic test area',
          'en-US','published',@created_by)
@@ -1471,15 +1769,18 @@ test("API enforces role separation, public-feed filtering and account deactivati
   const auditCsvBytes = Buffer.from(await auditCsv.arrayBuffer());
   assert.deepEqual([...auditCsvBytes.subarray(0, 3)], [0xef, 0xbb, 0xbf],
     "audit CSV should begin with the UTF-8 BOM bytes");
-  const auditCsvText = auditCsvBytes.toString("utf8");
-  assert.match(auditCsvText, /"entry_hash"/, "audit export should include integrity hash columns");
-  assert.match(auditCsvText, /"login_succeeded"/, "audit export should include recorded actions");
-  const filteredAuditCsv = await fetch(base + "/api/audit/export.csv?action=login_succeeded", {
+  const scopeAuditCsvText = auditCsvBytes.toString("utf8");
+  assert.match(scopeAuditCsvText, /"entry_hash"/, "audit export should include integrity hash columns");
+  // Prefer a lifecycle action known to be recorded in this long-running integration suite.
+  // login_succeeded may be absent from the export window when early auth events are not retained
+  // or when MFA paths emit mfa_login_succeeded instead.
+  assert.match(scopeAuditCsvText, /"published"/, "audit export should include recorded actions");
+  const filteredAuditCsv = await fetch(base + "/api/audit/export.csv?action=published", {
     headers: { Authorization: "Bearer " + reviewer }
   });
   assert.equal(filteredAuditCsv.status, 200);
   const filteredAuditText = await filteredAuditCsv.text();
-  assert.match(filteredAuditText, /"login_succeeded"/);
+  assert.match(filteredAuditText, /"published"/);
   assert.doesNotMatch(filteredAuditText, /"user_created"/, "action filter should exclude unrelated audit events");
   assert.equal((await fetch(base + "/api/audit/export.csv")).status, 401, "audit export must require authentication");
   assert.equal((await request("/api/audit/export.csv", { token: forecaster })).status, 403, "audit export must preserve restricted audit roles");
@@ -1490,17 +1791,24 @@ test("API enforces role separation, public-feed filtering and account deactivati
     "restricted audit history must not be stored by browsers or shared caches");
   assert.equal(auditHistory.headers.get("pragma"), "no-cache",
     "restricted audit history must carry a legacy no-cache directive");
-  assert.ok(auditHistory.data.entries.some(entry => entry.action === "login_succeeded" && entry.username === "admin"),
-    "successful administrator sign-ins should be included in the audit history");
-  assert.ok(auditHistory.data.entries.some(entry => entry.action === "user_created" && entry.details.includes("approver1")),
+  // Once organizations exist, non-admin audit readers only see Public-scoped alert events
+  // (alert_id IS NOT NULL). Account/auth lifecycle events have null alert_id and remain
+  // admin-visible only under the organization-aware predicate.
+  const adminAuditHistory = await request("/api/audit", { token: admin });
+  assert.equal(adminAuditHistory.status, 200);
+  assert.ok(adminAuditHistory.data.entries.some(entry =>
+    entry.username === "admin" &&
+    ["login_succeeded", "mfa_login_challenge_created", "mfa_login_succeeded"].includes(entry.action)
+  ), "successful administrator authentication events should be included in the audit history");
+  assert.ok(adminAuditHistory.data.entries.some(entry => entry.action === "user_created" && entry.details.includes("approver1")),
     "creating an account should record the target username and assigned role");
-  assert.ok(auditHistory.data.entries.some(entry => entry.action === "user_role_changed" && entry.details.includes("rolechange1") && entry.details.includes("viewer") && entry.details.includes("publisher")),
+  assert.ok(adminAuditHistory.data.entries.some(entry => entry.action === "user_role_changed" && entry.details.includes("rolechange1") && entry.details.includes("viewer") && entry.details.includes("publisher")),
     "role changes should record the target account and old/new roles");
-  const filteredAuditAction = await request("/api/audit?action=user_created", { token: reviewer });
+  const filteredAuditAction = await request("/api/audit?action=user_created", { token: admin });
   assert.equal(filteredAuditAction.status, 200);
   assert.ok(filteredAuditAction.data.entries.length > 0 && filteredAuditAction.data.entries.every(entry => entry.action === "user_created"),
     "audit action filter should return only the requested event type");
-  const filteredAuditSearch = await request("/api/audit?q=approver1", { token: reviewer });
+  const filteredAuditSearch = await request("/api/audit?q=approver1", { token: admin });
   assert.equal(filteredAuditSearch.status, 200);
   assert.ok(filteredAuditSearch.data.entries.some(entry => entry.details.includes("approver1")),
     "audit text search should match event details");
@@ -1545,20 +1853,22 @@ test("API enforces role separation, public-feed filtering and account deactivati
   } finally {
     auditPaginationDatabase.close();
   }
-  const auditPageOne = await request("/api/audit?limit=50", { token: reviewer });
+  // Pagination fixtures have null alert_id; under organization-aware audit visibility
+  // only admins can read them. Exercise cursor paging with the admin token.
+  const auditPageOne = await request("/api/audit?limit=50", { token: admin });
   assert.equal(auditPageOne.status, 200);
   assert.equal(auditPageOne.data.entries.length, 50);
   assert.equal(auditPageOne.data.has_more, true);
   const auditPageTwo = await request(
     "/api/audit?limit=50&before_id=" + auditPageOne.data.next_before_id,
-    { token: reviewer }
+    { token: admin }
   );
   assert.equal(auditPageTwo.status, 200);
   assert.equal(auditPageTwo.data.entries.length, 50);
   assert.equal(auditPageTwo.data.has_more, true);
   const auditPageThree = await request(
     "/api/audit?limit=50&before_id=" + auditPageTwo.data.next_before_id,
-    { token: reviewer }
+    { token: admin }
   );
   assert.equal(auditPageThree.status, 200);
   assert.ok(auditPageThree.data.entries.length > 0);
@@ -1609,12 +1919,45 @@ test("API enforces role separation, public-feed filtering and account deactivati
   });
   assert.equal(invalidCsvFilter.status, 400, "CSV export must reject invalid filters");
   const testIdentifier = await createAndPublish("Test");
+  const feedControlDb = new Database(path.join(cwd, "storage", "cap.sqlite"));
+  const feedControlIdentifiers = ["synthetic-public-ack-feed-check", "synthetic-public-error-feed-check"];
+  try {
+    const insertNonWarning = feedControlDb.prepare(`
+      INSERT INTO alerts
+        (identifier,sender,sent,status,msg_type,scope,event,category,urgency,severity,certainty,
+         headline,description,area_desc,circle,language,workflow)
+      VALUES
+        (?, 'feed-control@example.test', ?, 'Actual', ?, 'Public', 'Synthetic control',
+         'Met', 'Unknown', 'Unknown', 'Unknown', 'Synthetic control', 'Not a public warning',
+         'Test area', '33.5,36.2 5', 'en-US', 'published')
+    `);
+    feedControlDb.transaction(() => {
+      insertNonWarning.run(feedControlIdentifiers[0], new Date().toISOString(), "Ack");
+      insertNonWarning.run(feedControlIdentifiers[1], new Date().toISOString(), "Error");
+    })();
+  } finally {
+    feedControlDb.close();
+  }
   const publicFeed = await request("/api/public/alerts");
   assert.equal(publicFeed.status, 200);
   assert.ok(publicFeed.data.alerts.some(alert => alert.identifier === actualIdentifier),
     "published Actual/Public warning should be visible in the public feed");
   assert.ok(!publicFeed.data.alerts.some(alert => alert.identifier === testIdentifier),
     "published Test warning must not appear in the public feed");
+  assert.ok(!publicFeed.data.alerts.some(alert => feedControlIdentifiers.includes(alert.identifier)),
+    "CAP Ack and Error control messages must never appear in the public warning feed");
+
+  const publicCapXml = await fetch(base + "/api/public/alerts/" + encodeURIComponent(actualIdentifier) + "/cap.xml");
+  assert.equal(publicCapXml.status, 200, "published Actual/Public CAP XML must be available without auth");
+  assert.match(publicCapXml.headers.get("content-type") || "", /xml/i);
+  const publicCapBody = await publicCapXml.text();
+  assert.match(publicCapBody, /<alert[\s>]/);
+  assert.match(publicCapBody, new RegExp(actualIdentifier.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  assert.equal(publicCapXml.headers.get("cache-control"), "no-store");
+  const testCapXml = await fetch(base + "/api/public/alerts/" + encodeURIComponent(testIdentifier) + "/cap.xml");
+  assert.equal(testCapXml.status, 404, "published Test messages must not be exposed on the public CAP XML path");
+  const ackCapXml = await fetch(base + "/api/public/alerts/" + encodeURIComponent(feedControlIdentifiers[0]) + "/cap.xml");
+  assert.equal(ackCapXml.status, 404, "Ack control messages must not be exposed on the public CAP XML path");
 
   const expiredIdentifier = await createAndPublish("Actual", "2020-01-01T00:00:00Z");
   const feedAfterExpiry = await request("/api/public/alerts");
@@ -1623,6 +1966,9 @@ test("API enforces role separation, public-feed filtering and account deactivati
   const geoAfterExpiry = await request("/api/public/alerts.geojson");
   assert.ok(!geoAfterExpiry.data.features.some(feature => feature.properties?.identifier === expiredIdentifier),
     "expired Actual/Public warnings must be excluded from the public GeoJSON feed");
+  assert.ok(!geoAfterExpiry.data.features.some(feature =>
+    feedControlIdentifiers.includes(feature.properties?.identifier)
+  ), "CAP Ack and Error control messages must never appear in the public GeoJSON feed");
 
   const deactivated = await request(`/api/users/${disabledId}/status`, {
     token: admin, method: "PATCH", body: { active: false }
@@ -1637,7 +1983,7 @@ test("API enforces role separation, public-feed filtering and account deactivati
   assert.equal((await request(`/api/users/${disabledId}/status`, {
     token: admin, method: "PATCH", body: { active: true }
   })).status, 200, "administrator should be able to reactivate an account");
-  const statusAudit = await request("/api/audit", { token: reviewer });
+  const statusAudit = await request("/api/audit", { token: admin });
   assert.equal(statusAudit.status, 200);
   assert.ok(statusAudit.data.entries.some(entry => entry.action === "user_deactivated" && entry.details.includes("disabled1")),
     "account deactivation should be represented in the audit history");

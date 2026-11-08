@@ -12,11 +12,13 @@ import { db, ensureAdmin } from "./db.js";
 import { buildCapXml, makeIdentifier, validateAlert } from "./cap.js";
 import { alertsToGeoJSON } from "./geojson.js";
 import { appendAuditLog, verifyAuditChain } from "./audit.js";
-import { enqueueDelivery, claimDelivery, recordDeliveryReceipt, retryDelivery, recoverStaleDeliveries, processDueRetries } from "./delivery.js";
-import { applyOperationalRetention, collectOperationalMetrics } from "./retention.js";
+import { enqueueDelivery, claimDelivery, recordDeliveryReceipt, retryDelivery, recoverStaleDeliveries, processDueRetries, hasNonPublicDeliveryOutbox } from "./delivery.js";
+import { applyOperationalRetentionWithAudit, collectOperationalMetrics } from "./retention.js";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { consumeRecoveryCode, decryptTotpSecret, encryptTotpSecret, generateRecoveryCodes, generateTotpSecret, hashRecoveryCode, verifyTotp } from "./mfa.js";
 import { verifyAndConsumeWebhook } from "./webhook-replay.js";
+import { createWebhookSource, disableWebhookSource, listWebhookSources, resolveActiveWebhookSource, generateWebhookSourceSecret } from "./webhook-sources.js";
+import { alertRecipientGrantSql, assignAlertOrganizationOwner, createAlertRecipientGrant, createOrganization, createRecipientGroup, expireAlertRecipientGrants, expireOrganizationMemberships, expireRecipientGroupMemberships, hasActiveAlertRecipientGrant, hasActiveOrganizationMembership, listActiveOrganizationIds, requestOrganizationMembership, requestRecipientGroupMembership, transitionAlertRecipientGrant, transitionOrganizationMembership, transitionRecipientGroupMembership } from "./recipient-auth.js";
 
 const app = express();
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -29,9 +31,49 @@ if (configuredMfaRoles.some(role=>!validMfaRoles.has(role)) || new Set(configure
  process.exit(1);
 }
 const mfaRequiredRoles = new Set(configuredMfaRoles);
+const nonPublicRecipientAccessEnabled = process.env.CAP_NON_PUBLIC_RECIPIENT_ACCESS_ENABLED === "true";
+
+function recipientOrganizationContext(req) {
+ const raw=req.get("x-cap-organization-id") ?? req.query.organization_id;
+ if(raw===undefined || raw===null || raw==="") return null;
+ if(!/^[1-9][0-9]*$/.test(String(raw))) return null;
+ const organizationId=Number(raw);
+ if(!Number.isSafeInteger(organizationId) || !hasActiveOrganizationMembership(db,req.user.id,organizationId)) return null;
+ return organizationId;
+}
+
+function alertScopePredicate(req, alias="a", action="read") {
+ if(!nonPublicRecipientAccessEnabled) return {sql:`${alias}.scope='Public'`,params:[]};
+ const organizationId=recipientOrganizationContext(req);
+ if(!organizationId) return {sql:`${alias}.scope='Public'`,params:[]};
+ return {
+  sql:`(${alias}.scope='Public' OR (${alias}.scope IN ('Restricted','Private') AND ${alertRecipientGrantSql(alias,action)}))`,
+  params:[req.user.id,organizationId]
+ };
+}
+
+function canAccessAlertForRequest(req, alert, action="read") {
+ if(!alert) return false;
+ if(alert.scope==="Public") return true;
+ if(!nonPublicRecipientAccessEnabled) return false;
+ const organizationId=recipientOrganizationContext(req);
+ return Boolean(organizationId && hasActiveAlertRecipientGrant(db,{
+  alertId:alert.id,userId:req.user.id,organizationId,action
+ }));
+}
 const apiRateLimit = Number(process.env.API_RATE_LIMIT || 300);
 if (!Number.isSafeInteger(apiRateLimit) || apiRateLimit < 50 || apiRateLimit > 10000) {
  console.error("FATAL: API_RATE_LIMIT must be an integer between 50 and 10000.");
+ process.exit(1);
+}
+const adminAccountMutationLimit = Number(process.env.ADMIN_ACCOUNT_MUTATION_LIMIT || 30);
+if (!Number.isSafeInteger(adminAccountMutationLimit) || adminAccountMutationLimit < 1 || adminAccountMutationLimit > 1000) {
+ console.error("FATAL: ADMIN_ACCOUNT_MUTATION_LIMIT must be an integer between 1 and 1000.");
+ process.exit(1);
+}
+const adminPasswordResetLimit = Number(process.env.ADMIN_PASSWORD_RESET_LIMIT || 5);
+if (!Number.isSafeInteger(adminPasswordResetLimit) || adminPasswordResetLimit < 1 || adminPasswordResetLimit > 1000) {
+ console.error("FATAL: ADMIN_PASSWORD_RESET_LIMIT must be an integer between 1 and 1000.");
  process.exit(1);
 }
 const port = Number(process.env.PORT || 8095);
@@ -54,11 +96,11 @@ app.use(helmet({
    fontSrc: ["'self'", "data:"],
    formAction: ["'self'"],
    frameAncestors: ["'none'"],
-   imgSrc: ["'self'", "data:", "blob:", "https://*.tile.openstreetmap.org", "https://unpkg.com"],
+   imgSrc: ["'self'", "data:", "blob:", "https://*.tile.openstreetmap.org", "https://unpkg.com", "https://cdnjs.cloudflare.com"],
    objectSrc: ["'none'"],
-   scriptSrc: ["'self'", "https://unpkg.com"],
+   scriptSrc: ["'self'", "https://unpkg.com", "https://cdnjs.cloudflare.com"],
    scriptSrcAttr: ["'none'"],
-   styleSrc: ["'self'", "'unsafe-inline'", "https://unpkg.com"]
+   styleSrc: ["'self'", "'unsafe-inline'", "https://unpkg.com", "https://cdnjs.cloudflare.com"]
   }
  }
 }));
@@ -89,21 +131,53 @@ app.post("/api/webhooks/inbound", webhookIngressLimiter, express.raw({ type: "ap
  } catch {
   return res.status(400).json({ error: "A valid JSON object is required" });
  }
+ // Organization binding comes only from the registered source_key header → DB registry.
+ // Never trust organization_id or tenant fields supplied in the JSON body.
+ const sourceKeyHeader = req.get("x-webhook-source") || "";
+ if (!sourceKeyHeader.trim()) {
+  return res.status(401).json({ error: "X-Webhook-Source header identifying a registered organization-bound source is required" });
+ }
+ const source = resolveActiveWebhookSource(db, sourceKeyHeader);
+ if (!source) {
+  return res.status(401).json({ error: "Webhook source is unknown, disabled, or not bound to an active organization" });
+ }
+ // Ignore any organization identifiers present in the body for authorization decisions.
+ if (payload && typeof payload === "object") {
+  delete payload.organization_id;
+  delete payload.organizationId;
+  delete payload.org_id;
+ }
  const timestampHeader = req.get("x-webhook-timestamp") || "";
  if (!/^[0-9]{1,12}$/.test(timestampHeader)) return res.status(400).json({ error: "A valid X-Webhook-Timestamp header is required" });
  const timestamp = Number(timestampHeader);
  const signature = req.get("x-webhook-signature") || "";
  try {
   const receive = db.transaction(() => {
-   if (!verifyAndConsumeWebhook(db, webhookSecret, timestamp, req.body, signature)) return null;
+   // Verify with the per-source secret from the registry (not a client-supplied secret).
+   if (!verifyAndConsumeWebhook(db, source.secret, timestamp, req.body, signature)) return null;
    const signatureHash = createHash("sha256").update(signature, "utf8").digest("hex");
-   const result = db.prepare("INSERT INTO webhook_inbox(source_timestamp,signature_hash,payload_json) VALUES(?,?,?)")
-    .run(timestamp, signatureHash, JSON.stringify(payload));
+   const result = db.prepare(`INSERT INTO webhook_inbox(
+     source_timestamp,signature_hash,payload_json,organization_id,webhook_source_id,source_key
+   ) VALUES (?,?,?,?,?,?)`).run(
+    timestamp,
+    signatureHash,
+    JSON.stringify(payload),
+    source.organization_id,
+    source.id,
+    source.source_key
+   );
    return Number(result.lastInsertRowid);
   });
   const inboxId = receive.immediate();
   if (inboxId === null) return res.status(401).json({ error: "Webhook signature is invalid, expired, or has already been used" });
-  return res.status(202).json({ accepted: true, inbox_id: inboxId, status: "pending", action: "manual_review_required" });
+  return res.status(202).json({
+   accepted: true,
+   inbox_id: inboxId,
+   status: "pending",
+   action: "manual_review_required",
+   organization_id: source.organization_id,
+   source_key: source.source_key
+  });
  } catch (error) {
   console.error("Webhook ingress failed:", error);
   return res.status(500).json({ error: "Unable to safely store webhook message" });
@@ -165,11 +239,12 @@ function auth(req,res,next) {
    const user = db.prepare("SELECT id,username,role,active,token_version,mfa_enabled,must_change_password FROM users WHERE id=?").get(req.user.id);
    if (!user || !user.active) return res.status(401).json({error:"Account unavailable"});
    if (req.user.token_version !== user.token_version) return res.status(401).json({error:"Session expired; please sign in again"});
-   if(user.must_change_password===1) {
-    const allowedPaths=new Set(["GET /api/me","POST /api/auth/change-password","GET /api/auth/mfa/status","POST /api/auth/mfa/enroll","POST /api/auth/mfa/confirm"]);
-    if(!allowedPaths.has(req.method+" "+req.path))
-     return res.status(403).json({error:"A temporary password must be changed before using this operation",code:"PASSWORD_CHANGE_REQUIRED"});
-   }
+   const authenticationSetupPaths=new Set(["GET /api/me","POST /api/auth/change-password","GET /api/auth/mfa/status","POST /api/auth/mfa/enroll","POST /api/auth/mfa/confirm"]);
+   const requestPath=req.method+" "+req.path;
+   if(user.must_change_password===1 && !authenticationSetupPaths.has(requestPath))
+    return res.status(403).json({error:"A temporary password must be changed before using this operation",code:"PASSWORD_CHANGE_REQUIRED"});
+   if(mfaRequiredRoles.has(user.role) && user.mfa_enabled!==1 && !authenticationSetupPaths.has(requestPath))
+    return res.status(403).json({error:"MFA enrollment is required for this role before accessing protected operations",code:"MFA_REQUIRED"});
    req.user = user; next();
  } catch { return res.status(401).json({error:"Authentication required"}); }
 }
@@ -179,6 +254,40 @@ const roles = (...allowed) => (req,res,next) => {
   return res.status(403).json({error:"MFA enrollment is required for this role before accessing protected operations",code:"MFA_REQUIRED"});
  return next();
 };
+function webhookInboxAccess(req,res,next) {
+ if(req.user.role==="admin") return next();
+ if(req.user.role!=="reviewer") return res.status(403).json({error:"Insufficient permissions"});
+ // Shared current-membership policy checks active user/org and starts_at/expires_at.
+ if(listActiveOrganizationIds(db,req.user.id).length===0) {
+  return res.status(403).json({
+   error:"Webhook inbox access requires a current organization membership",
+   code:"WEBHOOK_ORGANIZATION_MEMBERSHIP_REQUIRED"
+  });
+ }
+ return next();
+}
+
+function auditReadPredicate(req) {
+ const organizationId=recipientOrganizationContext(req);
+ const alertLinkedPublic="(l.alert_id IS NOT NULL AND EXISTS (SELECT 1 FROM alerts scoped_alert WHERE scoped_alert.id=l.alert_id AND scoped_alert.scope='Public'))";
+ const platformEvents=req.user.role==="admin" ? "(l.alert_id IS NULL AND l.action<>'retention_applied')" : "0";
+ if(!nonPublicRecipientAccessEnabled || !organizationId) {
+  return {sql:`(${alertLinkedPublic} OR ${platformEvents})`,params:[]};
+ }
+ return {
+  sql:`(
+   ${platformEvents}
+   OR (l.alert_id IS NOT NULL AND EXISTS (
+    SELECT 1 FROM alerts scoped_alert
+    WHERE scoped_alert.id=l.alert_id
+      AND (scoped_alert.scope='Public' OR
+       (scoped_alert.scope IN ('Restricted','Private') AND ${alertRecipientGrantSql("scoped_alert","read")}))
+   ))
+  )`,
+  params:[req.user.id,organizationId]
+ };
+}
+
 function audit(userId, alertId, action, details="") {
  appendAuditLog(db, { userId, alertId, action, details });
 }
@@ -199,8 +308,8 @@ function rowToCap(r) {
   area_desc:r.area_desc,
   response_type:r.response_type,
   info_blocks:info_json ? JSON.parse(info_json) : undefined,
-  ...(restriction ? {restriction} : {}),
-  ...(addresses ? {addresses} : {})
+  ...(r.scope==="Restricted" && restriction ? {restriction} : {}),
+  ...(r.scope==="Private" && addresses ? {addresses} : {})
  };
 }
 
@@ -252,8 +361,7 @@ app.post("/api/ops/retention/apply",auth,roles("admin"),(req,res)=>{
  try {
   const deliveryRetentionDays=Number(req.body?.delivery_retention_days ?? process.env.CAP_DELIVERY_RETENTION_DAYS ?? 90);
   const webhookRetentionDays=Number(req.body?.webhook_retention_days ?? process.env.CAP_WEBHOOK_RETENTION_DAYS ?? 90);
-  const result=applyOperationalRetention(db,{deliveryRetentionDays,webhookRetentionDays});
-  audit(req.user.id,null,"retention_applied",JSON.stringify(result));
+  const result=applyOperationalRetentionWithAudit(db,{deliveryRetentionDays,webhookRetentionDays,userId:req.user.id});
   res.json(result);
  } catch(error) {
   res.status(400).json({error:error.message||"Retention apply failed"});
@@ -269,7 +377,11 @@ app.post("/api/auth/login",loginLimiter,(req,res)=>{
  const user = db.prepare("SELECT * FROM users WHERE username=?").get(username);
  const passwordHash = user?.active ? user.password_hash : DUMMY_PASSWORD_HASH;
  const passwordMatches = bcrypt.compareSync(password, passwordHash);
- if (!user || !user.active || !passwordMatches) return res.status(401).json({error:"Invalid credentials"});
+ if (!user || !user.active || !passwordMatches) {
+  // Record failed authentication without distinguishing unknown vs wrong password in the client response.
+  try { audit(user && user.active ? user.id : null, null, "login_failed", "Authentication failed"); } catch {}
+  return res.status(401).json({error:"Invalid credentials"});
+ }
  if (user.mfa_enabled) {
   const challengeId = randomUUID();
   const expiresAt = Date.now() + 5 * 60 * 1000;
@@ -508,7 +620,280 @@ app.use("/api/users",(_req,res,next)=>{
  res.set("Pragma","no-cache");
  next();
 });
+const adminAccountMutationLimiter=rateLimit({windowMs:15*60*1000,limit:adminAccountMutationLimit,keyGenerator:req=>String(req.user.id),standardHeaders:true,legacyHeaders:false});
+
 app.get("/api/me",auth,(req,res)=>res.json({user:req.user}));
+
+const organizationSchema = z.object({
+ slug: z.string().min(2).max(80).regex(/^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,78}[a-zA-Z0-9])$/),
+ name: z.string().min(2).max(200)
+});
+app.get("/api/organizations",auth,roles("admin"),(_req,res)=>{
+ const organizations=db.prepare(`
+  SELECT o.id,o.slug,o.name,o.status,o.created_at,o.updated_at,
+   (SELECT COUNT(*) FROM organization_memberships m
+    WHERE m.organization_id=o.id AND m.status='active'
+      AND (m.starts_at IS NULL OR julianday(m.starts_at)<=julianday('now'))
+      AND (m.expires_at IS NULL OR julianday(m.expires_at)>julianday('now'))) AS active_members
+  FROM organizations o ORDER BY o.id
+ `).all();
+ res.json({organizations});
+});
+app.post("/api/organizations",auth,roles("admin"),adminAccountMutationLimiter,(req,res)=>{
+ try {
+  const data=organizationSchema.parse(req.body);
+  const id=createOrganization(db,{
+   slug:data.slug,name:data.name,actorUserId:req.user.id
+  });
+  audit(req.user.id,null,"organization_created",`Created organization ${data.slug}`);
+  res.status(201).json({id,slug:data.slug.toLowerCase(),name:data.name,status:"active"});
+ } catch(error) {
+  if(error.code==="SQLITE_CONSTRAINT_UNIQUE") return res.status(409).json({error:"Organization slug already exists"});
+  return res.status(400).json({error:error.message});
+ }
+});
+app.get("/api/organizations/:id/memberships",auth,roles("admin"),(req,res)=>{
+ const organizationId=Number(req.params.id);
+ if(!Number.isSafeInteger(organizationId)||organizationId<1) return res.status(400).json({error:"Invalid organization id"});
+ const organization=db.prepare("SELECT id FROM organizations WHERE id=?").get(organizationId);
+ if(!organization) return res.status(404).json({error:"Organization not found"});
+ const memberships=db.prepare(`
+  SELECT m.id,m.organization_id,m.user_id,u.username,m.status,m.starts_at,m.expires_at,
+   m.created_by,m.approved_by,m.created_at,m.updated_at
+  FROM organization_memberships m JOIN users u ON u.id=m.user_id
+  WHERE m.organization_id=? ORDER BY m.id DESC
+ `).all(organizationId);
+ res.json({memberships});
+});
+app.post("/api/organizations/:id/memberships",auth,roles("admin"),adminAccountMutationLimiter,(req,res)=>{
+ const organizationId=Number(req.params.id);
+ if(!Number.isSafeInteger(organizationId)||organizationId<1) return res.status(400).json({error:"Invalid organization id"});
+ try {
+  const data=z.object({
+   user_id:z.number().int().positive(),
+   starts_at:z.string().datetime({offset:true}).optional().nullable(),
+   expires_at:z.string().datetime({offset:true}).optional().nullable()
+  }).parse(req.body);
+  const id=requestOrganizationMembership(db,{
+   organizationId,userId:data.user_id,actorUserId:req.user.id,
+   startsAt:data.starts_at??null,expiresAt:data.expires_at??null
+  });
+  audit(req.user.id,null,"organization_membership_requested",`Requested membership ${id} for user ${data.user_id} in organization ${organizationId}`);
+  return res.status(201).json({id,organization_id:organizationId,user_id:data.user_id,status:"pending"});
+ } catch(error) {
+  if(error.code==="SQLITE_CONSTRAINT_UNIQUE") return res.status(409).json({error:"An open membership already exists for this user and organization"});
+  if(/Active organization and active user/.test(error.message)) return res.status(404).json({error:"Organization or active user not found"});
+  return res.status(400).json({error:error.message});
+ }
+});
+app.post("/api/organizations/memberships/expire",auth,roles("admin"),adminAccountMutationLimiter,(req,res)=>{
+ try {
+  const expired=expireOrganizationMemberships(db);
+  if(expired>0) audit(req.user.id,null,"organization_memberships_expired",`Expired ${expired} organization memberships`);
+  return res.json({ok:true,expired});
+ } catch(error) {
+  console.error("Membership expiry sweep failed:",error);
+  return res.status(500).json({error:"Unable to expire memberships safely"});
+ }
+});
+
+const recipientGroupSchema=z.object({
+ slug:z.string().min(2).max(80).regex(/^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,78}[a-zA-Z0-9])$/),
+ name:z.string().min(2).max(200)
+});
+app.get("/api/organizations/:id/groups",auth,roles("admin"),(req,res)=>{
+ const organizationId=Number(req.params.id);
+ if(!Number.isSafeInteger(organizationId)||organizationId<1) return res.status(400).json({error:"Invalid organization id"});
+ const organization=db.prepare("SELECT id FROM organizations WHERE id=?").get(organizationId);
+ if(!organization) return res.status(404).json({error:"Organization not found"});
+ const groups=db.prepare(`
+  SELECT g.id,g.organization_id,g.slug,g.name,g.status,g.created_at,
+   (SELECT COUNT(*) FROM recipient_group_memberships gm
+    JOIN organization_memberships m ON m.id=gm.organization_membership_id
+    WHERE gm.group_id=g.id AND gm.status='active' AND m.status='active'
+      AND (gm.starts_at IS NULL OR julianday(gm.starts_at)<=julianday('now'))
+      AND (gm.expires_at IS NULL OR julianday(gm.expires_at)>julianday('now'))) AS active_members
+  FROM recipient_groups g WHERE g.organization_id=? ORDER BY g.id
+ `).all(organizationId);
+ res.json({groups});
+});
+app.post("/api/organizations/:id/groups",auth,roles("admin"),adminAccountMutationLimiter,(req,res)=>{
+ const organizationId=Number(req.params.id);
+ if(!Number.isSafeInteger(organizationId)||organizationId<1) return res.status(400).json({error:"Invalid organization id"});
+ try {
+  const data=recipientGroupSchema.parse(req.body);
+  const id=createRecipientGroup(db,{organizationId,slug:data.slug,name:data.name,actorUserId:req.user.id});
+  audit(req.user.id,null,"recipient_group_created",`Created recipient group ${data.slug} in organization ${organizationId}`);
+  return res.status(201).json({id,organization_id:organizationId,slug:data.slug.toLowerCase(),name:data.name,status:"active"});
+ } catch(error) {
+  if(error.code==="SQLITE_CONSTRAINT_UNIQUE") return res.status(409).json({error:"Recipient group slug already exists in this organization"});
+  if(/Active organization not found/.test(error.message)) return res.status(404).json({error:"Organization not found"});
+  return res.status(400).json({error:error.message});
+ }
+});
+app.get("/api/recipient-groups/:groupId/memberships",auth,roles("admin"),(req,res)=>{
+ const groupId=Number(req.params.groupId);
+ if(!Number.isSafeInteger(groupId)||groupId<1) return res.status(400).json({error:"Invalid recipient group id"});
+ const group=db.prepare("SELECT id,organization_id FROM recipient_groups WHERE id=?").get(groupId);
+ if(!group) return res.status(404).json({error:"Recipient group not found"});
+ const memberships=db.prepare(`
+  SELECT gm.id,gm.group_id,gm.organization_id,gm.user_id,u.username,
+   gm.organization_membership_id,gm.status,gm.starts_at,gm.expires_at,
+   gm.created_by,gm.approved_by,gm.created_at,gm.updated_at
+  FROM recipient_group_memberships gm JOIN users u ON u.id=gm.user_id
+  WHERE gm.group_id=? ORDER BY gm.id DESC
+ `).all(groupId);
+ res.json({memberships});
+});
+app.post("/api/recipient-groups/:groupId/memberships",auth,roles("admin"),adminAccountMutationLimiter,(req,res)=>{
+ const groupId=Number(req.params.groupId);
+ if(!Number.isSafeInteger(groupId)||groupId<1) return res.status(400).json({error:"Invalid recipient group id"});
+ try {
+  const data=z.object({
+   organization_membership_id:z.number().int().positive(),
+   starts_at:z.string().datetime({offset:true}).optional().nullable(),
+   expires_at:z.string().datetime({offset:true}).optional().nullable()
+  }).parse(req.body);
+  const id=requestRecipientGroupMembership(db,{
+   groupId,organizationMembershipId:data.organization_membership_id,actorUserId:req.user.id,
+   startsAt:data.starts_at??null,expiresAt:data.expires_at??null
+  });
+  audit(req.user.id,null,"recipient_group_membership_requested",`Requested group membership ${id} for organization membership ${data.organization_membership_id}`);
+  return res.status(201).json({id,group_id:groupId,status:"pending"});
+ } catch(error) {
+  if(error.code==="SQLITE_CONSTRAINT_UNIQUE") return res.status(409).json({error:"An open membership already exists for this user and group"});
+  if(/Active group and matching organization membership/.test(error.message)) return res.status(404).json({error:"Group or active organization membership not found"});
+  return res.status(400).json({error:error.message});
+ }
+});
+app.post("/api/recipient-groups/memberships/expire",auth,roles("admin"),adminAccountMutationLimiter,(req,res)=>{
+ try {
+  const expired=expireRecipientGroupMemberships(db);
+  if(expired>0) audit(req.user.id,null,"recipient_group_memberships_expired",`Expired ${expired} recipient group memberships`);
+  return res.json({ok:true,expired});
+ } catch(error) {
+  console.error("Recipient group membership expiry sweep failed:",error);
+  return res.status(500).json({error:"Unable to expire recipient group memberships safely"});
+ }
+});
+app.patch("/api/recipient-group-memberships/:id",auth,roles("admin"),adminAccountMutationLimiter,(req,res)=>{
+ const membershipId=Number(req.params.id);
+ if(!Number.isSafeInteger(membershipId)||membershipId<1) return res.status(400).json({error:"Invalid group membership id"});
+ try {
+  const data=z.object({status:z.enum(["active","suspended","revoked"])}).parse(req.body);
+  const result=transitionRecipientGroupMembership(db,{
+   membershipId,nextStatus:data.status,actorUserId:req.user.id
+  });
+  audit(req.user.id,null,"recipient_group_membership_"+data.status,
+   `Changed group membership ${membershipId} in group ${result.groupId} from ${result.previousStatus} to ${result.status}`);
+  return res.json({ok:true,...result});
+ } catch(error) {
+  if(/Group membership not found/.test(error.message)) return res.status(404).json({error:"Group membership not found"});
+  if(/not permitted|changed concurrently/.test(error.message)) return res.status(409).json({error:error.message});
+  return res.status(400).json({error:error.message});
+ }
+});
+
+
+app.post("/api/alerts/:id/owner-organization",auth,roles("admin"),adminAccountMutationLimiter,(req,res)=>{
+ const alertId=Number(req.params.id);
+ if(!Number.isSafeInteger(alertId)||alertId<1) return res.status(400).json({error:"Invalid alert id"});
+ try {
+  const data=z.object({organization_id:z.number().int().positive()}).parse(req.body);
+  const result=assignAlertOrganizationOwner(db,{alertId,organizationId:data.organization_id,actorUserId:req.user.id});
+  audit(req.user.id,alertId,"alert_organization_owner_assigned",`Assigned alert to organization ${data.organization_id}`);
+  return res.status(200).json({ok:true,...result});
+ } catch(error) {
+  if(/Unassigned alert and active organization/.test(error.message)) return res.status(409).json({error:"Alert is missing, already assigned, or organization is inactive"});
+  return res.status(400).json({error:error.message});
+ }
+});
+app.get("/api/alerts/:id/grants",auth,roles("admin"),(req,res)=>{
+ const alertId=Number(req.params.id);
+ if(!Number.isSafeInteger(alertId)||alertId<1) return res.status(400).json({error:"Invalid alert id"});
+ const alert=db.prepare("SELECT id,owner_organization_id FROM alerts WHERE id=?").get(alertId);
+ if(!alert) return res.status(404).json({error:"Alert not found"});
+ const grants=db.prepare(`
+  SELECT g.id,g.alert_id,g.owner_organization_id,g.recipient_type,g.recipient_user_id,
+   g.recipient_organization_id,g.recipient_group_id,g.action,g.status,g.starts_at,g.expires_at,
+   g.created_by,g.approved_by,g.created_at,g.updated_at
+  FROM alert_recipient_grants g WHERE g.alert_id=? ORDER BY g.id DESC
+ `).all(alertId);
+ return res.json({alert,grants});
+});
+app.post("/api/alerts/:id/grants",auth,roles("admin"),adminAccountMutationLimiter,(req,res)=>{
+ const alertId=Number(req.params.id);
+ if(!Number.isSafeInteger(alertId)||alertId<1) return res.status(400).json({error:"Invalid alert id"});
+ try {
+  const data=z.object({
+   owner_organization_id:z.number().int().positive(),
+   recipient_type:z.enum(["user","organization","group"]),
+   recipient_user_id:z.number().int().positive().optional().nullable(),
+   recipient_organization_id:z.number().int().positive(),
+   recipient_group_id:z.number().int().positive().optional().nullable(),
+   action:z.enum(["read","deliver"]),
+   starts_at:z.string().datetime({offset:true}).optional().nullable(),
+   expires_at:z.string().datetime({offset:true}).optional().nullable()
+  }).parse(req.body);
+  const id=createAlertRecipientGrant(db,{
+   alertId,ownerOrganizationId:data.owner_organization_id,
+   recipientType:data.recipient_type,recipientUserId:data.recipient_user_id??null,
+   recipientOrganizationId:data.recipient_organization_id,
+   recipientGroupId:data.recipient_group_id??null,action:data.action,
+   actorUserId:req.user.id,startsAt:data.starts_at??null,expiresAt:data.expires_at??null
+  });
+  audit(req.user.id,alertId,"alert_recipient_grant_created",`Created ${data.action} grant ${id} for ${data.recipient_type}`);
+  return res.status(201).json({id,alert_id:alertId,status:"pending"});
+ } catch(error) {
+  if(error.code==="SQLITE_CONSTRAINT_UNIQUE") return res.status(409).json({error:"An equivalent open grant already exists"});
+  if(/valid recipient|owned alert|FOREIGN KEY|CHECK constraint/.test(error.message)) return res.status(404).json({error:"Alert ownership or recipient target is not valid"});
+  return res.status(400).json({error:error.message});
+ }
+});
+app.patch("/api/alert-recipient-grants/:id",auth,roles("admin"),adminAccountMutationLimiter,(req,res)=>{
+ const grantId=Number(req.params.id);
+ if(!Number.isSafeInteger(grantId)||grantId<1) return res.status(400).json({error:"Invalid grant id"});
+ try {
+  const data=z.object({status:z.enum(["active","suspended","revoked"])}).parse(req.body);
+  const result=transitionAlertRecipientGrant(db,{grantId,nextStatus:data.status,actorUserId:req.user.id});
+  audit(req.user.id,result.alertId,"alert_recipient_grant_"+data.status,
+   `Changed grant ${grantId} from ${result.previousStatus} to ${result.status}`);
+  return res.json({ok:true,...result});
+ } catch(error) {
+  if(/Grant not found/.test(error.message)) return res.status(404).json({error:"Grant not found"});
+  if(/not permitted|changed concurrently/.test(error.message)) return res.status(409).json({error:error.message});
+  return res.status(400).json({error:error.message});
+ }
+});
+app.post("/api/alert-recipient-grants/expire",auth,roles("admin"),adminAccountMutationLimiter,(req,res)=>{
+ try {
+  const expired=expireAlertRecipientGrants(db);
+  if(expired>0) audit(req.user.id,null,"alert_recipient_grants_expired",`Expired ${expired} alert recipient grants`);
+  return res.json({ok:true,expired});
+ } catch(error) {
+  console.error("Alert recipient grant expiry sweep failed:",error);
+  return res.status(500).json({error:"Unable to expire alert recipient grants safely"});
+ }
+});
+
+app.patch("/api/organization-memberships/:id",auth,roles("admin"),adminAccountMutationLimiter,(req,res)=>{
+ const membershipId=Number(req.params.id);
+ if(!Number.isSafeInteger(membershipId)||membershipId<1) return res.status(400).json({error:"Invalid membership id"});
+ try {
+  const data=z.object({status:z.enum(["active","suspended","revoked"])}).parse(req.body);
+  const result=transitionOrganizationMembership(db,{
+   membershipId,nextStatus:data.status,actorUserId:req.user.id
+  });
+  audit(req.user.id,null,"organization_membership_"+data.status,
+   `Changed membership ${membershipId} in organization ${result.organizationId} from ${result.previousStatus} to ${result.status}`);
+  return res.json({ok:true,...result});
+ } catch(error) {
+  if(/Membership not found/.test(error.message)) return res.status(404).json({error:"Membership not found"});
+  if(/not permitted|changed concurrently/.test(error.message)) return res.status(409).json({error:error.message});
+  return res.status(400).json({error:error.message});
+ }
+});
+
 
 const userSchema = z.object({
  username: z.string().min(3).max(64).regex(/^[a-zA-Z0-9._-]+$/),
@@ -519,7 +904,7 @@ app.get("/api/users",auth,roles("admin"),(_req,res)=>{
  const users=db.prepare("SELECT id,username,role,active,mfa_enabled,must_change_password,created_at,last_login_at FROM users ORDER BY id").all();
  res.json({users:users.map(user=>({...user,mfa_required:mfaRequiredRoles.has(user.role)}))});
 });
-app.post("/api/users",auth,roles("admin"),(req,res)=>{
+app.post("/api/users",auth,roles("admin"),adminAccountMutationLimiter,(req,res)=>{
  try {
   const data=userSchema.parse(req.body);
   const hash=bcrypt.hashSync(data.password,12);
@@ -535,7 +920,7 @@ app.post("/api/users",auth,roles("admin"),(req,res)=>{
  }
 });
 
-const adminPasswordResetLimiter=rateLimit({windowMs:15*60*1000,limit:5,standardHeaders:true,legacyHeaders:false});
+const adminPasswordResetLimiter=rateLimit({windowMs:15*60*1000,limit:adminPasswordResetLimit,standardHeaders:true,legacyHeaders:false});
 app.post("/api/users/:id/password-reset",auth,roles("admin"),adminPasswordResetLimiter,(req,res)=>{
  const id=Number(req.params.id);
  if(!Number.isSafeInteger(id) || id<1) return res.status(400).json({error:"Invalid user id"});
@@ -544,9 +929,11 @@ app.post("/api/users/:id/password-reset",auth,roles("admin"),adminPasswordResetL
  const passwordHash=bcrypt.hashSync(temporaryPassword,12);
  try {
   const reset=db.transaction(()=>{
-   const target=db.prepare("SELECT id,username,active FROM users WHERE id=?").get(id);
+   const target=db.prepare("SELECT id,username,role,active FROM users WHERE id=?").get(id);
    if(!target) return {kind:"missing"};
    if(!target.active) return {kind:"inactive"};
+   // A single administrator must not receive another administrator's temporary credential.
+   if(target.role==="admin") return {kind:"privileged_target"};
    db.prepare("UPDATE users SET password_hash=?,must_change_password=1,token_version=token_version+1,mfa_pending_secret_enc=NULL,mfa_pending_expires_at=NULL WHERE id=?").run(passwordHash,id);
    db.prepare("UPDATE mfa_login_challenges SET consumed_at=CURRENT_TIMESTAMP WHERE user_id=? AND consumed_at IS NULL").run(id);
    audit(req.user.id,null,"user_password_reset",`Issued one-time temporary password for ${target.username}; forced change on next authenticated session`);
@@ -554,13 +941,14 @@ app.post("/api/users/:id/password-reset",auth,roles("admin"),adminPasswordResetL
   }).immediate();
   if(reset.kind==="missing") return res.status(404).json({error:"User not found"});
   if(reset.kind==="inactive") return res.status(409).json({error:"Reactivate the account before resetting its password"});
+  if(reset.kind==="privileged_target") return res.status(403).json({error:"Administrator credentials require an independently verified recovery process; peer-admin password reset is disabled"});
   return res.json({ok:true,id,username:reset.username,temporary_password:temporaryPassword,must_change_password:true,sessions_revoked:true});
  } catch(error) {
   console.error("Administrator password reset failed:",error);
   return res.status(500).json({error:"Unable to reset account password"});
  }
 });
-app.patch("/api/users/:id/role",auth,roles("admin"),(req,res)=>{
+app.patch("/api/users/:id/role",auth,roles("admin"),adminAccountMutationLimiter,(req,res)=>{
  const id=Number(req.params.id);
  if(!Number.isSafeInteger(id) || id<1) return res.status(400).json({error:"Invalid user id"});
  if(id===req.user.id) return res.status(409).json({error:"You cannot change your own role; ask another administrator"});
@@ -585,7 +973,7 @@ app.patch("/api/users/:id/role",auth,roles("admin"),(req,res)=>{
  } catch(error) { res.status(400).json({error:error.message}); }
 });
 
-app.patch("/api/users/:id/status",auth,roles("admin"),(req,res)=>{
+app.patch("/api/users/:id/status",auth,roles("admin"),adminAccountMutationLimiter,(req,res)=>{
  const id=Number(req.params.id);
  if(!Number.isSafeInteger(id) || id<1) return res.status(400).json({error:"Invalid user id"});
  const active=req.body?.active;
@@ -621,6 +1009,56 @@ app.use("/api/alerts",(_req,res,next)=>{
  res.set("Pragma","no-cache");
  next();
 });
+app.use("/api/alerts",auth,(req,res,next)=>{
+ const pathname=new URL(req.originalUrl,"http://localhost").pathname;
+ let normalizedPath=pathname;
+ while(normalizedPath.length>1 && normalizedPath.endsWith("/")) normalizedPath=normalizedPath.slice(0,-1);
+ const collectionRead=req.method==="GET" && ["/api/alerts","/api/alerts/stats","/api/alerts/export.csv"].includes(normalizedPath);
+ if(collectionRead){
+  if(["Restricted","Private"].includes(req.query.scope) &&
+     (!nonPublicRecipientAccessEnabled || !recipientOrganizationContext(req)))
+   return res.status(403).json({error:"Restricted and Private alert access requires an active organization membership and recipient grant",code:"SCOPE_AUTHORIZATION_UNCONFIGURED"});
+  return next();
+ }
+ if(req.method==="POST" && normalizedPath==="/api/alerts"){
+  if(req.body?.scope==="Restricted" && typeof req.body?.restriction==="string" && req.body.restriction.trim())
+   return res.status(403).json({error:"Creating Restricted alerts is disabled until recipient authorization is configured",code:"SCOPE_AUTHORIZATION_UNCONFIGURED"});
+  if(req.body?.scope==="Private" && typeof req.body?.addresses==="string" && req.body.addresses.trim())
+   return res.status(403).json({error:"Creating Private alerts is disabled until recipient authorization is configured",code:"SCOPE_AUTHORIZATION_UNCONFIGURED"});
+  return next();
+ }
+ const alertPathParts=normalizedPath.split("/");
+ let alertIdSegment=alertPathParts[3]||"";
+ try { alertIdSegment=decodeURIComponent(alertIdSegment); } catch { return res.status(400).json({error:"Invalid alert identifier"}); }
+ const alertId=Number(alertIdSegment);
+ const idMatch=normalizedPath.startsWith("/api/alerts/") && Number.isSafeInteger(alertId) && alertId>0 ? [null,alertId] : null;
+ if(idMatch){
+  const existing=db.prepare("SELECT id,scope FROM alerts WHERE id=?").get(idMatch[1]);
+  if(existing && existing.scope!=="Public") {
+   const adminGrantManagement=req.user.role==="admin" && [
+    `/api/alerts/${idMatch[1]}/owner-organization`,
+    `/api/alerts/${idMatch[1]}/grants`
+   ].includes(normalizedPath) && ["GET","POST"].includes(req.method);
+   const readPath=req.method==="GET" && [
+    `/api/alerts/${idMatch[1]}`,
+    `/api/alerts/${idMatch[1]}/cap.xml`,
+    `/api/alerts/${idMatch[1]}/relations`,
+    `/api/alerts/${idMatch[1]}/review-history`,
+    `/api/alerts/${idMatch[1]}/versions`,
+    `/api/alerts/${idMatch[1]}/timeline`
+   ].includes(normalizedPath);
+   if(!adminGrantManagement && (!readPath || !canAccessAlertForRequest(req,existing,"read")))
+    return res.status(404).json({error:"Alert not found"});
+  }
+  if(req.method==="PATCH" && req.body?.scope==="Restricted" &&
+     typeof (req.body.restriction ?? existing?.restriction)==="string" && (req.body.restriction ?? existing?.restriction).trim())
+   return res.status(403).json({error:"Changing an alert to Restricted is disabled until recipient authorization is configured",code:"SCOPE_AUTHORIZATION_UNCONFIGURED"});
+  if(req.method==="PATCH" && req.body?.scope==="Private" &&
+     typeof (req.body.addresses ?? existing?.addresses)==="string" && (req.body.addresses ?? existing?.addresses).trim())
+   return res.status(403).json({error:"Changing an alert to Private is disabled until recipient authorization is configured",code:"SCOPE_AUTHORIZATION_UNCONFIGURED"});
+ }
+ next();
+});
 app.get("/api/alerts/export.csv",auth,(req,res)=>{
  const workflow=req.query.workflow, severity=req.query.severity, status=req.query.status, scope=req.query.scope;
  const search=typeof req.query.q==="string" ? req.query.q.trim().slice(0,160) : "";
@@ -628,16 +1066,17 @@ app.get("/api/alerts/export.csv",auth,(req,res)=>{
  if(severity!==undefined && !["Extreme","Severe","Moderate","Minor","Unknown"].includes(severity)) return res.status(400).json({error:"Invalid severity filter"});
  if(status!==undefined && !["Actual","Exercise","System","Test"].includes(status)) return res.status(400).json({error:"Invalid CAP status filter"});
  if(scope!==undefined && !["Public","Restricted","Private"].includes(scope)) return res.status(400).json({error:"Invalid CAP scope filter"});
- const clauses=[],params=[];
+ const visibility=alertScopePredicate(req,"alerts","read");
+ const clauses=[visibility.sql],params=[...visibility.params];
  if(workflow!==undefined){clauses.push("workflow=?");params.push(workflow);}
  if(severity!==undefined){clauses.push("severity=?");params.push(severity);}
  if(status!==undefined){clauses.push("status=?");params.push(status);}
  if(scope!==undefined){clauses.push("scope=?");params.push(scope);}
  if(search){clauses.push("(instr(lower(identifier),lower(?))>0 OR instr(lower(event),lower(?))>0 OR instr(lower(headline),lower(?))>0 OR instr(lower(area_desc),lower(?))>0)");params.push(search,search,search,search);}
  const where=clauses.length ? "WHERE "+clauses.join(" AND ") : "";
- const rows=db.prepare("SELECT identifier,event,headline,area_desc,urgency,severity,certainty,status,scope,restriction,addresses,workflow,msg_type,sent,expires FROM alerts "+where+" ORDER BY sent DESC,id DESC LIMIT 5001").all(...params);
+ const rows=db.prepare("SELECT identifier,event,headline,area_desc,urgency,severity,certainty,status,scope,workflow,msg_type,sent,expires FROM alerts "+where+" ORDER BY sent DESC,id DESC LIMIT 5001").all(...params);
  if(rows.length>5000) return res.status(413).json({error:"Export exceeds 5000 rows; narrow the filters before exporting",maximum_rows:5000});
- const headers=["identifier","event","headline","area_desc","urgency","severity","certainty","status","scope","restriction","addresses","workflow","msg_type","sent","expires"];
+ const headers=["identifier","event","headline","area_desc","urgency","severity","certainty","status","scope","workflow","msg_type","sent","expires"];
  const lines=[headers.map(csvCell).join(","),...rows.map(row=>headers.map(key=>csvCell(row[key])).join(","))];
  res.status(200).set({
   "Content-Type":"text/csv; charset=utf-8",
@@ -646,6 +1085,7 @@ app.get("/api/alerts/export.csv",auth,(req,res)=>{
  }).send("\uFEFF"+lines.join("\r\n")+"\r\n");
 });
 app.get("/api/alerts/stats",auth,(req,res)=>{
+ const visibility=alertScopePredicate(req,"alerts","read");
  const stats=db.prepare(`SELECT
   COUNT(*) AS total,
   SUM(CASE WHEN workflow='draft' THEN 1 ELSE 0 END) AS drafts,
@@ -661,7 +1101,7 @@ app.get("/api/alerts/stats",auth,(req,res)=>{
   SUM(CASE WHEN status='Test' THEN 1 ELSE 0 END) AS test,
   SUM(CASE WHEN status='Exercise' THEN 1 ELSE 0 END) AS exercise,
   SUM(CASE WHEN status='System' THEN 1 ELSE 0 END) AS system
- FROM alerts`).get();
+ FROM alerts WHERE ${visibility.sql}`).get(...visibility.params);
  const normalized=Object.fromEntries(Object.entries(stats).map(([key,value])=>[key,value??0]));
  res.set("Cache-Control","no-store").json({stats:normalized});
 });
@@ -684,8 +1124,9 @@ app.get("/api/alerts",auth,(req,res)=>{
  if (severity !== undefined && !["Extreme","Severe","Moderate","Minor","Unknown"].includes(severity)) return res.status(400).json({error:"Invalid severity filter"});
  if (status !== undefined && !["Actual","Exercise","System","Test"].includes(status)) return res.status(400).json({error:"Invalid CAP status filter"});
  if (scope !== undefined && !["Public","Restricted","Private"].includes(scope)) return res.status(400).json({error:"Invalid CAP scope filter"});
- const clauses = [];
- const params = [];
+ const visibility=alertScopePredicate(req,"alerts","read");
+ const clauses = [visibility.sql];
+ const params = [...visibility.params];
  if (workflow !== undefined) { clauses.push("workflow=?"); params.push(workflow); }
  if (severity !== undefined) { clauses.push("severity=?"); params.push(severity); }
  if (status !== undefined) { clauses.push("status=?"); params.push(status); }
@@ -706,13 +1147,14 @@ app.get("/api/review/queue",auth,roles("admin","reviewer","approver"),(req,res)=
  const severity=req.query.severity;
  if(severity!==undefined&&!["Extreme","Severe","Moderate","Minor","Unknown"].includes(severity))
   return res.status(400).json({error:"Invalid severity filter"});
- const params=[];
+ const visibility=alertScopePredicate(req,"a","read");
+ const params=[...visibility.params];
  const severityClause=severity===undefined?"":" AND a.severity=?";
  if(severity!==undefined)params.push(severity);
- const rows=db.prepare(`SELECT a.id,a.identifier,a.event,a.headline,a.area_desc,a.urgency,a.severity,a.certainty,a.status,a.scope,a.restriction,a.addresses,a.sent,a.expires,a.created_at,a.updated_at,a.created_by,u.username AS creator,
+ const rows=db.prepare(`SELECT a.id,a.identifier,a.event,a.headline,a.area_desc,a.urgency,a.severity,a.certainty,a.status,a.scope,a.sent,a.expires,a.created_at,a.updated_at,a.created_by,u.username AS creator,
   CAST(MAX(0,(julianday('now')-julianday(a.created_at))*86400) AS INTEGER) AS waiting_seconds
   FROM alerts a LEFT JOIN users u ON u.id=a.created_by
-  WHERE a.workflow='pending'${severityClause}
+  WHERE a.workflow='pending' AND ${visibility.sql}${severityClause}
   ORDER BY CASE a.severity WHEN 'Extreme' THEN 0 WHEN 'Severe' THEN 1 WHEN 'Moderate' THEN 2 WHEN 'Minor' THEN 3 ELSE 4 END,
   a.created_at ASC,a.id ASC LIMIT ?`).all(...params,Number(limitRaw));
  res.set("Cache-Control","no-store").json({queue:rows,count:rows.length,limit:Number(limitRaw)});
@@ -748,8 +1190,13 @@ app.get("/api/alerts/:id/versions",auth,roles("admin","reviewer","approver"),(re
  const rows=db.prepare(`SELECT v.id,v.version_no,v.change_type,v.created_at,u.username AS changed_by,
   v.snapshot_json FROM alert_versions v LEFT JOIN users u ON u.id=v.changed_by
   WHERE v.alert_id=? ORDER BY v.version_no DESC LIMIT 50`).all(alert.id);
- const versions=rows.map(row=>({id:row.id,version_no:row.version_no,change_type:row.change_type,
-  created_at:row.created_at,changed_by:row.changed_by,snapshot:JSON.parse(row.snapshot_json)}));
+ const versions=rows.map(row=>{
+  const snapshot=JSON.parse(row.snapshot_json);
+  delete snapshot.restriction;
+  delete snapshot.addresses;
+  return {id:row.id,version_no:row.version_no,change_type:row.change_type,
+   created_at:row.created_at,changed_by:row.changed_by,snapshot};
+ });
  const current=versions[0]?.snapshot||null;
  const previous=versions[1]?.snapshot||null;
  const changed_fields=current&&previous?Object.keys(current).filter(key=>JSON.stringify(current[key])!==JSON.stringify(previous[key])):[];
@@ -794,7 +1241,7 @@ app.get("/api/alerts/:id/timeline",auth,roles("admin","reviewer","approver"),(re
 app.get("/api/alerts/:id",auth,(req,res)=>{
  const row = db.prepare("SELECT * FROM alerts WHERE id=?").get(req.params.id);
  if (!row) return res.status(404).json({error:"Alert not found"});
- const {info_json,...alert}=row;
+ const {info_json,restriction:_restriction,addresses:_addresses,...alert}=row;
  res.json({alert:{...alert,info_blocks:info_json?JSON.parse(info_json):[]}});
 });
 app.get("/api/alerts/:id/relations",auth,(req,res)=>{
@@ -809,7 +1256,7 @@ app.get("/api/alerts/:id/relations",auth,(req,res)=>{
   for(const reference of String(current.references_text||"").trim().split(/\s+/).filter(Boolean)){
    const parts=reference.split(",");
    if(parts.length!==3) continue;
-   const parentCandidates=db.prepare("SELECT "+columns+" FROM alerts WHERE sender=? AND identifier=?").all(parts[0],parts[1]);
+   const parentCandidates=db.prepare("SELECT "+columns+" FROM alerts WHERE scope='Public' AND sender=? AND identifier=?").all(parts[0],parts[1]);
    const referenceTime=Date.parse(parts[2]);
    const parent=Number.isFinite(referenceTime) ? parentCandidates.find(candidate=>
     Number.isFinite(Date.parse(candidate.sent)) &&
@@ -818,7 +1265,7 @@ app.get("/api/alerts/:id/relations",auth,(req,res)=>{
    if(parent && !found.has(parent.id)){found.set(parent.id,parent);queue.push(parent);}
   }
   const currentReferencePrefix=[current.sender,current.identifier,""].join(",");
-  const childCandidates=db.prepare("SELECT "+columns+" FROM alerts WHERE instr(' '||COALESCE(references_text,'')||' ',?)>0 ORDER BY sent,id").iterate(" "+currentReferencePrefix);
+  const childCandidates=db.prepare("SELECT "+columns+" FROM alerts WHERE scope='Public' AND instr(' '||COALESCE(references_text,'')||' ',?)>0 ORDER BY sent,id").iterate(" "+currentReferencePrefix);
   let matchedChildren=0;
   for(const child of childCandidates) {
    const matchesCurrent=String(child.references_text||"").trim().split(/\s+/).some(reference=>{
@@ -984,16 +1431,18 @@ app.patch("/api/alerts/:id",auth,roles("admin","forecaster"),(req,res)=>{
 });
 app.post("/api/alerts/:id/submit",auth,roles("admin","forecaster"),(req,res)=>{
  const transition=db.transaction(()=>{
-  const a=db.prepare("SELECT id,workflow FROM alerts WHERE id=?").get(req.params.id);
+  const a=db.prepare("SELECT id,workflow,created_by FROM alerts WHERE id=?").get(req.params.id);
   if(!a) return {kind:"missing"};
   if(a.workflow!=="draft") return {kind:"conflict"};
-  const changed=db.prepare("UPDATE alerts SET workflow='pending',updated_at=CURRENT_TIMESTAMP WHERE id=? AND workflow='draft'").run(a.id);
+  if(a.created_by!==req.user.id && req.user.role!=="admin") return {kind:"forbidden"};
+  const changed=db.prepare("UPDATE alerts SET workflow='pending',updated_at=CURRENT_TIMESTAMP WHERE id=? AND workflow='draft' AND (created_by=? OR ?='admin')").run(a.id,req.user.id,req.user.role);
   if(changed.changes!==1) return {kind:"conflict"};
   audit(req.user.id,a.id,"submitted","Sent for review");
   return {kind:"updated"};
  });
  const result=transition.immediate();
  if(result.kind==="missing") return res.status(404).json({error:"Alert not found"});
+ if(result.kind==="forbidden") return res.status(403).json({error:"Only the draft author or an administrator can submit this warning"});
  if(result.kind==="conflict") return res.status(409).json({error:"Only drafts can be submitted"});
  res.json({ok:true,workflow:"pending"});
 });
@@ -1045,7 +1494,7 @@ app.post("/api/alerts/:id/publish",auth,roles("admin","publisher"),(req,res)=>{
    if(references.length!==1) return {kind:"invalid_reference"};
    const parts=references[0].split(",");
    if(parts.length!==3 || parts.some(part=>!part)) return {kind:"invalid_reference"};
-   cancellationSource=db.prepare("SELECT id,workflow,sent FROM alerts WHERE sender=? AND identifier=?").get(parts[0],parts[1]);
+   cancellationSource=db.prepare("SELECT id,workflow,sent FROM alerts WHERE scope='Public' AND sender=? AND identifier=?").get(parts[0],parts[1]);
    if(!cancellationSource) return {kind:"source_missing"};
    const referenceTime=Date.parse(parts[2]);
    const sourceTime=Date.parse(cancellationSource.sent);
@@ -1086,7 +1535,49 @@ app.post("/api/alerts/:id/publish",auth,roles("admin","publisher"),(req,res)=>{
  const delivery=result.delivery;
  res.json({ok:true,workflow:"published",delivery:{id:delivery.id,status:delivery.status,channel:delivery.channel},note:"Internal publication only. External delivery adapters remain disabled; the outbox entry is queued for controlled processing."});
 });
-app.get("/api/webhooks/inbox",auth,roles("admin","reviewer"),(req,res)=>{
+
+const webhookSourceSchema = z.object({
+ organization_id: z.number().int().positive(),
+ source_key: z.string().min(3).max(64),
+ secret: z.string().min(32).max(500).optional(),
+ label: z.string().max(120).optional()
+});
+app.get("/api/webhook-sources",auth,roles("admin"),(req,res)=>{
+ res.set("Cache-Control","no-store");
+ const organizationId=req.query.organization_id!==undefined?Number(req.query.organization_id):null;
+ if(organizationId!==null && (!Number.isSafeInteger(organizationId)||organizationId<1)) {
+  return res.status(400).json({error:"Invalid organization_id"});
+ }
+ res.json({sources:listWebhookSources(db,organizationId)});
+});
+app.post("/api/webhook-sources",auth,roles("admin"),adminAccountMutationLimiter,(req,res)=>{
+ try {
+  const data=webhookSourceSchema.parse(req.body||{});
+  const secret=data.secret || generateWebhookSourceSecret();
+  const created=createWebhookSource(db,{
+   organizationId:data.organization_id,
+   sourceKey:data.source_key,
+   secret,
+   label:data.label||"",
+   actorUserId:req.user.id
+  });
+  audit(req.user.id,null,"webhook_source_created",`Created webhook source ${created.source_key} for organization ${created.organization_id}`);
+  res.status(201).json({...created,secret});
+ } catch(error) {
+  if(error.code==="SQLITE_CONSTRAINT_UNIQUE") return res.status(409).json({error:"Webhook source_key already exists"});
+  res.status(400).json({error:error.message});
+ }
+});
+app.post("/api/webhook-sources/:id/disable",auth,roles("admin"),adminAccountMutationLimiter,(req,res)=>{
+ const id=Number(req.params.id);
+ if(!Number.isSafeInteger(id)||id<1) return res.status(400).json({error:"Invalid webhook source id"});
+ const disabled=disableWebhookSource(db,id);
+ if(!disabled) return res.status(409).json({error:"Webhook source not found or already disabled"});
+ audit(req.user.id,null,"webhook_source_disabled",`Disabled webhook source ${id}`);
+ res.json({ok:true,id,status:"disabled"});
+});
+
+app.get("/api/webhooks/inbox",auth,webhookInboxAccess,(req,res)=>{
  res.set("Cache-Control","no-store");
  res.set("Pragma","no-cache");
  const status=req.query.status;
@@ -1097,7 +1588,13 @@ app.get("/api/webhooks/inbox",auth,roles("admin","reviewer"),(req,res)=>{
   if(!/^[1-9]\d*$/.test(beforeRaw) || !Number.isSafeInteger(Number(beforeRaw))) return res.status(400).json({error:"Invalid webhook inbox cursor"});
   beforeId=Number(beforeRaw);
  }
- const rows=db.prepare(`SELECT w.id,w.received_at,w.source_timestamp,w.payload_json,w.status,w.reviewed_at,w.review_note,w.reviewed_by,u.username AS reviewer_username FROM webhook_inbox w LEFT JOIN users u ON u.id=w.reviewed_by WHERE (? IS NULL OR w.status=?) AND (? IS NULL OR w.id < ?) ORDER BY w.id DESC LIMIT 101`).all(status ?? null,status ?? null,beforeId,beforeId);
+ const isAdmin=req.user.role==="admin";
+ const membershipOrgs=isAdmin?null:listActiveOrganizationIds(db,req.user.id);
+ if(!isAdmin && (!membershipOrgs || !membershipOrgs.length)) {
+  return res.set("Cache-Control","no-store").json({messages:[],count:0,has_more:false});
+ }
+ const orgFilter=isAdmin?"":` AND w.organization_id IN (${membershipOrgs.map(()=>"?").join(",")})`;
+ const rows=db.prepare(`SELECT w.id,w.received_at,w.source_timestamp,w.payload_json,w.status,w.reviewed_at,w.review_note,w.reviewed_by,w.organization_id,w.source_key,u.username AS reviewer_username FROM webhook_inbox w LEFT JOIN users u ON u.id=w.reviewed_by WHERE (? IS NULL OR w.status=?) AND (? IS NULL OR w.id < ?)${orgFilter} ORDER BY w.id DESC LIMIT 101`).all(status ?? null,status ?? null,beforeId,beforeId, ...(isAdmin?[]:membershipOrgs));
  const hasMore=rows.length>100;
  const page=rows.slice(0,100);
  res.json({
@@ -1106,7 +1603,7 @@ app.get("/api/webhooks/inbox",auth,roles("admin","reviewer"),(req,res)=>{
   next_before_id:hasMore?page[page.length-1].id:null
  });
 });
-app.patch("/api/webhooks/inbox/:id/review",auth,roles("admin","reviewer"),(req,res)=>{
+app.patch("/api/webhooks/inbox/:id/review",auth,webhookInboxAccess,(req,res)=>{
  res.set("Cache-Control","no-store");
  res.set("Pragma","no-cache");
  const id=Number(req.params.id);
@@ -1115,15 +1612,41 @@ app.patch("/api/webhooks/inbox/:id/review",auth,roles("admin","reviewer"),(req,r
  if(!parsed.success) return res.status(400).json({error:"Invalid webhook review decision"});
  const data=parsed.data;
  const result=db.transaction(()=>{
+  const row=db.prepare("SELECT id,organization_id,status FROM webhook_inbox WHERE id=?").get(id);
+  if(!row || row.status!=="pending") return {kind:"missing"};
+  if(req.user.role!=="admin") {
+   if(!row.organization_id) return {kind:"forbidden"};
+   if(!hasActiveOrganizationMembership(db,req.user.id,row.organization_id)) return {kind:"forbidden"};
+  }
   const updated=db.prepare("UPDATE webhook_inbox SET status=?,reviewed_at=CURRENT_TIMESTAMP,reviewed_by=?,review_note=? WHERE id=? AND status='pending'").run(data.status,req.user.id,data.note,id);
-  if(!updated.changes) return null;
-  audit(req.user.id,null,"webhook_inbox_"+data.status,`Reviewed inbound webhook message ${id}`);
-  return updated;
+  if(!updated.changes) return {kind:"missing"};
+  audit(req.user.id,null,"webhook_inbox_"+data.status,`Reviewed inbound webhook message ${id} for organization ${row.organization_id||"unassigned"}`);
+  return {kind:"ok"};
  }).immediate();
- if(!result) return res.status(409).json({error:"Webhook message is missing or no longer pending"});
+ if(result.kind==="forbidden") return res.status(403).json({error:"Insufficient organization permission for this webhook message"});
+ if(result.kind!=="ok") return res.status(409).json({error:"Webhook message is missing or no longer pending"});
  res.json({ok:true,id,status:data.status,reviewed_by:req.user.id,reviewer_username:req.user.username});
 });
 
+app.use("/api/delivery",auth,(req,res,next)=>{
+ const pathname=new URL(req.originalUrl,"http://localhost").pathname;
+ let normalizedPath=pathname;
+ while(normalizedPath.length>1 && normalizedPath.endsWith("/")) normalizedPath=normalizedPath.slice(0,-1);
+ const deliveryPathParts=normalizedPath.split("/");
+ let deliveryIdSegment=deliveryPathParts[4]||"";
+ try { deliveryIdSegment=decodeURIComponent(deliveryIdSegment); } catch { return res.status(400).json({error:"Invalid delivery identifier"}); }
+ const deliveryId=Number(deliveryIdSegment);
+ const idMatch=normalizedPath.startsWith("/api/delivery/outbox/") && Number.isSafeInteger(deliveryId) && deliveryId>0 ? [null,deliveryId] : null;
+ if(idMatch){
+  const row=db.prepare("SELECT a.id,a.scope FROM delivery_outbox d JOIN alerts a ON a.id=d.alert_id WHERE d.id=?").get(idMatch[1]);
+  if(row && row.scope!=="Public" && !canAccessAlertForRequest(req,row,"deliver"))
+   return res.status(404).json({error:"Delivery not found"});
+ }
+ if(req.method==="POST" && ["/api/delivery/process-retries","/api/delivery/recover-stale"].includes(normalizedPath)){
+  if(hasNonPublicDeliveryOutbox(db)) return res.status(403).json({error:"Global delivery maintenance is blocked while non-Public alert recipients are not authorized",code:"SCOPE_AUTHORIZATION_UNCONFIGURED"});
+ }
+ next();
+});
 app.use("/api/delivery",(_req,res,next)=>{
  res.set("Cache-Control","no-store");
  res.set("Pragma","no-cache");
@@ -1132,16 +1655,17 @@ app.use("/api/delivery",(_req,res,next)=>{
 app.get("/api/delivery/outbox",auth,roles("admin","publisher"),(req,res)=>{
  const status=req.query.status;
  if(status!==undefined && !["queued","sending","delivered","failed","dead_letter"].includes(status)) return res.status(400).json({error:"Invalid delivery status filter"});
+ const visibility=alertScopePredicate(req,"a","deliver");
  const rows=db.prepare(`SELECT d.id,d.alert_id,d.channel,CASE WHEN d.dead_letter_at IS NOT NULL THEN 'dead_letter' ELSE d.status END AS status,d.attempts,d.max_attempts,d.next_attempt_at,d.dead_letter_at,d.external_id,d.last_error,d.created_at,d.updated_at,d.last_attempt_at,d.delivered_at,a.identifier,a.headline
   FROM delivery_outbox d JOIN alerts a ON a.id=d.alert_id
-  WHERE (? IS NULL OR (?='dead_letter' AND d.dead_letter_at IS NOT NULL) OR (?<>'dead_letter' AND d.status=? AND d.dead_letter_at IS NULL)) ORDER BY d.created_at DESC LIMIT 500`).all(status ?? null,status ?? null,status ?? null,status ?? null);
+  WHERE ${visibility.sql} AND (? IS NULL OR (?='dead_letter' AND d.dead_letter_at IS NOT NULL) OR (?<>'dead_letter' AND d.status=? AND d.dead_letter_at IS NULL)) ORDER BY d.created_at DESC LIMIT 500`).all(...visibility.params,status ?? null,status ?? null,status ?? null,status ?? null);
  const counts=db.prepare(`SELECT
-  COALESCE(SUM(CASE WHEN dead_letter_at IS NOT NULL THEN 1 ELSE 0 END),0) AS dead_letter,
-  COALESCE(SUM(CASE WHEN dead_letter_at IS NULL AND status='queued' THEN 1 ELSE 0 END),0) AS queued,
-  COALESCE(SUM(CASE WHEN dead_letter_at IS NULL AND status='sending' THEN 1 ELSE 0 END),0) AS sending,
-  COALESCE(SUM(CASE WHEN dead_letter_at IS NULL AND status='failed' THEN 1 ELSE 0 END),0) AS failed,
-  COALESCE(SUM(CASE WHEN dead_letter_at IS NULL AND status='delivered' THEN 1 ELSE 0 END),0) AS delivered
-  FROM delivery_outbox`).get();
+  COALESCE(SUM(CASE WHEN d.dead_letter_at IS NOT NULL THEN 1 ELSE 0 END),0) AS dead_letter,
+  COALESCE(SUM(CASE WHEN d.dead_letter_at IS NULL AND d.status='queued' THEN 1 ELSE 0 END),0) AS queued,
+  COALESCE(SUM(CASE WHEN d.dead_letter_at IS NULL AND d.status='sending' THEN 1 ELSE 0 END),0) AS sending,
+  COALESCE(SUM(CASE WHEN d.dead_letter_at IS NULL AND d.status='failed' THEN 1 ELSE 0 END),0) AS failed,
+  COALESCE(SUM(CASE WHEN d.dead_letter_at IS NULL AND d.status='delivered' THEN 1 ELSE 0 END),0) AS delivered
+  FROM delivery_outbox d JOIN alerts a ON a.id=d.alert_id WHERE ${visibility.sql}`).get(...visibility.params);
  res.json({deliveries:rows,counts,external_adapters_enabled:false});
 });
 app.post("/api/delivery/process-retries",auth,roles("admin","publisher"),(req,res)=>{
@@ -1170,7 +1694,7 @@ app.post("/api/delivery/outbox/:id/claim",auth,roles("admin","publisher"),(req,r
  const deliveryId=Number(req.params.id);
  if(!Number.isSafeInteger(deliveryId) || deliveryId<1) return res.status(400).json({error:"Invalid delivery id"});
  const delivery=db.transaction(()=>{
-  const claimed=claimDelivery(db,deliveryId);
+  const claimed=claimDelivery(db,deliveryId,{userId:req.user.id,organizationId:recipientOrganizationContext(req)});
   if(!claimed) return null;
   audit(req.user.id,claimed.alert_id,"delivery_claimed",`Claimed outbox entry ${claimed.id}; no external transmission is performed by this endpoint`);
   return claimed;
@@ -1185,7 +1709,7 @@ app.post("/api/delivery/outbox/:id/receipt",auth,roles("admin","publisher"),(req
   const receiptSchema=z.object({status:z.enum(["delivered","failed"]),leaseToken:z.string().uuid(),externalId:z.string().max(256).optional(),details:z.string().max(2000).optional()});
   const data=receiptSchema.parse(req.body);
   const delivery=db.transaction(()=>{
-   const recorded=recordDeliveryReceipt(db,deliveryId,data);
+   const recorded=recordDeliveryReceipt(db,deliveryId,data,{userId:req.user.id,organizationId:recipientOrganizationContext(req)});
    if(!recorded) return null;
    audit(req.user.id,recorded.alert_id,"delivery_"+recorded.status,`Receipt recorded for outbox entry ${recorded.id}`);
    return recorded;
@@ -1198,7 +1722,7 @@ app.post("/api/delivery/outbox/:id/retry",auth,roles("admin","publisher"),(req,r
  const deliveryId=Number(req.params.id);
  if(!Number.isSafeInteger(deliveryId) || deliveryId<1) return res.status(400).json({error:"Invalid delivery id"});
  const delivery=db.transaction(()=>{
-  const retried=retryDelivery(db,deliveryId);
+  const retried=retryDelivery(db,deliveryId,{userId:req.user.id,organizationId:recipientOrganizationContext(req)});
   if(!retried) return null;
   audit(req.user.id,retried.alert_id,"delivery_retry_queued",`Requeued outbox entry ${retried.id}`);
   return retried;
@@ -1221,7 +1745,7 @@ app.get("/api/public/alerts.geojson", (req,res)=>{
  res.set("Cache-Control","no-store");
  res.set("Pragma","no-cache");
  try {
-  const rows=db.prepare("SELECT identifier,sender,sent,status,msg_type,scope,references_text,event,category,response_type,urgency,severity,certainty,effective,onset,expires,headline,description,instruction,area_desc,polygon,circle,language,info_json FROM alerts WHERE workflow='published' AND scope='Public' AND status='Actual' AND (expires IS NULL OR expires='' OR julianday(expires)>julianday('now')) ORDER BY sent DESC LIMIT 100").all();
+  const rows=db.prepare("SELECT identifier,sender,sent,status,msg_type,scope,references_text,event,category,response_type,urgency,severity,certainty,effective,onset,expires,headline,description,instruction,area_desc,polygon,circle,language,info_json FROM alerts WHERE workflow='published' AND scope='Public' AND status='Actual' AND msg_type IN ('Alert','Update','Cancel') AND (expires IS NULL OR expires='' OR julianday(expires)>julianday('now')) ORDER BY sent DESC LIMIT 100").all();
   res.type("application/geo+json").json(alertsToGeoJSON(rows));
  } catch(error) {
   console.error("Public GeoJSON export failed:",error);
@@ -1231,9 +1755,28 @@ app.get("/api/public/alerts.geojson", (req,res)=>{
 app.get("/api/public/alerts", (req,res)=>{
  res.set("Cache-Control","no-store");
  res.set("Pragma","no-cache");
- const rows=db.prepare("SELECT identifier,sender,sent,status,msg_type,scope,references_text,event,category,response_type,urgency,severity,certainty,effective,onset,expires,headline,description,instruction,area_desc,polygon,circle,language,info_json FROM alerts WHERE workflow='published' AND scope='Public' AND status='Actual' AND (expires IS NULL OR expires='' OR julianday(expires)>julianday('now')) ORDER BY sent DESC LIMIT 100").all();
+ const rows=db.prepare("SELECT identifier,sender,sent,status,msg_type,scope,references_text,event,category,response_type,urgency,severity,certainty,effective,onset,expires,headline,description,instruction,area_desc,polygon,circle,language,info_json FROM alerts WHERE workflow='published' AND scope='Public' AND status='Actual' AND msg_type IN ('Alert','Update','Cancel') AND (expires IS NULL OR expires='' OR julianday(expires)>julianday('now')) ORDER BY sent DESC LIMIT 100").all();
  res.json({alerts:rows.map(row=>{const {info_json,...alert}=row;return {...alert,info_blocks:info_json?JSON.parse(info_json):[]};})});
 });
+// Public CAP XML by identifier: only published Actual Public Alert/Update/Cancel that are not expired.
+app.get("/api/public/alerts/:identifier/cap.xml", (req,res)=>{
+ res.set("Cache-Control","no-store");
+ res.set("Pragma","no-cache");
+ const identifier=String(req.params.identifier||"").trim();
+ if(!identifier || identifier.length>200) return res.status(400).json({error:"Invalid CAP identifier"});
+ const row=db.prepare(`SELECT * FROM alerts WHERE identifier=? AND workflow='published' AND scope='Public' AND status='Actual'
+  AND msg_type IN ('Alert','Update','Cancel')
+  AND (expires IS NULL OR expires='' OR julianday(expires)>julianday('now'))`).get(identifier);
+ if(!row) return res.status(404).json({error:"Public CAP message not found"});
+ try {
+  const xml=buildCapXml(rowToCap(row));
+  res.type("application/xml").send(xml);
+ } catch(error) {
+  console.error("Public CAP XML export failed:",error);
+  res.status(500).json({error:"Unable to generate the public CAP XML message"});
+ }
+});
+// Chain verification is platform-level integrity metadata, not an event-read bypass.
 app.get("/api/audit/verify",auth,roles("admin","reviewer","approver"),(_req,res)=>{
  res.set("Cache-Control","no-store");
  res.set("Pragma","no-cache");
@@ -1243,7 +1786,7 @@ app.get("/api/audit/verify",auth,roles("admin","reviewer","approver"),(_req,res)
 app.get("/api/audit/export.csv",auth,roles("admin","reviewer","approver"),(req,res)=>{
  const action=typeof req.query.action==="string"?req.query.action.trim().slice(0,80):"";
  const search=typeof req.query.q==="string"?req.query.q.trim().slice(0,160):"";
- const clauses=[],params=[];
+ const auditScope=auditReadPredicate(req),clauses=[auditScope.sql],params=[...auditScope.params];
  if(action){clauses.push("l.action=?");params.push(action);}
  if(search){clauses.push("(instr(lower(COALESCE(l.action,'')),lower(?))>0 OR instr(lower(COALESCE(l.details,'')),lower(?))>0 OR instr(lower(COALESCE(u.username,'')),lower(?))>0)");params.push(search,search,search);}
  const where=clauses.length?"WHERE "+clauses.join(" AND "):"";
@@ -1269,7 +1812,7 @@ app.get("/api/audit",auth,roles("admin","reviewer","approver"),(req,res)=>{
  }
  const action=typeof req.query.action==="string"?req.query.action.trim().slice(0,80):"";
  const search=typeof req.query.q==="string"?req.query.q.trim().slice(0,160):"";
- const clauses=[],params=[];
+ const auditScope=auditReadPredicate(req),clauses=[auditScope.sql],params=[...auditScope.params];
  if(action){clauses.push("l.action=?");params.push(action);}
  if(search){clauses.push("(instr(lower(COALESCE(l.action,char(0))),lower(?))>0 OR instr(lower(COALESCE(l.details,char(0))),lower(?))>0 OR instr(lower(COALESCE(u.username,char(0))),lower(?))>0)");params.push(search,search,search);}
  if(beforeId!==null){clauses.push("l.id<?");params.push(beforeId);}

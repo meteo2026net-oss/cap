@@ -10,9 +10,22 @@ This guide describes the current security controls and the precautions required 
 - Authenticated sessions expire after eight hours. Password changes, administrator-assisted password resets, account deactivation, and role changes increment the account token version and invalidate prior sessions.
 - MFA login challenges are purpose-bound, short-lived credentials. The general authentication middleware rejects challenge-purpose tokens as sessions; only the dedicated MFA challenge endpoint can exchange one for a full session after second-factor verification.
 - Newly provisioned accounts are required to replace their initial temporary password before accessing application data. Administrators can also issue a cryptographically random temporary password for another active account. The value is returned once, stored only as a bcrypt hash, forces a password change before application data or operations are available, and revokes existing sessions. The endpoint is rate-limited and audited; it does not send email or expose the temporary password in audit records.
-- Role checks, configurable `MFA_REQUIRED_ROLES` enforcement, transactional last-active-administrator protections, rate limits, Helmet security headers, a restrictive Content Security Policy, and server-side request validation are implemented. When a listed role has not enrolled MFA, its role-protected operations return `403` with code `MFA_REQUIRED`; authenticated MFA enrollment endpoints remain available so the account can complete setup.
+- Role checks, configurable `MFA_REQUIRED_ROLES` enforcement, transactional last-active-administrator protections, rate limits, Helmet security headers, a restrictive Content Security Policy, and server-side request validation are implemented. MFA enforcement is applied in the authentication middleware, not only in role gates: accounts in a listed role cannot reach authenticated data or operational routes until MFA enrollment is confirmed. Only the profile and password/MFA setup endpoints remain available during enrollment; blocked requests return `403` with code `MFA_REQUIRED`.
 - The audit log uses append-only database guards and a SHA-256 hash chain. The authenticated verification endpoint detects changed entries, broken hash links, unhashed records appended after chain activation, and missing IDs between retained hashed entries. A valid result does not prove that the final entries or the database itself were not removed or replaced; retain signed checkpoints outside this database.
 - SQLite backup and restore helpers validate database integrity, foreign keys, and the audit chain. Restore refuses to proceed while SQLite WAL/SHM sidecars exist.
+
+## CAP scope authorization — temporary fail-closed boundary
+
+The application does not yet have an institution-approved recipient/grant model for CAP Restricted and Private messages. Role names such as administrator, reviewer, approver, publisher, or forecaster are not treated as implicit recipient grants.
+
+Until that model is implemented and approved, the API applies a temporary Public-only policy:
+- Authenticated alert lists, detail reads, CSV exports, statistics, review queues, CAP XML, versions, review history, timelines, and relationship traversal expose Public-scope records only. A direct request for a non-Public record returns the same 404 response as a missing record.
+- Relationship traversal filters both parent and child candidates to Public, preventing a Public root from revealing a Restricted/Private linked message. Recipient-only CAP fields (restriction/addresses) are also suppressed from Public detail, XML, CSV, review-queue, and historical-version responses, including legacy Public rows that still contain those columns.
+- New Restricted/Private alerts and promotion of a Public draft into either non-Public scope are rejected with SCOPE_AUTHORIZATION_UNCONFIGURED.
+- Generic audit listing/export and operational metrics omit events/aggregates attached to non-Public alerts. Delivery outbox listing/counts are Public-only; direct operations on non-Public deliveries are hidden, and global retry/recovery maintenance is blocked while any non-Public outbox row exists.
+- Public JSON/GeoJSON feeds retain their separate published + Public + Actual + unexpired + Alert/Update/Cancel filters.
+
+This is deliberately restrictive and may hide existing non-Public records from normal application workflows. Do not use Restricted or Private CAP messages in this deployment. Existing records remain in the database for controlled migration; do not delete or reclassify them to bypass the policy. Re-enable non-Public workflows only after a reviewed recipient-grant schema, trusted identity/organization mapping, deny-by-default enforcement across every read/export/mutation/delivery path, audit of grant/revoke changes, and multi-account IDOR regression tests are implemented and accepted. The addresses field is not an authorization mechanism.
 
 ## Required deployment precautions
 
@@ -33,7 +46,7 @@ The current GitHub `main` branch reports branch protection disabled. Before acce
 
 ## Supply-chain and browser-asset considerations
 
-- The dashboard loads Leaflet and Leaflet.draw assets from the third-party `unpkg.com` CDN. Leaflet 1.9.4 CSS and JavaScript include Subresource Integrity metadata, but Leaflet.draw 1.0.4 CSS and JavaScript do not. The Content Security Policy permits these CDN resources. CDN compromise, package replacement, or availability failures can affect the browser dashboard; before operational deployment, prefer reviewed, pinned self-hosted assets or add verified integrity metadata for every external asset.
+- The dashboard loads Leaflet 1.9.4 from `unpkg.com` and Leaflet.draw 1.0.4 from `cdnjs.cloudflare.com`. All four external CSS/JavaScript assets include pinned Subresource Integrity hashes, `crossorigin="anonymous"`, and `referrerpolicy="no-referrer"`; automated static-asset tests guard these attributes and the Leaflet.draw hashes. The Content Security Policy permits these CDN origins. SRI detects unexpected asset-content changes, but CDN availability failures can still affect the browser dashboard; before operational deployment, consider reviewed, pinned self-hosted assets.
 - The repository commits `package-lock.json`; CI uses `npm ci` so dependency resolution is reproducible against the reviewed lockfile. Review dependency updates and vulnerability reports before merging.
 
 ## Important limitations
@@ -54,3 +67,24 @@ Do not authorize operational use until the responsible institution has completed
 - CAP conformance and end-to-end interoperability tests with intended receiving systems;
 - role separation, approval policy, audit retention, and incident-response approval;
 - operational training, monitoring, support ownership, and change-management procedures.
+
+
+## Temporary Public-only CAP scope boundary
+Recipient-level authorization for Restricted and Private alerts is not implemented. The application therefore fails closed: authenticated API collection, statistics, review, audit, delivery, export, and alert-linked detail paths expose Public alerts only. Direct identifiers for non-Public alerts are concealed as not found. New non-Public messages and valid scope promotions are blocked until an institution-approved recipient-grant model exists. Structurally incomplete CAP requests are still rejected by CAP validation and are not persisted; the temporary scope denial applies after required scope fields are present. Legacy non-Public records remain stored but are not available through the application API. This is a containment measure, not a recipient authorization implementation.
+
+- A source-and-test review of account lifecycle, role boundaries, MFA configuration, recipient identity, and the Restricted/Private reopening gate is maintained in [ACCOUNT_AND_RECIPIENT_AUTHORIZATION_REVIEW.md](ACCOUNT_AND_RECIPIENT_AUTHORIZATION_REVIEW.md). The review records that reviewer and approver currently share the same route permissions, MFA is opt-in unless `MFA_REQUIRED_ROLES` is configured, and no organization/recipient grant model exists.
+
+
+- Recipient authorization remains Public-only pending institutional approval and implementation. See [RECIPIENT_AUTHORIZATION_DESIGN.md](RECIPIENT_AUTHORIZATION_DESIGN.md) for the proposal and required cross-organization test matrix; it is not an enabled grant system.
+
+
+## Delivery and background recipient-scope audit
+
+- [DELIVERY_RECIPIENT_SCOPE_AUDIT.md](DELIVERY_RECIPIENT_SCOPE_AUDIT.md) records the source-level inventory of enqueue, outbox reads, claim, receipt, retry, background maintenance, worker behavior, webhook inbox separation, and residual recipient-grant gates.
+- Delivery state transitions now enforce Public scope in their SQL predicates as defense in depth; the background worker remains paused when legacy non-Public outbox rows exist. External adapters remain disabled.
+
+
+## Role authorization audit
+
+- [ROLE_AUTHORIZATION_AUDIT.md](ROLE_AUTHORIZATION_AUDIT.md) records the route-level and workflow-level review for Reviewer, Approver, Forecaster, Publisher, Viewer, and Admin, including unresolved separation-of-duties decisions.
+- Forecaster submission is restricted to the draft author or an administrator; the API integration suite covers cross-forecaster submission denial.

@@ -1,46 +1,110 @@
 /**
- * Independent CAP receiver A — minimal tag extraction (not using src/cap.js).
- * Local simulation only; no network listeners.
+ * Independent local CAP receiver A.
+ * Parses XML with an XML parser; it does not call the application CAP parser.
+ * Local simulation only; no network listeners or external delivery.
  */
-function extract(tag, xml) {
-  const re = new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`, "i");
-  const match = xml.match(re);
-  return match ? match[1].trim() : "";
+import { create } from "xmlbuilder2";
+import { persistReceiverMessage } from "./receiver-store.mjs";
+
+const CAP_NAMESPACE = "urn:oasis:names:tc:emergency:cap:1.2";
+const DERIVED_TYPES = new Set(["Update", "Cancel", "Ack", "Error"]);
+
+function nodeText(node) {
+  if (node == null) return "";
+  if (typeof node === "string" || typeof node === "number") return String(node).trim();
+  if (typeof node === "object" && node["#"] != null) return String(node["#"]).trim();
+  return "";
 }
 
-export function receiveCapXmlA(xml) {
-  if (typeof xml !== "string" || !xml.includes("<alert")) {
-    return { ok: false, error: "missing alert root", kind: "Error" };
+function childNode(parent, localName) {
+  if (!parent || typeof parent !== "object") return undefined;
+  const key = Object.keys(parent).find(name => name === localName || name.endsWith(":" + localName));
+  return key ? parent[key] : undefined;
+}
+
+function parseDocument(xml) {
+  if (typeof xml !== "string" || !xml.trim()) throw new Error("CAP XML is required");
+  if (Buffer.byteLength(xml, "utf8") > 1_000_000) throw new Error("CAP XML exceeds the 1 MB receiver limit");
+  // This receiver has no need for DTDs or entities; reject them before parsing.
+  if (/<!\s*(?:DOCTYPE|ENTITY)\b/i.test(xml)) throw new Error("DTD and entity declarations are not accepted");
+  let document;
+  try {
+    document = create(xml).end({ format: "object" });
+  } catch {
+    throw new Error("malformed XML");
   }
-  const msgType = extract("msgType", xml);
-  const identifier = extract("identifier", xml);
-  const sender = extract("sender", xml);
-  const sent = extract("sent", xml);
-  const scope = extract("scope", xml);
-  const references = extract("references", xml);
-  const status = extract("status", xml);
-  if (!identifier || !sender || !sent || !msgType || !scope || !status) {
-    return { ok: false, error: "missing required CAP header fields", kind: "Error", identifier, sender };
+  const rootKey = Object.keys(document || {}).find(name => name === "alert" || name.endsWith(":alert"));
+  const alert = rootKey ? document[rootKey] : undefined;
+  if (!alert || typeof alert !== "object" || Array.isArray(alert)) throw new Error("missing CAP alert root");
+  const namespaces = Object.entries(alert).filter(([name]) => name === "@xmlns" || name.startsWith("@xmlns:")).map(([, value]) => String(value));
+  if (!namespaces.includes(CAP_NAMESPACE)) throw new Error("missing or unexpected CAP 1.2 namespace");
+  return alert;
+}
+
+function verifyReferences(referencesText, knownMessages) {
+  const references = referencesText.trim().split(/\s+/).filter(Boolean);
+  if (!references.length) return { ok: false, error: "derived message missing references" };
+  if (!Array.isArray(knownMessages)) return { ok: false, error: "known message history must be an array" };
+  for (const reference of references) {
+    const parts = reference.split(",");
+    if (parts.length !== 3 || parts.some(part => !part)) return { ok: false, error: "invalid CAP reference triplet" };
+    const [sender, identifier, sent] = parts;
+    const found = knownMessages.some(message =>
+      message.sender === sender && message.identifier === identifier && message.sent === sent
+    );
+    if (!found) return { ok: false, error: "referenced CAP message is not present or does not match sender/identifier/sent" };
   }
-  if (!["Alert", "Update", "Cancel", "Ack", "Error"].includes(msgType)) {
-    return { ok: false, error: "unsupported msgType", kind: "Error", identifier, sender };
+  return { ok: true };
+}
+
+export function receiveCapXmlA(xml, { knownMessages = [], database = null } = {}) {
+  let alert;
+  try {
+    alert = parseDocument(xml);
+  } catch (error) {
+    return { ok: false, error: error.message, kind: "Error" };
   }
-  if (["Update", "Cancel", "Ack", "Error"].includes(msgType) && !references) {
-    return { ok: false, error: "derived message missing references", kind: "Error", identifier, sender };
+  const stored = {
+    identifier: nodeText(childNode(alert, "identifier")),
+    sender: nodeText(childNode(alert, "sender")),
+    sent: nodeText(childNode(alert, "sent")),
+    msgType: nodeText(childNode(alert, "msgType")),
+    scope: nodeText(childNode(alert, "scope")),
+    status: nodeText(childNode(alert, "status")),
+    references: nodeText(childNode(alert, "references"))
+  };
+  if (Object.values(stored).slice(0, 6).some(value => !value)) {
+    return { ok: false, error: "missing required CAP header fields", kind: "Error", stored };
   }
-  if (scope === "Restricted" && !extract("restriction", xml)) {
-    return { ok: false, error: "Restricted requires restriction", kind: "Error", identifier, sender };
+  if (!["Alert", "Update", "Cancel", "Ack", "Error"].includes(stored.msgType)) {
+    return { ok: false, error: "unsupported msgType", kind: "Error", stored };
   }
-  if (scope === "Private" && !extract("addresses", xml)) {
-    return { ok: false, error: "Private requires addresses", kind: "Error", identifier, sender };
+  if (!["Public", "Restricted", "Private"].includes(stored.scope)) {
+    return { ok: false, error: "unsupported scope", kind: "Error", stored };
+  }
+  if (!["Actual", "Exercise", "System", "Test"].includes(stored.status)) {
+    return { ok: false, error: "unsupported status", kind: "Error", stored };
+  }
+  if (stored.scope === "Restricted" && !nodeText(childNode(alert, "restriction"))) {
+    return { ok: false, error: "Restricted requires restriction", kind: "Error", stored };
+  }
+  if (stored.scope === "Private" && !nodeText(childNode(alert, "addresses"))) {
+    return { ok: false, error: "Private requires addresses", kind: "Error", stored };
+  }
+  const validate = history => DERIVED_TYPES.has(stored.msgType) ? verifyReferences(stored.references, history) : { ok: true };
+  let duplicate = false;
+  if (database) {
+    const persisted = persistReceiverMessage(database, stored, validate);
+    if (!persisted.ok) return { ...persisted, kind: "Error", stored };
+    duplicate = persisted.duplicate;
+  } else {
+    const checked = validate(knownMessages);
+    if (!checked.ok) return { ...checked, kind: "Error", stored };
   }
   return {
     ok: true,
-    stored: { identifier, sender, sent, msgType, scope, status, references },
-    ack: {
-      msgType: "Ack",
-      references: `${sender},${identifier},${sent}`,
-      note: "receiver-a accepted"
-    }
+    duplicate,
+    stored,
+    ack: { msgType: "Ack", references: `${stored.sender},${stored.identifier},${stored.sent}`, note: "receiver-a accepted" }
   };
 }

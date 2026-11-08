@@ -20,8 +20,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 22
       - name: Verify Node.js version policy is consistent
@@ -93,14 +93,18 @@ jobs:
           fi
           echo "Syntax checks passed for $count tracked JavaScript files."
       - run: npm test
+      - name: Run 10,000-message CAP performance benchmark
+        run: npm run perf:10k
       - run: npm run test:cap-schema
 
   windows-backup:
-    runs-on: windows-latest
+    # Pin to the stable VS 2022 image; windows-latest moved to VS 2026,
+    # which node-gyp currently fails to detect for better-sqlite3 native builds.
+    runs-on: windows-2022
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 22
       - name: Install exact dependency versions

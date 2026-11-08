@@ -3,6 +3,14 @@
 > **Status: NOT APPROVED FOR OPERATIONAL PUBLIC WARNING ISSUANCE.**
 > This checklist is a planning and acceptance record, not a certification. A passing CI run does not establish CAP interoperability, institutional authority, or operational safety. Keep deployments private and use only Test/Exercise data until every applicable gate has been independently accepted.
 
+## 0. Intended operational scope (fixed product intent)
+
+- **Geography:** Syrian Arab Republic only.
+- **Mode:** Local programme on institution-controlled hosts (operations centre), not a worldwide distribution network.
+- **Message standard:** OASIS CAP 1.2 for alert structure; scope of *use* remains national/local.
+- **Outbound global channels:** Not in scope by default; `external_adapters_enabled` remains false unless the owning institution later accepts a narrow channel after Gate 8 evidence.
+- **النطاق:** سوريا فقط · تشغيل محلي · ليس خدمة عالمية.
+
 ## 1. Decisions and inputs required from the deploying institution
 
 These are deployment-time decisions; they are not needed to continue repository development.
@@ -26,7 +34,10 @@ These are deployment-time decisions; they are not needed to continue repository 
 - [x] Implement administrator-assisted password reset with a generated temporary password, session revocation, forced change before normal access, audit event, and rate limiting.
 - [ ] Implement secure self-service password recovery with verified delivery, expiring single-use tokens, and abuse controls.
 - [ ] Enforce institutional identity lifecycle: onboarding, approval, suspension, offboarding, and periodic access review.
+- [x] Apply a temporary fail-closed Public-only API policy: lists, detail/XML/history/relations, exports, statistics, review queues, audit listing/export, and delivery views exclude non-Public records; direct non-Public IDs are concealed as 404; new Restricted/Private creation and scope promotion are blocked. Regression tests are added; CI evidence is pending.
+- [ ] Design, implement, and independently review the institution-approved recipient-grant model for Restricted and Private messages, including trusted organization/user mapping, deny-by-default read/export/mutation/delivery enforcement, grant/revoke audit events, and multi-account IDOR tests. The addresses field is not an ACL. Keep non-Public workflows disabled until this gate is accepted.
 - [ ] Review role separation and last-administrator safeguards against the institution's approved policy.
+- [x] Block administrator-assisted password reset when the target is another administrator; verify that the denied request leaves the target credentials unchanged. This does not implement dual authorization for administrator creation/promotion.
 - [ ] Define session lifetime, revocation, secret rotation, and emergency account recovery.
 - [x] Verify retained audit-chain hash links and detect missing IDs between retained hashed entries; automated tests cover modified records, broken links, unhashed tails, and interior sequence gaps.
 - [ ] Define audit retention, external immutable/off-host anchoring, access review, and evidence export.
@@ -40,7 +51,7 @@ The application can maintain an HMAC-SHA256 signed checkpoint after every succes
 - `AUDIT_CHECKPOINT_PATH`: an absolute path on a separately protected, off-host or separately mounted persistent volume. Do not place this file beside the SQLite database on the same writable disk if it is intended to protect against host/database rollback.
 - `AUDIT_CHECKPOINT_SECRET`: a unique random secret of at least 32 bytes, stored in the host secret manager and never committed to Git.
 
-For an existing installation, first take a backup and review the current audit-chain verification result. Then initialize the anchor exactly once with `npm run audit:checkpoint:init`. The command refuses to overwrite an existing checkpoint and refuses to anchor an invalid chain. New audit appends update the signed checkpoint; if the checkpoint is missing, stale, or has an invalid signature, subsequent audit writes are refused until an administrator investigates and performs an approved recovery. A stale checkpoint after an interrupted write must not be silently replaced.
+For an existing installation, first take a backup and review the current audit-chain verification result. Then initialize the anchor exactly once with `npm run audit:checkpoint:init`. The command refuses to overwrite an existing checkpoint and refuses to anchor an invalid chain. New audit appends update the signed checkpoint; if the checkpoint is missing, stale, or has an invalid signature, subsequent audit writes are refused until an administrator investigates and performs an approved recovery. A stale checkpoint after an interrupted write must not be silently replaced. The manual recovery command `npm run audit:checkpoint:refresh -- --confirm-offhost-evidence` requires an explicit operator confirmation flag after the independent evidence review (the flag is an operator attestation, not cryptographic proof), then verifies the existing checkpoint HMAC, confirms that its anchor remains in the complete verified database chain, and advances it only when the database is not rolled back. Before running it, an administrator must compare the checkpoint against independently protected off-host evidence and review the intervening audit records; a valid local HMAC alone cannot prove that the file is the latest trusted checkpoint. If that comparison fails or no trusted evidence is available, stop and restore a consistent database/checkpoint pair from verified backups rather than re-anchoring.
 
 A valid checkpoint detects deletion or rollback of the anchored tail. The checkpoint storage and secret must be protected independently of the database for this control to provide meaningful off-host assurance. If the checkpoint is stored on the same host and under the same administrator control as SQLite, it does not provide independent protection against a privileged attacker. Back up and monitor the checkpoint separately. Do not claim institutional certification based on this control alone.
 
@@ -53,7 +64,8 @@ A valid checkpoint detects deletion or rollback of the anchored tail. The checkp
 - [x] Validate CAP references as complete `sender,identifier,sent` triplets, including invalid-calendar rejection and XML Schema timezone bounds (maximum ±14:00); automated tests cover multiple references and boundary offsets.
 - [x] Support Update/Cancel reference chains with preserved historical messages, immutable snapshots, and timeline APIs; integration tests cover derivation and relations.
 - [x] Exclude Test/Exercise and non-Public/expired alerts from public JSON and GeoJSON feeds; integration tests assert the isolation rules.
-- [x] Enforce CAP Restricted (restriction text) and Private (addresses) requirements in validation, API, database, RTL form, Update/Cancel derivation, XSD positive controls, and public-feed exclusion tests.
+- [x] Restrict public JSON/GeoJSON feeds to CAP Alert, Update, and Cancel message types; Ack and Error control messages are excluded even if stored with Public/Actual/published fields.
+- [x] Retain CAP Restricted (restriction text) and Private (addresses) structural validation and XSD coverage, while the HTTP API blocks creating or promoting either scope until recipient grants are implemented. Do not interpret the CAP addresses field as an ACL.
 - [ ] Conduct end-to-end interoperability tests with every intended receiving organization/provider using non-operational test endpoints.
 - [ ] Obtain written acceptance from the receiving-system owners and the authorized warning authority.
 
@@ -96,6 +108,8 @@ A valid checkpoint detects deletion or rollback of the anchored tail. The checkp
 
 ## 7. Go-live acceptance gates
 
+**Canonical institutional register:** [INSTITUTIONAL_ACCEPTANCE_EVIDENCE.md](INSTITUTIONAL_ACCEPTANCE_EVIDENCE.md). Gate 8 closes only when that register’s final acceptance row is Accepted with Evidence ID, Date, and Approver. This readiness checklist is supporting guidance; it does not replace the register.
+
 Go-live is blocked until all applicable items below have named evidence and an accountable approver:
 
 1. [ ] Authorized institution signs off on policy, roles, coverage, and operational ownership.
@@ -111,3 +125,40 @@ Go-live is blocked until all applicable items below have named evidence and an a
 The current application is a development foundation. It has a local SQLite-backed workflow, CAP XML generation/schema checks, public JSON/GeoJSON feeds, audit logging, an internal delivery outbox, and an optional inbound manual-review inbox. The maintenance worker does not send messages. No external CAP, email, SMS, push, or government gateway transport is currently enabled. The inbound webhook receiver is disabled by default and does not create or publish alerts.
 
 The current CI suite and CodeQL are useful automated checks, but they do not replace the acceptance gates above. Do not describe this repository as certified, institutionally approved, or production-ready for public-warning issuance until those gates have been completed and independently evidenced.
+
+
+## Account and recipient authorization review
+- [x] Code-level review of account lifecycle, session invalidation, role guards, MFA controls, and current recipient-scope containment recorded in [ACCOUNT_AND_RECIPIENT_AUTHORIZATION_REVIEW.md](ACCOUNT_AND_RECIPIENT_AUTHORIZATION_REVIEW.md).
+- [ ] Institution must approve the role/approval matrix, trusted organization and recipient identity source, geographic/temporal grant semantics, grant/revoke lifecycle, MFA-required roles, and account recovery process.
+- [ ] Implement and independently test recipient grants before enabling Restricted or Private operations. Keep the Public-only boundary in place until the multi-user/multi-organization IDOR and revocation test matrix is accepted.
+
+
+## Recipient authorization design proposal
+- [x] Drafted [RECIPIENT_AUTHORIZATION_DESIGN.md](RECIPIENT_AUTHORIZATION_DESIGN.md) with a deny-by-default conceptual model, identity prerequisites, enforcement inventory, revocation semantics, and multi-organization negative/positive test matrix.
+- [ ] This proposal is not institution-approved and is not implemented. Do not create grants or enable Restricted/Private workflows until the identity authority, organization hierarchy, recipient semantics, role separation, expiry/revocation, and operational controls are approved.
+
+
+## Delivery and background recipient-scope audit
+- [x] Reviewed every current delivery state transition and background queue-maintenance path; recorded the findings in [DELIVERY_RECIPIENT_SCOPE_AUDIT.md](DELIVERY_RECIPIENT_SCOPE_AUDIT.md).
+- [x] Added Public-scope SQL enforcement to enqueue, claim, receipt, retry, automatic retry, and stale-lease recovery paths, with negative unit and API regression coverage.
+- [ ] Recipient grants, identity verification, expiry/revocation semantics, and institution-approved queue behavior remain prerequisites before any Restricted/Private delivery or external adapter is enabled.
+
+
+## Role authorization review
+
+- [x] Completed a source-and-test role audit for Reviewer, Approver, Forecaster, Publisher, Viewer, and Admin; findings and open policy decisions are in [ROLE_AUTHORIZATION_AUDIT.md](ROLE_AUTHORIZATION_AUDIT.md).
+- [x] Enforced forecaster ownership on draft submission, matching the existing draft-edit ownership check; a second forecaster cannot submit another user's draft.
+- [ ] Institution must approve the distinct reviewer/approver workflow, approval quorum, conflict-of-interest rules, publisher/delivery-operator boundary, and admin override/dual-control policy before operational acceptance.
+
+
+## Recipient authorization gap audit
+
+- [x] Inspected the current SQLite schema, API scope guards, collection/export/review/relations/audit/delivery paths, and existing scope-isolation integration tests.
+- [x] Documented that organization, membership, recipient-group, grant, and grant-audit entities and a central recipient policy are not implemented.
+- [x] Added the required multi-organization IDOR, membership lifecycle, grant revocation, race/TOCTOU, indirect disclosure, and delivery regression plan in [RECIPIENT_AUTHORIZATION_GAP_AUDIT.md](RECIPIENT_AUTHORIZATION_GAP_AUDIT.md).
+- [ ] Institution must approve identity authority, organization hierarchy, membership lifecycle, grant semantics, dual-control policy, and revocation behavior before implementation.
+- [ ] Implement and pass real two-organization cross-tenant IDOR tests before enabling Restricted/Private.
+
+
+- [x] Extended the recipient gap audit with a route/background-worker inventory covering alerts, CAP XML/relations, review/version/timeline, webhooks, audit, metrics, retention, user administration, outbox, and retry/recovery.
+- [x] Identified global webhook inbox attribution, alert-less audit event visibility, global retention, aggregate metrics, and worker principal-context as additional multi-organization design gates.

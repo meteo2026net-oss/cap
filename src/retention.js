@@ -1,3 +1,4 @@
+import { appendAuditLog, finalizeAuditCheckpoint } from "./audit.js";
 /**
  * Local retention helpers for non-authoritative operational tables.
  * Audit log rows are intentionally NOT deleted: the hash chain requires an
@@ -49,20 +50,28 @@ export function collectOperationalMetrics(database) {
   const quick = database.pragma("quick_check");
   const foreignKeys = database.pragma("foreign_key_check");
   const outbox = database.prepare(`
-    SELECT status, COUNT(*) AS n
-    FROM delivery_outbox
-    GROUP BY status
+    SELECT d.status, COUNT(*) AS n
+    FROM delivery_outbox d JOIN alerts a ON a.id=d.alert_id
+    WHERE a.scope='Public'
+    GROUP BY d.status
   `).all();
   const byStatus = Object.fromEntries(outbox.map(row => [row.status, row.n]));
   const oldestQueued = database.prepare(`
-    SELECT MIN(created_at) AS oldest
-    FROM delivery_outbox
-    WHERE status IN ('queued', 'failed')
+    SELECT MIN(d.created_at) AS oldest
+    FROM delivery_outbox d JOIN alerts a ON a.id=d.alert_id
+    WHERE a.scope='Public' AND d.status IN ('queued', 'failed')
   `).get()?.oldest || null;
   const alerts = database.prepare(`
-    SELECT workflow, COUNT(*) AS n FROM alerts GROUP BY workflow
+    SELECT workflow, COUNT(*) AS n FROM alerts WHERE scope='Public' GROUP BY workflow
   `).all();
-  const auditCount = database.prepare(`SELECT COUNT(*) AS n FROM audit_log`).get().n;
+  const organizationsConfigured = Boolean(
+    database.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='organizations'").get()
+    && database.prepare("SELECT 1 FROM organizations LIMIT 1").get()
+  );
+  const auditVisibility = organizationsConfigured
+    ? "l.alert_id IS NOT NULL AND EXISTS (SELECT 1 FROM alerts a WHERE a.id=l.alert_id AND a.scope='Public')"
+    : "((l.alert_id IS NOT NULL AND EXISTS (SELECT 1 FROM alerts a WHERE a.id=l.alert_id AND a.scope='Public')) OR (l.alert_id IS NULL AND l.action<>'retention_applied'))";
+  const auditCount = database.prepare("SELECT COUNT(*) AS n FROM audit_log l WHERE " + auditVisibility).get().n;
   return {
     database: {
       quick_check: quick[0]?.quick_check === "ok" ? "ok" : "failed",
@@ -74,7 +83,7 @@ export function collectOperationalMetrics(database) {
       sending: byStatus.sending || 0,
       failed: byStatus.failed || 0,
       delivered: byStatus.delivered || 0,
-      dead_lettered: database.prepare("SELECT COUNT(*) AS n FROM delivery_outbox WHERE status='failed' AND dead_letter_at IS NOT NULL").get().n,
+      dead_lettered: database.prepare("SELECT COUNT(*) AS n FROM delivery_outbox d JOIN alerts a ON a.id=d.alert_id WHERE a.scope='Public' AND d.status='failed' AND d.dead_letter_at IS NOT NULL").get().n,
       oldest_pending_at: oldestQueued
     },
     alerts_by_workflow: Object.fromEntries(alerts.map(row => [row.workflow, row.n])),
@@ -100,4 +109,43 @@ export function applyOperationalRetention(database, {
       }
     };
   })();
+}
+
+
+/**
+ * Run retention and append its hash-chained audit event inside one outer
+ * SQLite transaction. If audit persistence fails, all deletions roll back.
+ * auditWriter injection exists solely for deterministic failure testing.
+ */
+export function applyOperationalRetentionWithAudit(database, {
+  deliveryRetentionDays = Number(process.env.CAP_DELIVERY_RETENTION_DAYS || 90),
+  webhookRetentionDays = Number(process.env.CAP_WEBHOOK_RETENTION_DAYS || 90),
+  userId = null,
+  auditWriter = appendAuditLog,
+  auditOptions = {}
+} = {}) {
+  let auditResult;
+  const result = database.transaction(() => {
+    const retentionResult = applyOperationalRetention(database, { deliveryRetentionDays, webhookRetentionDays });
+    auditResult = auditWriter(
+      database,
+      { userId, alertId: null, action: "retention_applied", details: JSON.stringify(retentionResult) },
+      { ...auditOptions, deferCheckpoint: auditWriter === appendAuditLog }
+    );
+    return retentionResult;
+  }).immediate();
+
+  // The external checkpoint is a separate filesystem trust anchor. Refresh it
+  // only after the SQLite transaction commits, never while its transaction is open.
+  if (auditWriter === appendAuditLog && auditResult?.checkpoint_pending) {
+    try {
+      finalizeAuditCheckpoint(auditResult, auditOptions);
+    } catch {
+      return {
+        ...result,
+        audit_checkpoint_warning: "Retention and its database audit event committed, but the external audit checkpoint could not be refreshed. Verify the checkpoint before the next audit append."
+      };
+    }
+  }
+  return result;
 }

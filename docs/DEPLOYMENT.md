@@ -1,5 +1,9 @@
 # Deployment (test environments)
 
+**Intended deployment scope:** local operations in the **Syrian Arab Republic only** — a local programme for an operations centre / institutional host inside Syria. This is **not** a global warning distribution service. CAP 1.2 is used as the message format; geographic and operational scope remain national/local.
+
+**نطاق التشغيل المقصود:** تشغيل محلي داخل **الجمهورية العربية السورية فقط** — برنامج محلي لمركز عمليات / جهة مستضيفة داخل سوريا. **ليس** خدمة نشر تحذيرات عالمية. يُستخدم CAP 1.2 كصيغة رسالة؛ والنطاق الجغرافي والتشغيلي يبقى وطنياً/محلياً.
+
 1. Install Node.js LTS matching CI.
 2. `npm run setup:local` then `npm ci`.
 3. Configure secrets in `.env` (never commit): `JWT_SECRET`, `ADMIN_PASSWORD`, `MFA_ENCRYPTION_KEY`.

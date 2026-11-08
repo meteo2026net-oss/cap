@@ -44,6 +44,8 @@ function validateReferences(value) {
     const calendar = new Date(0);
     calendar.setUTCFullYear(year, month - 1, day);
     calendar.setUTCHours(hour, minute, second, 0);
+    // The fractional-seconds group is non-capturing in this regex:
+    // year..second are groups 1-6, Z/sign is 7-8, then offset hour/minute are 9-10.
     const offsetHour = timestamp[9] === undefined ? 0 : Number(timestamp[9]);
     const offsetMinute = timestamp[10] === undefined ? 0 : Number(timestamp[10]);
     if (year < 1 || calendar.getUTCFullYear() !== year || calendar.getUTCMonth() !== month - 1 ||
@@ -80,6 +82,15 @@ function capDateTime(value, field) {
   return date.toISOString().replace(/\.\d{3}Z$/, "-00:00");
 }
 function validDate(value, field) { if (value) capDateTime(value, field); }
+
+function normalizeReferences(value) {
+  const references = String(value || "").trim().split(/\s+/).filter(Boolean);
+  validateReferences(value);
+  return references.map(reference => {
+    const [sender, identifier, sent] = reference.split(",");
+    return `${sender},${identifier},${capDateTime(sent, "reference sent")}`;
+  }).join(" ");
+}
 
 function decimalNumber(value) {
   if (typeof value !== "string" || !/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(value.trim())) return NaN;
@@ -344,7 +355,7 @@ export function buildCapXml(a) {
     ...(a.addresses ? { addresses: a.addresses } : {}),
     ...(a.codes?.length ? { code: a.codes } : {}),
     ...(a.note ? { note: a.note } : {}),
-    ...(a.references_text ? { references: a.references_text } : {}),
+    ...(a.references_text ? { references: normalizeReferences(a.references_text) } : {}),
     ...(a.incidents ? { incidents: a.incidents } : {})
   };
   if (!["Cancel","Ack","Error"].includes(a.msg_type)) alert.info = infos.map(normalizeInfo);
@@ -355,16 +366,59 @@ export function buildCapXml(a) {
  * Parse a CAP 1.2 XML document into the internal alert representation used by validateAlert/buildCapXml.
  * Accepts whitespace and element-order variations produced by xmlbuilder2 and typical receivers.
  */
+function assertCapElementNamespaces(element, inheritedNamespaces = {}, elementName = null) {
+  const namespaces = { ...inheritedNamespaces };
+  if (element && typeof element === "object" && !Array.isArray(element)) {
+    for (const [key, value] of Object.entries(element)) {
+      if (key === "@xmlns") namespaces[""] = String(value);
+      else if (key.startsWith("@xmlns:")) namespaces[key.slice(7)] = String(value);
+    }
+  }
+  if (elementName) {
+    const separator = elementName.indexOf(":");
+    const prefix = separator < 0 ? "" : elementName.slice(0, separator);
+    const namespaceUri = namespaces[prefix] || "";
+    if (namespaceUri !== "urn:oasis:names:tc:emergency:cap:1.2") {
+      throw new Error(`CAP XML element '${elementName}' is not in the OASIS CAP 1.2 namespace`);
+    }
+  }
+  if (!element || typeof element !== "object" || Array.isArray(element)) return;
+  for (const [key, child] of Object.entries(element)) {
+    if (key.startsWith("@") || key === "#") continue;
+    for (const childElement of asArray(child)) {
+      assertCapElementNamespaces(childElement, namespaces, key);
+    }
+  }
+}
+
+function normalizeXmlObject(value) {
+  if (Array.isArray(value)) return value.map(normalizeXmlObject);
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(Object.entries(value).map(([key, child]) => {
+    // Preserve XML attributes/text markers; strip element prefixes only
+    // after every element has been verified as belonging to CAP 1.2.
+    const normalizedKey = key.startsWith("@") || key === "#" ? key : key.split(":").at(-1);
+    return [normalizedKey, normalizeXmlObject(child)];
+  }));
+}
+
 export function parseCapXml(xml) {
   if (typeof xml !== "string" || !xml.trim()) throw new Error("CAP XML is required");
+  if (Buffer.byteLength(xml, "utf8") > 1_000_000) throw new Error("CAP XML exceeds the 1 MB parser limit");
+  if (/<!\s*(?:DOCTYPE|ENTITY)\b/i.test(xml)) throw new Error("DTD and entity declarations are not accepted");
   let document;
   try {
     document = create(xml).end({ format: "object" });
   } catch {
     throw new Error("CAP XML is not well-formed");
   }
-  const alert = document?.alert;
-  if (!alert || typeof alert !== "object") throw new Error("CAP XML must contain a root alert element");
+  const rootKey = Object.keys(document || {}).find(name => name === "alert" || name.endsWith(":alert"));
+  const rawAlert = rootKey ? document[rootKey] : undefined;
+  if (!rawAlert || typeof rawAlert !== "object" || Array.isArray(rawAlert)) {
+    throw new Error("CAP XML must contain a root alert element");
+  }
+  assertCapElementNamespaces(rawAlert, {}, rootKey);
+  const alert = normalizeXmlObject(rawAlert);
 
   const infoNodes = asArray(alert.info);
   const info_blocks = infoNodes.map(info => {

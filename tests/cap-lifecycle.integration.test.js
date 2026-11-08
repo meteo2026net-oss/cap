@@ -183,60 +183,39 @@ test("CAP lifecycle covers Public, Restricted, Private, Update, Cancel, relation
   assert.doesNotMatch(publicAlert.xml, /<restriction>/);
   assert.doesNotMatch(publicAlert.xml, /<addresses>/);
 
-  // --- Restricted Actual lifecycle ---
-  const restrictedAlert = await publishThroughWorkflow(forecaster, {
-    event: "Lifecycle restricted storm",
-    headline: "Restricted lifecycle storm warning",
-    description: "Restricted-scope actual warning for authorized agencies only.",
-    area_desc: "Lifecycle restricted district",
-    circle: "34.00,36.50 8",
-    category: "Met",
-    urgency: "Immediate",
-    severity: "Severe",
-    certainty: "Observed",
-    status: "Actual",
-    scope: "Restricted",
-    restriction: "Internal distribution to authorized meteorological partners only",
-    language: "en-US"
-  }, "Restricted Actual");
-
-  assert.match(restrictedAlert.xml, /<scope>Restricted<\/scope>/);
-  assert.match(restrictedAlert.xml, /<restriction>Internal distribution to authorized meteorological partners only<\/restriction>/);
-
-  // --- Private Actual lifecycle ---
-  const privateAlert = await publishThroughWorkflow(forecaster, {
-    event: "Lifecycle private storm",
-    headline: "Private lifecycle storm warning",
-    description: "Private-scope actual warning for named recipients only.",
-    area_desc: "Lifecycle private desk",
-    circle: "33.20,36.10 5",
-    category: "Met",
-    urgency: "Expected",
-    severity: "Minor",
-    certainty: "Possible",
-    status: "Actual",
-    scope: "Private",
-    addresses: "ops@example.test duty@example.test",
-    language: "en-US"
-  }, "Private Actual");
-
-  assert.match(privateAlert.xml, /<scope>Private<\/scope>/);
-  assert.match(privateAlert.xml, /<addresses>ops@example.test duty@example.test<\/addresses>/);
+  // --- Non-Public creation is disabled until recipient grants exist ---
+  for (const payload of [
+    {
+      event: "Lifecycle restricted storm", headline: "Restricted lifecycle storm warning",
+      description: "Restricted-scope fixture", area_desc: "Lifecycle restricted district",
+      circle: "34.00,36.50 8", category: "Met", urgency: "Immediate",
+      severity: "Severe", certainty: "Observed", status: "Actual",
+      scope: "Restricted", restriction: "Internal distribution to authorized meteorological partners only",
+      language: "en-US"
+    },
+    {
+      event: "Lifecycle private storm", headline: "Private lifecycle storm warning",
+      description: "Private-scope fixture", area_desc: "Lifecycle private desk",
+      circle: "33.20,36.10 5", category: "Met", urgency: "Expected",
+      severity: "Minor", certainty: "Possible", status: "Actual",
+      scope: "Private", addresses: "ops@example.test duty@example.test", language: "en-US"
+    }
+  ]) {
+    const denied = await request("/api/alerts", { token: forecaster, method: "POST", body: payload });
+    assert.equal(denied.status, 403, "Restricted/Private creation must fail closed until recipient grants exist");
+    assert.equal(denied.data.code, "SCOPE_AUTHORIZATION_UNCONFIGURED");
+  }
 
   // --- Public feed isolation ---
   const publicFeed = await request("/api/public/alerts");
   assert.equal(publicFeed.status, 200);
   const feedIds = new Set((publicFeed.data.alerts || []).map(alert => alert.identifier));
   assert.ok(feedIds.has(publicAlert.identifier), "Public Actual published alert must appear on public feed");
-  assert.ok(!feedIds.has(restrictedAlert.identifier), "Restricted Actual must never appear on public feed");
-  assert.ok(!feedIds.has(privateAlert.identifier), "Private Actual must never appear on public feed");
 
   const geoFeed = await request("/api/public/alerts.geojson");
   assert.equal(geoFeed.status, 200);
   const geoIds = new Set((geoFeed.data.features || []).map(feature => feature.properties?.identifier).filter(Boolean));
   assert.ok(geoIds.has(publicAlert.identifier), "Public Actual must appear on GeoJSON feed");
-  assert.ok(!geoIds.has(restrictedAlert.identifier), "Restricted Actual must never appear on GeoJSON feed");
-  assert.ok(!geoIds.has(privateAlert.identifier), "Private Actual must never appear on GeoJSON feed");
 
   // --- Update and Cancel on Public published alert ---
   const updateDraft = await request(`/api/alerts/${publicAlert.id}/derive`, {
@@ -281,75 +260,17 @@ test("CAP lifecycle covers Public, Restricted, Private, Update, Cancel, relation
   assert.match(cancelXml, /<msgType>Cancel<\/msgType>/);
   assert.match(cancelXml, /<references>/);
 
-  // --- Restricted and Private Update/Cancel derivation ---
-  async function derivePublishAndValidate(source, msgType, label, xmlAssertions = []) {
-    const derived = await request(`/api/alerts/${source.id}/derive`, {
-      token: forecaster, method: "POST", body: { msg_type: msgType }
-    });
-    assert.equal(derived.status, 201, `${label}: derive ${msgType} should succeed: ${JSON.stringify(derived.data)}`);
-    assert.equal(derived.data.msg_type, msgType);
-    assert.equal(derived.data.status, "Test");
-    assert.ok(String(derived.data.references || "").includes(source.identifier),
-      `${label}: ${msgType} must reference the source identifier`);
-
-    assert.equal((await request(`/api/alerts/${derived.data.id}/submit`, { token: forecaster, method: "POST", body: {} })).status, 200,
-      `${label}: ${msgType} submit should succeed`);
-    assert.equal((await request(`/api/alerts/${derived.data.id}/approve`, { token: reviewer, method: "POST", body: {} })).status, 200,
-      `${label}: ${msgType} approve should succeed`);
-    const published = await request(`/api/alerts/${derived.data.id}/publish`, { token: publisher, method: "POST", body: {} });
-    assert.equal(published.status, 200, `${label}: ${msgType} publish should succeed: ${JSON.stringify(published.data)}`);
-
-    const xmlResponse = await fetch(base + `/api/alerts/${derived.data.id}/cap.xml`, {
-      headers: { Authorization: "Bearer " + forecaster }
-    });
-    assert.equal(xmlResponse.status, 200, `${label}: ${msgType} CAP XML export should succeed`);
-    const xml = await xmlResponse.text();
-    await writeAndValidateXml(xml, `${label} ${msgType}`);
-    assert.match(xml, new RegExp(`<msgType>${msgType}</msgType>`));
-    assert.match(xml, /<references>/);
-    for (const assertion of xmlAssertions) assertion(xml);
-    return { ...derived.data, xml };
-  }
-
-  const restrictedUpdate = await derivePublishAndValidate(restrictedAlert, "Update", "Restricted", [
-    xml => assert.match(xml, /<scope>Restricted<\/scope>/),
-    xml => assert.match(xml, /<restriction>Internal distribution to authorized meteorological partners only<\/restriction>/)
-  ]);
-  const restrictedCancel = await derivePublishAndValidate(restrictedAlert, "Cancel", "Restricted", [
-    xml => assert.match(xml, /<scope>Restricted<\/scope>/),
-    xml => assert.match(xml, /<restriction>Internal distribution to authorized meteorological partners only<\/restriction>/)
-  ]);
-  const privateUpdate = await derivePublishAndValidate(privateAlert, "Update", "Private", [
-    xml => assert.match(xml, /<scope>Private<\/scope>/),
-    xml => assert.match(xml, /<addresses>ops@example.test duty@example.test<\/addresses>/)
-  ]);
-  const privateCancel = await derivePublishAndValidate(privateAlert, "Cancel", "Private", [
-    xml => assert.match(xml, /<scope>Private<\/scope>/),
-    xml => assert.match(xml, /<addresses>ops@example.test duty@example.test<\/addresses>/)
-  ]);
-
-  // --- Relations / lineage integrity ---
-  for (const [source, updateId, cancelId, label] of [
-    [publicAlert, updateDraft.data.identifier, cancelDraft.data.identifier, "Public"],
-    [restrictedAlert, restrictedUpdate.identifier, restrictedCancel.identifier, "Restricted"],
-    [privateAlert, privateUpdate.identifier, privateCancel.identifier, "Private"]
-  ]) {
-    const relations = await request(`/api/alerts/${source.id}/relations`, { token: forecaster });
-    assert.equal(relations.status, 200, `${label}: relations endpoint should succeed`);
-    assert.ok(relations.data.count >= 3, `${label}: lineage should include original, update and cancel`);
-    const relationTypes = new Set((relations.data.messages || []).map(message => message.msg_type));
-    assert.ok(relationTypes.has("Alert"), `${label}: relations must include original Alert`);
-    assert.ok(relationTypes.has("Update"), `${label}: relations must include Update`);
-    assert.ok(relationTypes.has("Cancel"), `${label}: relations must include Cancel`);
-    assert.ok((relations.data.relations || []).length >= 2, `${label}: CAP reference edges should link derived messages`);
-    const identifiers = new Set((relations.data.messages || []).map(message => message.identifier));
-    assert.ok(identifiers.has(source.identifier), `${label}: relations include source identifier`);
-    assert.ok(identifiers.has(updateId), `${label}: relations include Update identifier`);
-    assert.ok(identifiers.has(cancelId), `${label}: relations include Cancel identifier`);
-    for (const edge of relations.data.relations || []) {
-      assert.match(String(edge.reference || ""), /,.+,/, `${label}: relation reference must be a CAP triplet`);
-    }
-  }
+  // --- Public lineage integrity ---
+  const relations = await request(`/api/alerts/${publicAlert.id}/relations`, { token: forecaster });
+  assert.equal(relations.status, 200, "Public relations endpoint should succeed");
+  assert.ok(relations.data.count >= 3, "Public lineage should include Alert, Update and Cancel");
+  const relationTypes = new Set((relations.data.messages || []).map(message => message.msg_type));
+  assert.ok(relationTypes.has("Alert") && relationTypes.has("Update") && relationTypes.has("Cancel"));
+  assert.ok((relations.data.relations || []).length >= 2, "CAP reference edges should link Public derivatives");
+  const relationIds = new Set((relations.data.messages || []).map(message => message.identifier));
+  assert.ok(relationIds.has(publicAlert.identifier));
+  assert.ok(relationIds.has(updateDraft.data.identifier));
+  assert.ok(relationIds.has(cancelDraft.data.identifier));
 
   // --- Database integrity checks ---
   const dbPath = path.join(cwd, "storage", "cap.sqlite");
@@ -363,65 +284,35 @@ test("CAP lifecycle covers Public, Restricted, Private, Update, Cancel, relation
 
     const byScope = db.prepare("SELECT scope, COUNT(*) AS n FROM alerts WHERE workflow='published' GROUP BY scope").all();
     const scopeMap = Object.fromEntries(byScope.map(row => [row.scope, row.n]));
-    assert.ok((scopeMap.Public || 0) >= 1, "published Public alerts should exist");
-    assert.ok((scopeMap.Restricted || 0) >= 1, "published Restricted alerts should exist");
-    assert.ok((scopeMap.Private || 0) >= 1, "published Private alerts should exist");
+    assert.ok((scopeMap.Public || 0) >= 3, "Public Alert/Update/Cancel should be published");
+    assert.equal(scopeMap.Restricted || 0, 0, "the API must not publish Restricted rows before recipient authorization exists");
+    assert.equal(scopeMap.Private || 0, 0, "the API must not publish Private rows before recipient authorization exists");
 
-    const leaked = db.prepare(`
-      SELECT identifier, scope, status, workflow, msg_type FROM alerts
-      WHERE workflow='published' AND scope IN ('Restricted','Private')
-    `).all();
-    assert.ok(leaked.length >= 6, "Restricted/Private published Alert/Update/Cancel rows should exist in DB");
-
-    // Re-check public feed SQL contract against DB state
     const publicRows = db.prepare(`
       SELECT identifier FROM alerts
       WHERE workflow='published' AND scope='Public' AND status='Actual'
         AND (expires IS NULL OR expires='' OR julianday(expires)>julianday('now'))
     `).all().map(row => row.identifier);
-    for (const row of leaked) {
-      assert.ok(!publicRows.includes(row.identifier),
-        `DB public-feed query must not include ${row.scope} ${row.msg_type} identifier ${row.identifier}`);
-    }
+    assert.ok(publicRows.includes(publicAlert.identifier), "published Public source remains eligible for public feed");
+    const outbox = db.prepare("SELECT COUNT(*) AS n FROM delivery_outbox").get();
+    assert.ok(outbox.n >= 3, "each successful Public publish should enqueue an internal outbox entry");
 
     const cancelRow = db.prepare("SELECT workflow, msg_type, references_text FROM alerts WHERE identifier=?").get(cancelDraft.data.identifier);
     assert.equal(cancelRow.msg_type, "Cancel");
     assert.equal(cancelRow.workflow, "published");
     assert.match(cancelRow.references_text || "", new RegExp(publicAlert.identifier));
 
-    const restrictedCancelRow = db.prepare("SELECT scope, restriction, references_text FROM alerts WHERE identifier=?").get(restrictedCancel.identifier);
-    assert.equal(restrictedCancelRow.scope, "Restricted");
-    assert.match(restrictedCancelRow.restriction || "", /authorized meteorological partners/);
-    assert.match(restrictedCancelRow.references_text || "", new RegExp(restrictedAlert.identifier));
-
-    const privateUpdateRow = db.prepare("SELECT scope, addresses, references_text FROM alerts WHERE identifier=?").get(privateUpdate.identifier);
-    assert.equal(privateUpdateRow.scope, "Private");
-    assert.match(privateUpdateRow.addresses || "", /ops@example\.test/);
-    assert.match(privateUpdateRow.references_text || "", new RegExp(privateAlert.identifier));
-
-    const outbox = db.prepare("SELECT COUNT(*) AS n FROM delivery_outbox").get();
-    assert.ok(outbox.n >= 9, "each successful publish should enqueue an internal outbox entry");
   } finally {
     db.close();
   }
 
-  // Restricted/Private and their derivatives remain absent from public feeds
+  // Public feeds retain the published Public Alert/Update/Cancel lifecycle.
   const publicFeedAfter = await request("/api/public/alerts");
   const afterIds = new Set((publicFeedAfter.data.alerts || []).map(alert => alert.identifier));
-  for (const identifier of [
-    restrictedAlert.identifier, restrictedUpdate.identifier, restrictedCancel.identifier,
-    privateAlert.identifier, privateUpdate.identifier, privateCancel.identifier
-  ]) {
-    assert.ok(!afterIds.has(identifier), `public JSON feed must not include non-Public identifier ${identifier}`);
-  }
+  assert.ok(afterIds.has(publicAlert.identifier));
   const geoAfter = await request("/api/public/alerts.geojson");
   const geoAfterIds = new Set((geoAfter.data.features || []).map(feature => feature.properties?.identifier).filter(Boolean));
-  for (const identifier of [
-    restrictedAlert.identifier, restrictedUpdate.identifier, restrictedCancel.identifier,
-    privateAlert.identifier, privateUpdate.identifier, privateCancel.identifier
-  ]) {
-    assert.ok(!geoAfterIds.has(identifier), `public GeoJSON feed must not include non-Public identifier ${identifier}`);
-  }
+  assert.ok(geoAfterIds.has(publicAlert.identifier));
 });
 
 test("CAP Ack and Error messages validate against OASIS XSD with required references", { timeout: 30000 }, async () => {

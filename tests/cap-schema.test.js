@@ -77,7 +77,11 @@ test("all CAP message types conform to the official OASIS CAP 1.2 XSD", { skip: 
       areas: [{ areaDesc: "Test district", polygon: "51,0 52,0 52,1 51,1 51,0" }]
     }]
   };
-  const references = "alerts@example.test,urn:uuid:previous-id,2026-11-03T12:00:00-00:00";
+  const references = [
+    "alerts@example.test,urn:uuid:previous-id,2026-11-03T13:00:00+01:00",
+    "alerts@example.test,urn:uuid:previous-id-2,2026-11-03T07:00:00-05:00",
+    "alerts@example.test,urn:uuid:previous-id-3,2026-11-03T12:00:00Z"
+  ].join(" ");
   const cases = ["Alert", "Update", "Cancel", "Ack", "Error"].map(msg_type => ({
     msg_type,
     ...base,
@@ -319,5 +323,38 @@ test("Restricted and Private scope messages with required fields conform to the 
     }
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("CAP reference timezone offsets enforce the signed 14-hour boundary", () => {
+  const base = {
+    identifier: makeIdentifier(),
+    sender: "alerts@example.test",
+    sent: "2026-11-07T12:00:00Z",
+    status: "Test",
+    msg_type: "Update",
+    scope: "Public",
+    references_text: "alerts@example.test,urn:uuid:prior,2026-11-07T00:00:00+14:00",
+    info_blocks: [{
+      categories: ["Met"],
+      event: "Timezone boundary",
+      urgency: "Expected",
+      severity: "Minor",
+      certainty: "Possible",
+      areas: [{ areaDesc: "Test district", circle: "51.5,-0.1 5" }]
+    }]
+  };
+  assert.doesNotThrow(() => buildCapXml(base), "the maximum +14:00 offset is valid");
+  for (const sent of [
+    "2026-11-07T00:00:00+14:01",
+    "2026-11-07T00:00:00+15:00",
+    "2026-11-07T00:00:00-14:01",
+    "2026-11-07T00:00:00-15:00"
+  ]) {
+    assert.throws(
+      () => buildCapXml({ ...base, references_text: `alerts@example.test,urn:uuid:prior,${sent}` }),
+      /out-of-range date, time or timezone offset/,
+      `must reject reference offset ${sent.slice(-6)}`
+    );
   }
 });

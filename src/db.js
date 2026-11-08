@@ -5,11 +5,16 @@ import bcrypt from "bcryptjs";
 import { installAuditLogGuards } from "./audit.js";
 import { migrateLeaseTokenStorage } from "./lease-migration.js";
 import { initializeWebhookReplayStore } from "./webhook-replay.js";
+import { ensureWebhookSourcesSchema } from "./webhook-sources.js";
+import { installRecipientSchema } from "./recipient-auth.js";
 
 const databasePath = path.resolve(process.env.DB_PATH || path.join("storage", "cap.sqlite"));
 fs.mkdirSync(path.dirname(databasePath), { recursive: true });
 export const db = new Database(databasePath);
 db.pragma("journal_mode = WAL");
+// Allow short-lived concurrent writers (e.g. API requests and background jobs)
+// to wait for SQLite's single-writer lock instead of failing immediately.
+db.pragma("busy_timeout = 5000");
 db.pragma("foreign_keys = ON");
 
 db.exec(`
@@ -91,6 +96,15 @@ CREATE INDEX IF NOT EXISTS idx_delivery_alert ON delivery_outbox(alert_id);
 
 `);
 
+ // Alerts created before tenant ownership was introduced remain unassigned; never infer or backfill a tenant.
+ const alertOwnerColumns = db.prepare("PRAGMA table_info(alerts)").all().map(column => column.name);
+ if (!alertOwnerColumns.includes("owner_organization_id")) {
+  db.exec("ALTER TABLE alerts ADD COLUMN owner_organization_id INTEGER REFERENCES organizations(id) ON DELETE RESTRICT");
+ }
+
+ // Install recipient authorization entities before any tenant-aware route or worker is loaded.
+ installRecipientSchema(db);
+
  // Forward-compatible, idempotent SQLite migrations for existing installations.
  db.exec(`
   CREATE TABLE IF NOT EXISTS alert_versions (
@@ -158,6 +172,7 @@ CREATE INDEX IF NOT EXISTS idx_delivery_alert ON delivery_outbox(alert_id);
  `);
  const webhookInboxColumns = db.prepare("PRAGMA table_info(webhook_inbox)").all().map(column => column.name);
  if (!webhookInboxColumns.includes("reviewed_by")) db.exec("ALTER TABLE webhook_inbox ADD COLUMN reviewed_by INTEGER REFERENCES users(id)");
+ ensureWebhookSourcesSchema(db);
  db.exec("CREATE INDEX IF NOT EXISTS idx_delivery_retry_due ON delivery_outbox(status,next_attempt_at,attempts)");
 
 

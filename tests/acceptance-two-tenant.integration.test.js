@@ -430,7 +430,7 @@ test("acceptance pack: two-tenant webhook isolation and public test lifecycle", 
     });
     assert.equal(csvResponse.status, 200, label + " audit CSV export");
     const csv = await csvResponse.text();
-    assert.equal(csv.split("\r\n").some(line => line.split(",")[3] === String(restrictedAlertId)), false,
+    assert.equal(csv.split("\r\n").some(line => line.split(",")[3]?.replace(/^"|"$/g, "") === String(restrictedAlertId)), false,
       label + " CSV must not disclose restricted alert-linked audit rows");
     assert.equal(csv.includes("must not appear in tenant audit views"), isPlatformAdmin,
       label + " CSV platform-only events must follow the platform administrator boundary");
@@ -440,7 +440,7 @@ test("acceptance pack: two-tenant webhook isolation and public test lifecycle", 
   });
   assert.equal(authorizedCsvResponse.status, 200);
   const authorizedCsv = await authorizedCsvResponse.text();
-  assert.ok(authorizedCsv.split("\r\n").some(line => line.split(",")[3] === String(restrictedAlertId)),
+  assert.ok(authorizedCsv.split("\r\n").some(line => line.split(",")[3]?.replace(/^"|"$/g, "") === String(restrictedAlertId)),
     "authorized CSV export must include granted alert-linked audit rows");
   assert.equal((await request("/api/audit/verify", { token: reviewerB })).status, 200,
     "reviewers may inspect chain-integrity metadata without receiving alert-linked event rows");

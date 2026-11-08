@@ -185,7 +185,17 @@ test("organization membership API enforces admin control and same-role tenant me
       description: "Synthetic integration-test alert",
       area_desc: "Test area",
       status: "Test",
-      scope: "Public"
+      scope: "Public",
+      info_blocks: [{
+        category: "Met",
+        event: "Tenant isolation test",
+        urgency: "Unknown",
+        severity: "Unknown",
+        certainty: "Unknown",
+        headline: "Tenant A test alert",
+        description: "Synthetic integration-test alert",
+        area: { areaDesc: "Test area" }
+      }]
     }
   });
   assert.equal(alert.status, 201, "forecaster can create an isolated test alert");

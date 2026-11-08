@@ -226,6 +226,156 @@ export function installRecipientSchema(database) {
     CREATE INDEX IF NOT EXISTS idx_group_membership_events_org
       ON recipient_group_membership_events(organization_id,id DESC);
 
+
+    CREATE TABLE IF NOT EXISTS alert_recipient_grants (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      alert_id INTEGER NOT NULL REFERENCES alerts(id) ON DELETE RESTRICT,
+      owner_organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE RESTRICT,
+      recipient_type TEXT NOT NULL CHECK(recipient_type IN ('user','organization','group')),
+      recipient_user_id INTEGER REFERENCES users(id) ON DELETE RESTRICT,
+      recipient_organization_id INTEGER REFERENCES organizations(id) ON DELETE RESTRICT,
+      recipient_group_id INTEGER,
+      action TEXT NOT NULL CHECK(action IN ('read','deliver')),
+      status TEXT NOT NULL DEFAULT 'pending'
+        CHECK(status IN ('pending','active','suspended','revoked','expired')),
+      starts_at TEXT,
+      expires_at TEXT,
+      created_by INTEGER NOT NULL REFERENCES users(id),
+      approved_by INTEGER REFERENCES users(id),
+      updated_by INTEGER REFERENCES users(id),
+      revoked_at TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(recipient_group_id,recipient_organization_id)
+        REFERENCES recipient_groups(id,organization_id) ON DELETE RESTRICT,
+      CHECK(owner_organization_id <> recipient_organization_id OR recipient_type='user'),
+      CHECK(
+        (recipient_type='user' AND recipient_user_id IS NOT NULL
+          AND recipient_organization_id IS NULL AND recipient_group_id IS NULL) OR
+        (recipient_type='organization' AND recipient_user_id IS NULL
+          AND recipient_organization_id IS NOT NULL AND recipient_group_id IS NULL) OR
+        (recipient_type='group' AND recipient_user_id IS NULL
+          AND recipient_organization_id IS NOT NULL AND recipient_group_id IS NOT NULL)
+      ),
+      CHECK(expires_at IS NULL OR starts_at IS NULL OR julianday(expires_at)>julianday(starts_at)),
+      CHECK(status <> 'active' OR approved_by IS NOT NULL),
+      CHECK(status <> 'revoked' OR revoked_at IS NOT NULL)
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_alert_grant_one_open_target
+      ON alert_recipient_grants(alert_id,recipient_type,
+        COALESCE(recipient_user_id,0),COALESCE(recipient_organization_id,0),
+        COALESCE(recipient_group_id,0),action)
+      WHERE status IN ('pending','active','suspended');
+    CREATE INDEX IF NOT EXISTS idx_alert_grant_lookup
+      ON alert_recipient_grants(alert_id,status,action,expires_at);
+    CREATE INDEX IF NOT EXISTS idx_alert_grant_recipient
+      ON alert_recipient_grants(recipient_type,recipient_user_id,recipient_organization_id,recipient_group_id,status);
+
+    CREATE TABLE IF NOT EXISTS alert_recipient_grant_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      grant_id INTEGER NOT NULL REFERENCES alert_recipient_grants(id) ON DELETE RESTRICT,
+      alert_id INTEGER NOT NULL REFERENCES alerts(id) ON DELETE RESTRICT,
+      owner_organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE RESTRICT,
+      actor_user_id INTEGER REFERENCES users(id),
+      event_type TEXT NOT NULL CHECK(event_type IN
+        ('grant_created','grant_activated','grant_suspended','grant_reactivated','grant_revoked','grant_expired')),
+      from_status TEXT,
+      to_status TEXT NOT NULL,
+      occurred_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_alert_grant_events_alert
+      ON alert_recipient_grant_events(alert_id,id DESC);
+
+    CREATE TRIGGER IF NOT EXISTS alert_grant_create_guard
+    BEFORE INSERT ON alert_recipient_grants
+    WHEN NEW.status <> 'pending'
+      OR NOT EXISTS (
+        SELECT 1 FROM users actor WHERE actor.id=NEW.created_by AND actor.active=1 AND actor.role='admin'
+      )
+      OR NOT EXISTS (
+        SELECT 1 FROM alerts a WHERE a.id=NEW.alert_id
+          AND a.owner_organization_id=NEW.owner_organization_id
+      )
+      OR NOT EXISTS (
+        SELECT 1 FROM organizations owner WHERE owner.id=NEW.owner_organization_id AND owner.status='active'
+      )
+      OR (NEW.recipient_type='user' AND NOT EXISTS (
+        SELECT 1 FROM organization_memberships m JOIN organizations o ON o.id=m.organization_id
+        JOIN users u ON u.id=m.user_id
+        WHERE m.user_id=NEW.recipient_user_id AND m.status='active'
+          AND o.status='active' AND u.active=1
+          AND (m.starts_at IS NULL OR julianday(m.starts_at)<=julianday('now'))
+          AND (m.expires_at IS NULL OR julianday(m.expires_at)>julianday('now'))
+      ))
+      OR (NEW.recipient_type='organization' AND NOT EXISTS (
+        SELECT 1 FROM organizations o WHERE o.id=NEW.recipient_organization_id
+          AND o.status='active' AND o.id<>NEW.owner_organization_id
+      ))
+      OR (NEW.recipient_type='group' AND NOT EXISTS (
+        SELECT 1 FROM recipient_groups g JOIN organizations o ON o.id=g.organization_id
+        WHERE g.id=NEW.recipient_group_id
+          AND g.organization_id=NEW.recipient_organization_id
+          AND g.status='active' AND o.status='active'
+          AND o.id<>NEW.owner_organization_id
+      ))
+    BEGIN SELECT RAISE(ABORT, 'Grant requires active administrator, owned alert, and valid recipient'); END;
+
+    CREATE TRIGGER IF NOT EXISTS alert_grant_update_guard
+    BEFORE UPDATE OF status ON alert_recipient_grants
+    WHEN (NEW.status <> 'expired' AND NOT EXISTS (
+        SELECT 1 FROM users actor WHERE actor.id=NEW.updated_by AND actor.active=1 AND actor.role='admin'
+      ))
+      OR (NEW.status='active' AND NOT EXISTS (
+        SELECT 1 FROM users approver WHERE approver.id=NEW.approved_by AND approver.active=1 AND approver.role='admin'
+      ))
+      OR (NEW.status='expired' AND (
+        OLD.expires_at IS NULL OR julianday(OLD.expires_at)>julianday('now')
+      ))
+    BEGIN SELECT RAISE(ABORT, 'Grant state change lacks valid authority or expiry'); END;
+
+    CREATE TRIGGER IF NOT EXISTS alert_grant_identity_immutable
+    BEFORE UPDATE OF alert_id,owner_organization_id,recipient_type,recipient_user_id,
+      recipient_organization_id,recipient_group_id,action,created_by ON alert_recipient_grants
+    BEGIN SELECT RAISE(ABORT, 'Grant identity is immutable'); END;
+
+    CREATE TRIGGER IF NOT EXISTS alert_grant_state_transition_guard
+    BEFORE UPDATE OF status ON alert_recipient_grants
+    WHEN NOT (
+      (OLD.status='pending' AND NEW.status IN ('active','revoked','expired')) OR
+      (OLD.status='active' AND NEW.status IN ('suspended','revoked','expired')) OR
+      (OLD.status='suspended' AND NEW.status IN ('active','revoked','expired'))
+    )
+    BEGIN SELECT RAISE(ABORT, 'Invalid or terminal grant state transition'); END;
+
+    CREATE TRIGGER IF NOT EXISTS alert_grant_event_insert
+    AFTER INSERT ON alert_recipient_grants
+    BEGIN
+      INSERT INTO alert_recipient_grant_events
+        (grant_id,alert_id,owner_organization_id,actor_user_id,event_type,from_status,to_status)
+      VALUES(NEW.id,NEW.alert_id,NEW.owner_organization_id,NEW.created_by,'grant_created',NULL,NEW.status);
+    END;
+    CREATE TRIGGER IF NOT EXISTS alert_grant_event_update
+    AFTER UPDATE OF status ON alert_recipient_grants
+    WHEN OLD.status <> NEW.status
+    BEGIN
+      INSERT INTO alert_recipient_grant_events
+        (grant_id,alert_id,owner_organization_id,actor_user_id,event_type,from_status,to_status)
+      VALUES(NEW.id,NEW.alert_id,NEW.owner_organization_id,NEW.updated_by,
+        CASE
+          WHEN NEW.status='active' AND OLD.status='suspended' THEN 'grant_reactivated'
+          WHEN NEW.status='active' THEN 'grant_activated'
+          WHEN NEW.status='suspended' THEN 'grant_suspended'
+          WHEN NEW.status='revoked' THEN 'grant_revoked'
+          WHEN NEW.status='expired' THEN 'grant_expired'
+        END,OLD.status,NEW.status);
+    END;
+    CREATE TRIGGER IF NOT EXISTS alert_grant_events_no_update
+    BEFORE UPDATE ON alert_recipient_grant_events
+    BEGIN SELECT RAISE(ABORT, 'Grant events are immutable'); END;
+    CREATE TRIGGER IF NOT EXISTS alert_grant_events_no_delete
+    BEFORE DELETE ON alert_recipient_grant_events
+    BEGIN SELECT RAISE(ABORT, 'Grant events are immutable'); END;
+
     CREATE TRIGGER IF NOT EXISTS recipient_group_create_admin_guard
     BEFORE INSERT ON recipient_groups
     WHEN NOT EXISTS (

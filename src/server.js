@@ -191,6 +191,27 @@ const roles = (...allowed) => (req,res,next) => {
   return res.status(403).json({error:"MFA enrollment is required for this role before accessing protected operations",code:"MFA_REQUIRED"});
  return next();
 };
+function webhookInboxAccess(req,res,next) {
+ if(req.user.role==="admin") return next();
+ if(req.user.role!=="reviewer") return res.status(403).json({error:"Insufficient permissions"});
+ const organizationsConfigured=Boolean(db.prepare("SELECT 1 FROM organizations LIMIT 1").get());
+ if(organizationsConfigured) {
+  return res.status(403).json({
+   error:"Webhook inbox review is disabled until inbound sources are attributed to organizations",
+   code:"WEBHOOK_TENANT_ATTRIBUTION_UNCONFIGURED"
+  });
+ }
+ return next();
+}
+
+function auditReadPredicate(user) {
+ const organizationsConfigured=Boolean(db.prepare("SELECT 1 FROM organizations LIMIT 1").get());
+ if(user.role!=="admin" && organizationsConfigured) {
+  return "(l.alert_id IS NOT NULL AND EXISTS (SELECT 1 FROM alerts scoped_alert WHERE scoped_alert.id=l.alert_id AND scoped_alert.scope='Public'))";
+ }
+ return "((l.alert_id IS NOT NULL AND EXISTS (SELECT 1 FROM alerts scoped_alert WHERE scoped_alert.id=l.alert_id AND scoped_alert.scope='Public')) OR (l.alert_id IS NULL AND l.action<>'retention_applied'))";
+}
+
 function audit(userId, alertId, action, details="") {
  appendAuditLog(db, { userId, alertId, action, details });
 }
@@ -1413,7 +1434,7 @@ app.post("/api/alerts/:id/publish",auth,roles("admin","publisher"),(req,res)=>{
  const delivery=result.delivery;
  res.json({ok:true,workflow:"published",delivery:{id:delivery.id,status:delivery.status,channel:delivery.channel},note:"Internal publication only. External delivery adapters remain disabled; the outbox entry is queued for controlled processing."});
 });
-app.get("/api/webhooks/inbox",auth,roles("admin","reviewer"),(req,res)=>{
+app.get("/api/webhooks/inbox",auth,webhookInboxAccess,(req,res)=>{
  res.set("Cache-Control","no-store");
  res.set("Pragma","no-cache");
  const status=req.query.status;
@@ -1433,7 +1454,7 @@ app.get("/api/webhooks/inbox",auth,roles("admin","reviewer"),(req,res)=>{
   next_before_id:hasMore?page[page.length-1].id:null
  });
 });
-app.patch("/api/webhooks/inbox/:id/review",auth,roles("admin","reviewer"),(req,res)=>{
+app.patch("/api/webhooks/inbox/:id/review",auth,webhookInboxAccess,(req,res)=>{
  res.set("Cache-Control","no-store");
  res.set("Pragma","no-cache");
  const id=Number(req.params.id);
@@ -1588,7 +1609,7 @@ app.get("/api/audit/verify",auth,roles("admin","reviewer","approver"),(_req,res)
 app.get("/api/audit/export.csv",auth,roles("admin","reviewer","approver"),(req,res)=>{
  const action=typeof req.query.action==="string"?req.query.action.trim().slice(0,80):"";
  const search=typeof req.query.q==="string"?req.query.q.trim().slice(0,160):"";
- const clauses=["((l.alert_id IS NOT NULL AND EXISTS (SELECT 1 FROM alerts scoped_alert WHERE scoped_alert.id=l.alert_id AND scoped_alert.scope='Public')) OR (l.alert_id IS NULL AND l.action<>'retention_applied'))"],params=[];
+ const clauses=[auditReadPredicate(req.user)],params=[];
  if(action){clauses.push("l.action=?");params.push(action);}
  if(search){clauses.push("(instr(lower(COALESCE(l.action,'')),lower(?))>0 OR instr(lower(COALESCE(l.details,'')),lower(?))>0 OR instr(lower(COALESCE(u.username,'')),lower(?))>0)");params.push(search,search,search);}
  const where=clauses.length?"WHERE "+clauses.join(" AND "):"";
@@ -1614,7 +1635,7 @@ app.get("/api/audit",auth,roles("admin","reviewer","approver"),(req,res)=>{
  }
  const action=typeof req.query.action==="string"?req.query.action.trim().slice(0,80):"";
  const search=typeof req.query.q==="string"?req.query.q.trim().slice(0,160):"";
- const clauses=["((l.alert_id IS NOT NULL AND EXISTS (SELECT 1 FROM alerts scoped_alert WHERE scoped_alert.id=l.alert_id AND scoped_alert.scope='Public')) OR (l.alert_id IS NULL AND l.action<>'retention_applied'))"],params=[];
+ const clauses=[auditReadPredicate(req.user)],params=[];
  if(action){clauses.push("l.action=?");params.push(action);}
  if(search){clauses.push("(instr(lower(COALESCE(l.action,char(0))),lower(?))>0 OR instr(lower(COALESCE(l.details,char(0))),lower(?))>0 OR instr(lower(COALESCE(u.username,char(0))),lower(?))>0)");params.push(search,search,search);}
  if(beforeId!==null){clauses.push("l.id<?");params.push(beforeId);}

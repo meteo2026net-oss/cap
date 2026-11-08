@@ -17,6 +17,7 @@ import { applyOperationalRetentionWithAudit, collectOperationalMetrics } from ".
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { consumeRecoveryCode, decryptTotpSecret, encryptTotpSecret, generateRecoveryCodes, generateTotpSecret, hashRecoveryCode, verifyTotp } from "./mfa.js";
 import { verifyAndConsumeWebhook } from "./webhook-replay.js";
+import { createOrganization, requestOrganizationMembership, transitionOrganizationMembership } from "./recipient-auth.js";
 
 const app = express();
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -519,6 +520,87 @@ app.use("/api/users",(_req,res,next)=>{
  next();
 });
 app.get("/api/me",auth,(req,res)=>res.json({user:req.user}));
+
+const organizationSchema = z.object({
+ slug: z.string().min(2).max(80).regex(/^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,78}[a-zA-Z0-9])$/),
+ name: z.string().min(2).max(200)
+});
+app.get("/api/organizations",auth,roles("admin"),(_req,res)=>{
+ const organizations=db.prepare(`
+  SELECT o.id,o.slug,o.name,o.status,o.created_at,o.updated_at,
+   (SELECT COUNT(*) FROM organization_memberships m
+    WHERE m.organization_id=o.id AND m.status='active'
+      AND (m.starts_at IS NULL OR julianday(m.starts_at)<=julianday('now'))
+      AND (m.expires_at IS NULL OR julianday(m.expires_at)>julianday('now'))) AS active_members
+  FROM organizations o ORDER BY o.id
+ `).all();
+ res.json({organizations});
+});
+app.post("/api/organizations",auth,roles("admin"),adminAccountMutationLimiter,(req,res)=>{
+ try {
+  const data=organizationSchema.parse(req.body);
+  const id=db.transaction(()=>createOrganization(db,{
+   slug:data.slug,name:data.name,actorUserId:req.user.id
+  })).immediate();
+  audit(req.user.id,null,"organization_created",`Created organization ${data.slug}`);
+  res.status(201).json({id,slug:data.slug.toLowerCase(),name:data.name,status:"active"});
+ } catch(error) {
+  if(error.code==="SQLITE_CONSTRAINT_UNIQUE") return res.status(409).json({error:"Organization slug already exists"});
+  return res.status(400).json({error:error.message});
+ }
+});
+app.get("/api/organizations/:id/memberships",auth,roles("admin"),(req,res)=>{
+ const organizationId=Number(req.params.id);
+ if(!Number.isSafeInteger(organizationId)||organizationId<1) return res.status(400).json({error:"Invalid organization id"});
+ const organization=db.prepare("SELECT id FROM organizations WHERE id=?").get(organizationId);
+ if(!organization) return res.status(404).json({error:"Organization not found"});
+ const memberships=db.prepare(`
+  SELECT m.id,m.organization_id,m.user_id,u.username,m.status,m.starts_at,m.expires_at,
+   m.created_by,m.approved_by,m.created_at,m.updated_at
+  FROM organization_memberships m JOIN users u ON u.id=m.user_id
+  WHERE m.organization_id=? ORDER BY m.id DESC
+ `).all(organizationId);
+ res.json({memberships});
+});
+app.post("/api/organizations/:id/memberships",auth,roles("admin"),adminAccountMutationLimiter,(req,res)=>{
+ const organizationId=Number(req.params.id);
+ if(!Number.isSafeInteger(organizationId)||organizationId<1) return res.status(400).json({error:"Invalid organization id"});
+ try {
+  const data=z.object({
+   user_id:z.number().int().positive(),
+   starts_at:z.string().datetime({offset:true}).optional().nullable(),
+   expires_at:z.string().datetime({offset:true}).optional().nullable()
+  }).parse(req.body);
+  const id=requestOrganizationMembership(db,{
+   organizationId,userId:data.user_id,actorUserId:req.user.id,
+   startsAt:data.starts_at??null,expiresAt:data.expires_at??null
+  });
+  audit(req.user.id,null,"organization_membership_requested",`Requested membership ${id} for user ${data.user_id} in organization ${organizationId}`);
+  return res.status(201).json({id,organization_id:organizationId,user_id:data.user_id,status:"pending"});
+ } catch(error) {
+  if(error.code==="SQLITE_CONSTRAINT_UNIQUE") return res.status(409).json({error:"An open membership already exists for this user and organization"});
+  if(/Active organization and active user/.test(error.message)) return res.status(404).json({error:"Organization or active user not found"});
+  return res.status(400).json({error:error.message});
+ }
+});
+app.patch("/api/organization-memberships/:id",auth,roles("admin"),adminAccountMutationLimiter,(req,res)=>{
+ const membershipId=Number(req.params.id);
+ if(!Number.isSafeInteger(membershipId)||membershipId<1) return res.status(400).json({error:"Invalid membership id"});
+ try {
+  const data=z.object({status:z.enum(["active","suspended","revoked","expired"])}).parse(req.body);
+  const result=transitionOrganizationMembership(db,{
+   membershipId,nextStatus:data.status,actorUserId:req.user.id
+  });
+  audit(req.user.id,null,"organization_membership_"+data.status,
+   `Changed membership ${membershipId} in organization ${result.organizationId} from ${result.previousStatus} to ${result.status}`);
+  return res.json({ok:true,...result});
+ } catch(error) {
+  if(/Membership not found/.test(error.message)) return res.status(404).json({error:"Membership not found"});
+  if(/not permitted|changed concurrently/.test(error.message)) return res.status(409).json({error:error.message});
+  return res.status(400).json({error:error.message});
+ }
+});
+
 
 const userSchema = z.object({
  username: z.string().min(3).max(64).regex(/^[a-zA-Z0-9._-]+$/),

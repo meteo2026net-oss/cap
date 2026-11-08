@@ -1791,19 +1791,24 @@ test("API enforces role separation, public-feed filtering and account deactivati
     "restricted audit history must not be stored by browsers or shared caches");
   assert.equal(auditHistory.headers.get("pragma"), "no-cache",
     "restricted audit history must carry a legacy no-cache directive");
-  assert.ok(auditHistory.data.entries.some(entry =>
+  // Once organizations exist, non-admin audit readers only see Public-scoped alert events
+  // (alert_id IS NOT NULL). Account/auth lifecycle events have null alert_id and remain
+  // admin-visible only under the organization-aware predicate.
+  const adminAuditHistory = await request("/api/audit", { token: admin });
+  assert.equal(adminAuditHistory.status, 200);
+  assert.ok(adminAuditHistory.data.entries.some(entry =>
     entry.username === "admin" &&
     ["login_succeeded", "mfa_login_challenge_created", "mfa_login_succeeded"].includes(entry.action)
   ), "successful administrator authentication events should be included in the audit history");
-  assert.ok(auditHistory.data.entries.some(entry => entry.action === "user_created" && entry.details.includes("approver1")),
+  assert.ok(adminAuditHistory.data.entries.some(entry => entry.action === "user_created" && entry.details.includes("approver1")),
     "creating an account should record the target username and assigned role");
-  assert.ok(auditHistory.data.entries.some(entry => entry.action === "user_role_changed" && entry.details.includes("rolechange1") && entry.details.includes("viewer") && entry.details.includes("publisher")),
+  assert.ok(adminAuditHistory.data.entries.some(entry => entry.action === "user_role_changed" && entry.details.includes("rolechange1") && entry.details.includes("viewer") && entry.details.includes("publisher")),
     "role changes should record the target account and old/new roles");
-  const filteredAuditAction = await request("/api/audit?action=user_created", { token: reviewer });
+  const filteredAuditAction = await request("/api/audit?action=user_created", { token: admin });
   assert.equal(filteredAuditAction.status, 200);
   assert.ok(filteredAuditAction.data.entries.length > 0 && filteredAuditAction.data.entries.every(entry => entry.action === "user_created"),
     "audit action filter should return only the requested event type");
-  const filteredAuditSearch = await request("/api/audit?q=approver1", { token: reviewer });
+  const filteredAuditSearch = await request("/api/audit?q=approver1", { token: admin });
   assert.equal(filteredAuditSearch.status, 200);
   assert.ok(filteredAuditSearch.data.entries.some(entry => entry.details.includes("approver1")),
     "audit text search should match event details");

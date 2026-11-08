@@ -124,22 +124,43 @@ test("Restricted and Private legacy alerts are denied across authenticated and p
   assert.equal(organizationA.status, 201);
   assert.equal(organizationB.status, 201);
   const accountRows = (await request("/api/users", { token: admin })).data.users;
-  const userAId = accountRows.find(row => row.username === "iso_forecaster").id;
-  const userBId = accountRows.find(row => row.username === "iso_forecaster_b").id;
-  const memberA = await request(`/api/organizations/${organizationA.data.id}/memberships`, {
-    token: admin, method: "POST", body: { user_id: userAId }
+  const tenantMemberships = [];
+  for (const [organizationId, username] of [
+    [organizationA.data.id, "iso_forecaster"],
+    [organizationA.data.id, "iso_reviewer"],
+    [organizationA.data.id, "iso_publisher"],
+    [organizationB.data.id, "iso_forecaster_b"],
+    [organizationB.data.id, "iso_reviewer_b"],
+    [organizationB.data.id, "iso_publisher_b"]
+  ]) {
+    const userId = accountRows.find(row => row.username === username).id;
+    const membership = await request(`/api/organizations/${organizationId}/memberships`, {
+      token: admin, method: "POST", body: { user_id: userId }
+    });
+    assert.equal(membership.status, 201, username + " membership should be created");
+    assert.equal((await request(`/api/organization-memberships/${membership.data.id}`, {
+      token: admin, method: "PATCH", body: { status: "active" }
+    })).status, 200, username + " membership should be activated");
+    tenantMemberships.push(membership.data);
+  }
+
+  assert.equal((await request("/api/webhooks/inbox", { token: reviewerB })).status, 403,
+    "reviewer access to the global webhook inbox is disabled once organizations exist without source attribution");
+  const webhookDenied = await request("/api/webhooks/inbox", { token: reviewerB });
+  assert.equal(webhookDenied.data.code, "WEBHOOK_TENANT_ATTRIBUTION_UNCONFIGURED");
+  assert.equal((await request("/api/webhooks/inbox", { token: admin })).status, 200,
+    "platform administrators retain the global inbox for controlled triage");
+  const scopedAudit = await request("/api/audit?limit=500", { token: reviewerB });
+  assert.equal(scopedAudit.status, 200);
+  assert.ok(!(scopedAudit.data.entries || []).some(entry =>
+    entry.action === "organization_created" || entry.action.startsWith("organization_membership_")),
+    "non-admin audit readers cannot enumerate alert-less organization lifecycle events");
+  const scopedAuditCsv = await fetch(base + "/api/audit/export.csv", {
+    headers: { Authorization: "Bearer " + reviewerB }
   });
-  const memberB = await request(`/api/organizations/${organizationB.data.id}/memberships`, {
-    token: admin, method: "POST", body: { user_id: userBId }
-  });
-  assert.equal(memberA.status, 201);
-  assert.equal(memberB.status, 201);
-  assert.equal((await request(`/api/organization-memberships/${memberA.data.id}`, {
-    token: admin, method: "PATCH", body: { status: "active" }
-  })).status, 200);
-  assert.equal((await request(`/api/organization-memberships/${memberB.data.id}`, {
-    token: admin, method: "PATCH", body: { status: "active" }
-  })).status, 200);
+  const scopedAuditCsvText = await scopedAuditCsv.text();
+  assert.equal(scopedAuditCsv.status, 200);
+  assert.doesNotMatch(scopedAuditCsvText, /isolation-org-a|isolation-org-b/);
 
   const publicCreate = await request("/api/alerts", {
     token: forecaster, method: "POST", body: {

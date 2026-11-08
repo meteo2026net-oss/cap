@@ -985,6 +985,10 @@ app.use("/api/alerts",auth,(req,res,next)=>{
  if(idMatch){
   const existing=db.prepare("SELECT id,scope FROM alerts WHERE id=?").get(idMatch[1]);
   if(existing && existing.scope!=="Public") {
+   const adminGrantManagement=req.user.role==="admin" && [
+    `/api/alerts/${idMatch[1]}/owner-organization`,
+    `/api/alerts/${idMatch[1]}/grants`
+   ].includes(normalizedPath) && ["GET","POST"].includes(req.method);
    const readPath=req.method==="GET" && [
     `/api/alerts/${idMatch[1]}`,
     `/api/alerts/${idMatch[1]}/cap.xml`,
@@ -993,7 +997,7 @@ app.use("/api/alerts",auth,(req,res,next)=>{
     `/api/alerts/${idMatch[1]}/versions`,
     `/api/alerts/${idMatch[1]}/timeline`
    ].includes(normalizedPath);
-   if(!readPath || !canAccessAlertForRequest(req,existing,"read"))
+   if(!adminGrantManagement && (!readPath || !canAccessAlertForRequest(req,existing,"read")))
     return res.status(404).json({error:"Alert not found"});
   }
   if(req.method==="PATCH" && req.body?.scope==="Restricted" &&

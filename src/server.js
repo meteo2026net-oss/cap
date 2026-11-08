@@ -515,11 +515,12 @@ const userSchema = z.object({
  password: z.string().min(14).max(200),
  role: z.enum(["admin","forecaster","reviewer","approver","publisher","viewer"])
 });
+const adminAccountMutationLimiter=rateLimit({windowMs:15*60*1000,limit:30,keyGenerator:req=>String(req.user.id),standardHeaders:true,legacyHeaders:false});
 app.get("/api/users",auth,roles("admin"),(_req,res)=>{
  const users=db.prepare("SELECT id,username,role,active,mfa_enabled,must_change_password,created_at,last_login_at FROM users ORDER BY id").all();
  res.json({users:users.map(user=>({...user,mfa_required:mfaRequiredRoles.has(user.role)}))});
 });
-app.post("/api/users",auth,roles("admin"),(req,res)=>{
+app.post("/api/users",auth,roles("admin"),adminAccountMutationLimiter,(req,res)=>{
  try {
   const data=userSchema.parse(req.body);
   const hash=bcrypt.hashSync(data.password,12);
@@ -547,6 +548,8 @@ app.post("/api/users/:id/password-reset",auth,roles("admin"),adminPasswordResetL
    const target=db.prepare("SELECT id,username,active FROM users WHERE id=?").get(id);
    if(!target) return {kind:"missing"};
    if(!target.active) return {kind:"inactive"};
+   // A single administrator must not receive another administrator's temporary credential.
+   if(target.role==="admin") return {kind:"privileged_target"};
    db.prepare("UPDATE users SET password_hash=?,must_change_password=1,token_version=token_version+1,mfa_pending_secret_enc=NULL,mfa_pending_expires_at=NULL WHERE id=?").run(passwordHash,id);
    db.prepare("UPDATE mfa_login_challenges SET consumed_at=CURRENT_TIMESTAMP WHERE user_id=? AND consumed_at IS NULL").run(id);
    audit(req.user.id,null,"user_password_reset",`Issued one-time temporary password for ${target.username}; forced change on next authenticated session`);
@@ -554,13 +557,14 @@ app.post("/api/users/:id/password-reset",auth,roles("admin"),adminPasswordResetL
   }).immediate();
   if(reset.kind==="missing") return res.status(404).json({error:"User not found"});
   if(reset.kind==="inactive") return res.status(409).json({error:"Reactivate the account before resetting its password"});
+  if(reset.kind==="privileged_target") return res.status(403).json({error:"Administrator credentials require an independently verified recovery process; peer-admin password reset is disabled"});
   return res.json({ok:true,id,username:reset.username,temporary_password:temporaryPassword,must_change_password:true,sessions_revoked:true});
  } catch(error) {
   console.error("Administrator password reset failed:",error);
   return res.status(500).json({error:"Unable to reset account password"});
  }
 });
-app.patch("/api/users/:id/role",auth,roles("admin"),(req,res)=>{
+app.patch("/api/users/:id/role",auth,roles("admin"),adminAccountMutationLimiter,(req,res)=>{
  const id=Number(req.params.id);
  if(!Number.isSafeInteger(id) || id<1) return res.status(400).json({error:"Invalid user id"});
  if(id===req.user.id) return res.status(409).json({error:"You cannot change your own role; ask another administrator"});
@@ -585,7 +589,7 @@ app.patch("/api/users/:id/role",auth,roles("admin"),(req,res)=>{
  } catch(error) { res.status(400).json({error:error.message}); }
 });
 
-app.patch("/api/users/:id/status",auth,roles("admin"),(req,res)=>{
+app.patch("/api/users/:id/status",auth,roles("admin"),adminAccountMutationLimiter,(req,res)=>{
  const id=Number(req.params.id);
  if(!Number.isSafeInteger(id) || id<1) return res.status(400).json({error:"Invalid user id"});
  const active=req.body?.active;

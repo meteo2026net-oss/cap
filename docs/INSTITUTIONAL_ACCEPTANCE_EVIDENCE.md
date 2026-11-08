@@ -4,8 +4,8 @@
 > Other documents may link here; they must not mark Gate 8 rows Accepted on their own.  
 > Automated tests, CodeQL, documentation commits, and PR #4 Draft status are **not** acceptance evidence.
 
-**Software verification head (CI green):** `53ee894ba0894bb92017c95f238d0af2290f2b4c`  
-**Documentation alignment head:** `54a002e75242f37ac618f6e4b8e4d71f00632db7`  
+**Software verification head (CI green):** `a5225a61023e1030fdbe8ddd18b8eba79fbcdba8`  
+**Documentation / software completion head:** `a5225a61023e1030fdbe8ddd18b8eba79fbcdba8`  
 **PR #4:** Draft — not an acceptance vehicle  
 **external_adapters_enabled:** false  
 

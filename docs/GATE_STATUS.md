@@ -1,11 +1,12 @@
 # Project Gate Status
 
 **Branch:** `fix/retention-audit-atomicity`  
-**Documentation head:** `54a002e75242f37ac618f6e4b8e4d71f00632db7`  
-**Last head with CAP system checks + CodeQL success (software verification):** `53ee894ba0894bb92017c95f238d0af2290f2b4c`  
+**Documentation head:** `a5225a61023e1030fdbe8ddd18b8eba79fbcdba8`  
+**Last head with CAP system checks + CodeQL success (software verification):** `a5225a61023e1030fdbe8ddd18b8eba79fbcdba8` (also verified lineage including `53ee894`)  
 **PR #4:** open, **Draft**, not merged — https://github.com/meteo2026net-oss/cap/pull/4  
 **external_adapters_enabled:** **false**
 
+**Software completion record:** [`SOFTWARE_COMPLETION.md`](SOFTWARE_COMPLETION.md)  
 **Canonical institutional acceptance register (Gate 8 only):**  
 [`docs/INSTITUTIONAL_ACCEPTANCE_EVIDENCE.md`](INSTITUTIONAL_ACCEPTANCE_EVIDENCE.md)  
 No other document may mark Gate 8 closed. CI, README, and PR state are not acceptance evidence.
@@ -26,7 +27,7 @@ No other document may mark Gate 8 closed. CI, README, and PR state are not accep
 |------|----------------|-------|
 | Pin SHA + review commits | Software-tested | Historical close-out in `PHASE1_BASELINE.md`; branch continues |
 | PR #4 review posture | Software-tested | Draft only; no merge without explicit approval |
-| Full suite on software verification head | Software-tested | CAP system checks + CodeQL success on `53ee894ba0894bb92017c95f238d0af2290f2b4c` |
+| Full suite on software verification head | Software-tested | CAP system checks + CodeQL success on `a5225a61023e1030fdbe8ddd18b8eba79fbcdba8` |
 
 ---
 

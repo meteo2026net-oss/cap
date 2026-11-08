@@ -1388,15 +1388,19 @@ test("API enforces role separation, public-feed filtering and account deactivati
     }
   }
   const blockedScopeChange = await request(`/api/alerts/${actualRow.id}`, {
-    token: forecaster, method: "PATCH", body: { scope: "Restricted" }
+    token: forecaster, method: "PATCH", body: {
+      scope: "Restricted", restriction: "Designated response organizations"
+    }
   });
   assert.equal(blockedScopeChange.status, 403,
     "any Public alert scope promotion must be denied before workflow-state checks");
   const blockedPrivateScopeChange = await request(`/api/alerts/${actualRow.id}`, {
-    token: forecaster, method: "PATCH", body: { scope: "Private" }
+    token: forecaster, method: "PATCH", body: {
+      scope: "Private", addresses: "ops@example.invalid"
+    }
   });
   assert.equal(blockedPrivateScopeChange.status, 403,
-    "Private scope promotion must be denied even without an addresses field");
+    "valid Private scope promotion must be denied until recipient authorization is configured");
 
   const queueWithoutPrivate = await request("/api/review/queue?limit=200", { token: reviewer });
   assert.equal(queueWithoutPrivate.status, 200);

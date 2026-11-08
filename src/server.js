@@ -34,6 +34,11 @@ if (!Number.isSafeInteger(apiRateLimit) || apiRateLimit < 50 || apiRateLimit > 1
  console.error("FATAL: API_RATE_LIMIT must be an integer between 50 and 10000.");
  process.exit(1);
 }
+const adminAccountMutationLimit = Number(process.env.ADMIN_ACCOUNT_MUTATION_LIMIT || 30);
+if (!Number.isSafeInteger(adminAccountMutationLimit) || adminAccountMutationLimit < 1 || adminAccountMutationLimit > 1000) {
+ console.error("FATAL: ADMIN_ACCOUNT_MUTATION_LIMIT must be an integer between 1 and 1000.");
+ process.exit(1);
+}
 const port = Number(process.env.PORT || 8095);
 const secret = process.env.JWT_SECRET;
 if (!secret || secret.length < 32 || /^REPLACE_WITH_/i.test(secret)) {
@@ -515,7 +520,7 @@ const userSchema = z.object({
  password: z.string().min(14).max(200),
  role: z.enum(["admin","forecaster","reviewer","approver","publisher","viewer"])
 });
-const adminAccountMutationLimiter=rateLimit({windowMs:15*60*1000,limit:30,keyGenerator:req=>String(req.user.id),standardHeaders:true,legacyHeaders:false});
+const adminAccountMutationLimiter=rateLimit({windowMs:15*60*1000,limit:adminAccountMutationLimit,keyGenerator:req=>String(req.user.id),standardHeaders:true,legacyHeaders:false});
 app.get("/api/users",auth,roles("admin"),(_req,res)=>{
  const users=db.prepare("SELECT id,username,role,active,mfa_enabled,must_change_password,created_at,last_login_at FROM users ORDER BY id").all();
  res.json({users:users.map(user=>({...user,mfa_required:mfaRequiredRoles.has(user.role)}))});
@@ -1026,16 +1031,18 @@ app.patch("/api/alerts/:id",auth,roles("admin","forecaster"),(req,res)=>{
 });
 app.post("/api/alerts/:id/submit",auth,roles("admin","forecaster"),(req,res)=>{
  const transition=db.transaction(()=>{
-  const a=db.prepare("SELECT id,workflow FROM alerts WHERE id=?").get(req.params.id);
+  const a=db.prepare("SELECT id,workflow,created_by FROM alerts WHERE id=?").get(req.params.id);
   if(!a) return {kind:"missing"};
   if(a.workflow!=="draft") return {kind:"conflict"};
-  const changed=db.prepare("UPDATE alerts SET workflow='pending',updated_at=CURRENT_TIMESTAMP WHERE id=? AND workflow='draft'").run(a.id);
+  if(a.created_by!==req.user.id && req.user.role!=="admin") return {kind:"forbidden"};
+  const changed=db.prepare("UPDATE alerts SET workflow='pending',updated_at=CURRENT_TIMESTAMP WHERE id=? AND workflow='draft' AND (created_by=? OR ?='admin')").run(a.id,req.user.id,req.user.role);
   if(changed.changes!==1) return {kind:"conflict"};
   audit(req.user.id,a.id,"submitted","Sent for review");
   return {kind:"updated"};
  });
  const result=transition.immediate();
  if(result.kind==="missing") return res.status(404).json({error:"Alert not found"});
+ if(result.kind==="forbidden") return res.status(403).json({error:"Only the draft author or an administrator can submit this warning"});
  if(result.kind==="conflict") return res.status(409).json({error:"Only drafts can be submitted"});
  res.json({ok:true,workflow:"pending"});
 });

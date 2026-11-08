@@ -139,3 +139,12 @@ The current CI suite and CodeQL are useful automated checks, but they do not rep
 - [x] Completed a source-and-test role audit for Reviewer, Approver, Forecaster, Publisher, Viewer, and Admin; findings and open policy decisions are in [ROLE_AUTHORIZATION_AUDIT.md](ROLE_AUTHORIZATION_AUDIT.md).
 - [x] Enforced forecaster ownership on draft submission, matching the existing draft-edit ownership check; a second forecaster cannot submit another user's draft.
 - [ ] Institution must approve the distinct reviewer/approver workflow, approval quorum, conflict-of-interest rules, publisher/delivery-operator boundary, and admin override/dual-control policy before operational acceptance.
+
+
+## Recipient authorization gap audit
+
+- [x] Inspected the current SQLite schema, API scope guards, collection/export/review/relations/audit/delivery paths, and existing scope-isolation integration tests.
+- [x] Documented that organization, membership, recipient-group, grant, and grant-audit entities and a central recipient policy are not implemented.
+- [x] Added the required multi-organization IDOR, membership lifecycle, grant revocation, race/TOCTOU, indirect disclosure, and delivery regression plan in [RECIPIENT_AUTHORIZATION_GAP_AUDIT.md](RECIPIENT_AUTHORIZATION_GAP_AUDIT.md).
+- [ ] Institution must approve identity authority, organization hierarchy, membership lifecycle, grant semantics, dual-control policy, and revocation behavior before implementation.
+- [ ] Implement and pass real two-organization cross-tenant IDOR tests before enabling Restricted/Private.

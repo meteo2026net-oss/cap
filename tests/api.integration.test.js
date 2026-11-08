@@ -42,7 +42,8 @@ test("API enforces role separation, public-feed filtering and account deactivati
       MFA_ENCRYPTION_KEY: "a".repeat(64),
       MFA_REQUIRED_ROLES: "admin,approver,publisher",
       API_RATE_LIMIT: "2000",
-      ADMIN_ACCOUNT_MUTATION_LIMIT: "1000"
+      ADMIN_ACCOUNT_MUTATION_LIMIT: "1000",
+      ADMIN_PASSWORD_RESET_LIMIT: "1000"
     },
     stdio: "ignore"
   });

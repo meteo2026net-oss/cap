@@ -5,7 +5,7 @@
 > Automated tests, CodeQL, documentation commits, and PR #4 Draft status are **not** acceptance evidence.
 
 **Software verification head (CI green):** `53ee894ba0894bb92017c95f238d0af2290f2b4c`  
-**Documentation alignment head:** `5d928d955910d29a4936f765704f1c67df7126eb`  
+**Documentation alignment head:** `604e3e167afbcbd2afb6146f86d92e25e623da5a`  
 **PR #4:** Draft — not an acceptance vehicle  
 **external_adapters_enabled:** false  
 

@@ -39,6 +39,16 @@ This matrix records the automated conformance coverage currently present in this
 - Confirm operational policy for Test/Exercise messages, correction/cancellation chains, multilingual publication, and geographic coding with the authorized warning authority.
 - Keep outbound delivery adapters disabled until each external channel has a reviewed provider profile, authentication, timeout, retry, idempotency, and receipt policy.
 
+## Phase 6–8 repository additions (automated)
+
+| Area | Evidence | Status |
+|---|---|---|
+| Operational metrics + retention apply | `src/retention.js`, `tests/retention.test.js`, `tests/retention-audit-atomicity.test.js`, `tests/cap-phase6-ops.integration.test.js`, `npm run retention:apply` / `ops:metrics` | Implemented; deletions and `retention_applied` audit share one SQLite transaction |
+| Performance smoke | `tests/perf/cap-performance.test.js` (validate/build/parse + mixed SQLite reads) | Implemented in CI; not a production capacity certificate |
+| Independent local receivers A/B | `tools/cap-receivers/*`, `tests/cap-phase7-receivers.test.js` | Implemented: namespace enforcement, DTD rejection, Arabic, dedupe, Update-before-Alert ordering |
+| Organization-bound webhook sources | `src/webhook-sources.js`, inbox `organization_id`/`source_key`, `docs/WEBHOOK_ORGANIZATION_BINDING.md` | Implemented; ingress still gated by `CAP_WEBHOOK_INGRESS_ENABLED` and produces manual-review inbox only |
+| External adapters | Health + delivery responses | Explicitly `false`; no outbound transport |
+
 ## Current repository maturity (as of 2026-11-07)
 
 - Core CAP 1.2 XML generation, required/optional field validation, and official XSD positive + negative controls are implemented and exercised in CI.

@@ -1012,7 +1012,8 @@ app.get("/api/alerts/export.csv",auth,(req,res)=>{
  if(severity!==undefined && !["Extreme","Severe","Moderate","Minor","Unknown"].includes(severity)) return res.status(400).json({error:"Invalid severity filter"});
  if(status!==undefined && !["Actual","Exercise","System","Test"].includes(status)) return res.status(400).json({error:"Invalid CAP status filter"});
  if(scope!==undefined && !["Public","Restricted","Private"].includes(scope)) return res.status(400).json({error:"Invalid CAP scope filter"});
- const clauses=["scope='Public'"],params=[];
+ const visibility=alertScopePredicate(req,"alerts","read");
+ const clauses=[visibility.sql],params=[...visibility.params];
  if(workflow!==undefined){clauses.push("workflow=?");params.push(workflow);}
  if(severity!==undefined){clauses.push("severity=?");params.push(severity);}
  if(status!==undefined){clauses.push("status=?");params.push(status);}
@@ -1030,6 +1031,7 @@ app.get("/api/alerts/export.csv",auth,(req,res)=>{
  }).send("\uFEFF"+lines.join("\r\n")+"\r\n");
 });
 app.get("/api/alerts/stats",auth,(req,res)=>{
+ const visibility=alertScopePredicate(req,"alerts","read");
  const stats=db.prepare(`SELECT
   COUNT(*) AS total,
   SUM(CASE WHEN workflow='draft' THEN 1 ELSE 0 END) AS drafts,
@@ -1045,7 +1047,7 @@ app.get("/api/alerts/stats",auth,(req,res)=>{
   SUM(CASE WHEN status='Test' THEN 1 ELSE 0 END) AS test,
   SUM(CASE WHEN status='Exercise' THEN 1 ELSE 0 END) AS exercise,
   SUM(CASE WHEN status='System' THEN 1 ELSE 0 END) AS system
- FROM alerts WHERE scope='Public'`).get();
+ FROM alerts WHERE ${visibility.sql}`).get(...visibility.params);
  const normalized=Object.fromEntries(Object.entries(stats).map(([key,value])=>[key,value??0]));
  res.set("Cache-Control","no-store").json({stats:normalized});
 });
@@ -1068,8 +1070,9 @@ app.get("/api/alerts",auth,(req,res)=>{
  if (severity !== undefined && !["Extreme","Severe","Moderate","Minor","Unknown"].includes(severity)) return res.status(400).json({error:"Invalid severity filter"});
  if (status !== undefined && !["Actual","Exercise","System","Test"].includes(status)) return res.status(400).json({error:"Invalid CAP status filter"});
  if (scope !== undefined && !["Public","Restricted","Private"].includes(scope)) return res.status(400).json({error:"Invalid CAP scope filter"});
- const clauses = ["scope='Public'"];
- const params = [];
+ const visibility=alertScopePredicate(req,"alerts","read");
+ const clauses = [visibility.sql];
+ const params = [...visibility.params];
  if (workflow !== undefined) { clauses.push("workflow=?"); params.push(workflow); }
  if (severity !== undefined) { clauses.push("severity=?"); params.push(severity); }
  if (status !== undefined) { clauses.push("status=?"); params.push(status); }
@@ -1090,13 +1093,14 @@ app.get("/api/review/queue",auth,roles("admin","reviewer","approver"),(req,res)=
  const severity=req.query.severity;
  if(severity!==undefined&&!["Extreme","Severe","Moderate","Minor","Unknown"].includes(severity))
   return res.status(400).json({error:"Invalid severity filter"});
- const params=[];
+ const visibility=alertScopePredicate(req,"a","read");
+ const params=[...visibility.params];
  const severityClause=severity===undefined?"":" AND a.severity=?";
  if(severity!==undefined)params.push(severity);
  const rows=db.prepare(`SELECT a.id,a.identifier,a.event,a.headline,a.area_desc,a.urgency,a.severity,a.certainty,a.status,a.scope,a.sent,a.expires,a.created_at,a.updated_at,a.created_by,u.username AS creator,
   CAST(MAX(0,(julianday('now')-julianday(a.created_at))*86400) AS INTEGER) AS waiting_seconds
   FROM alerts a LEFT JOIN users u ON u.id=a.created_by
-  WHERE a.workflow='pending' AND a.scope='Public'${severityClause}
+  WHERE a.workflow='pending' AND ${visibility.sql}${severityClause}
   ORDER BY CASE a.severity WHEN 'Extreme' THEN 0 WHEN 'Severe' THEN 1 WHEN 'Moderate' THEN 2 WHEN 'Minor' THEN 3 ELSE 4 END,
   a.created_at ASC,a.id ASC LIMIT ?`).all(...params,Number(limitRaw));
  res.set("Cache-Control","no-store").json({queue:rows,count:rows.length,limit:Number(limitRaw)});

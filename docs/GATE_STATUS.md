@@ -51,6 +51,9 @@ No other document may mark Gate 8 closed. CI, README, and PR state are not accep
 
 ## Gate 8 — Institutional acceptance (OPEN — no Go-Live)
 
+Phase 5 pack: [`PHASE5_FINAL_CLOSURE.md`](PHASE5_FINAL_CLOSURE.md) — current process decision **NO-GO** until register rows 1–14 are Accepted with real evidence.
+
+
 Tracked exclusively in [`INSTITUTIONAL_ACCEPTANCE_EVIDENCE.md`](INSTITUTIONAL_ACCEPTANCE_EVIDENCE.md).  
 All register rows are **Open** until the owning institution supplies Evidence ID, Date, and Approver.
 

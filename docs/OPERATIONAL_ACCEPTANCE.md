@@ -3,7 +3,7 @@
 > This document separates **software behaviors already exercised in automated tests** from **institutional go-live decisions** that this repository cannot complete on its own.
 > External delivery adapters remain disabled (`external_adapters_enabled: false`). Do not treat a green CI run as authority to issue public warnings.
 >
-> Latest automated verification head on `fix/retention-audit-atomicity`: `28fee082a0a6` (CAP system checks + CodeQL success).
+> Latest automated verification head on `fix/retention-audit-atomicity`: `53ee894ba0894bb92017c95f238d0af2290f2b4c` (CAP system checks + CodeQL success). Gate 8 institutional items remain Open; CI does not close them.
 
 ## A. Verified in automated tests (local / CI)
 

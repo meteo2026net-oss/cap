@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import Database from "better-sqlite3";
 import {
+  alertRecipientGrantSql,
   assignAlertOrganizationOwner,
   createAlertRecipientGrant,
   createOrganization,
@@ -244,6 +245,13 @@ test("alert grants bind direct users, organizations, and groups to an alert owne
     assert.equal(hasActiveAlertRecipientGrant(database,{
       alertId:100,userId:2,organizationId:owner,action:"deliver"
     }),false,"organization grants do not extend to a same-role user in the owning organization");
+    const deliverPredicate=alertRecipientGrantSql("a","deliver");
+    assert.equal(Boolean(database.prepare(`SELECT 1 FROM alerts a WHERE a.id=100 AND ${deliverPredicate}`).get(3,recipient)),true,
+      "the SQL predicate used by list/export/outbox queries recognizes an active organization grant");
+    assert.equal(Boolean(database.prepare(`SELECT 1 FROM alerts a WHERE a.id=100 AND ${deliverPredicate}`).get(2,owner)),false,
+      "the SQL predicate denies a same-role user from the owning organization");
+    assert.equal(Boolean(database.prepare(`SELECT 1 FROM alerts a WHERE a.id=100 AND ${deliverPredicate}`).get(2,recipient)),false,
+      "the SQL predicate denies a user without active membership in the recipient organization");
 
     const groupGrant=createAlertRecipientGrant(database,{
       alertId:100,ownerOrganizationId:owner,recipientType:"group",
@@ -256,6 +264,9 @@ test("alert grants bind direct users, organizations, and groups to an alert owne
     assert.equal(hasActiveAlertRecipientGrant(database,{
       alertId:100,userId:2,organizationId:recipient,action:"read"
     }),false,"group grants do not extend to a same-role user in the owning organization");
+    const readPredicate=alertRecipientGrantSql("a","read");
+    assert.equal(Boolean(database.prepare(`SELECT 1 FROM alerts a WHERE a.id=100 AND ${readPredicate}`).get(3,recipient)),true,
+      "the correlated read predicate recognizes active group membership");
 
     transitionAlertRecipientGrant(database,{grantId:direct,nextStatus:"revoked",actorUserId:1});
     assert.equal(database.prepare("SELECT status FROM alert_recipient_grants WHERE id=?").get(direct).status,"revoked");

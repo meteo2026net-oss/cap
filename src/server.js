@@ -1777,7 +1777,7 @@ app.get("/api/public/alerts/:identifier/cap.xml", (req,res)=>{
  }
 });
 // Chain verification is platform-level integrity metadata, not an event-read bypass.
-app.get("/api/audit/verify",auth,roles("admin"),(_req,res)=>{
+app.get("/api/audit/verify",auth,roles("admin","reviewer","approver"),(_req,res)=>{
  res.set("Cache-Control","no-store");
  res.set("Pragma","no-cache");
  res.json(verifyAuditChain(db));

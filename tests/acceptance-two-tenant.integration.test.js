@@ -325,35 +325,38 @@ test("acceptance pack: two-tenant webhook isolation and public test lifecycle", 
   assert.equal(row.scope || "Public", "Public", "scope remains Public");
 
   // Audit authorization: identical-role recipient users differ only by an explicit active grant.
-  const restrictedDraft = await request("/api/alerts", {
-    method: "POST", token: admin,
-    body: {
-      event: "Restricted audit isolation test",
-      headline: "Restricted audit event must be grant-scoped",
-      description: "Synthetic cross-organization audit authorization test",
-      area_desc: "Isolated test area", circle: "33.5,36.2 8",
-      category: "Met", urgency: "Future", severity: "Moderate",
-      certainty: "Possible", status: "Test", scope: "Restricted",
-    },
-  });
-  assert.equal(restrictedDraft.status, 201, "restricted audit fixture");
-  const restrictedAlertId = restrictedDraft.data.id;
+  const auditDb = new Database(path.join(cwd, "storage", "cap.sqlite"));
+  let reviewerBId;
+  let expiredReviewerId;
+  let restrictedAlertId;
+  try {
+    reviewerBId = auditDb.prepare("SELECT id FROM users WHERE username=?").get("acc_reviewer_b").id;
+    expiredReviewerId = auditDb.prepare("SELECT id FROM users WHERE username=?").get("acc_reviewer_expired").id;
+    const insertRestricted = auditDb.prepare(`
+      INSERT INTO alerts
+        (identifier,sender,sent,status,msg_type,scope,restriction,addresses,event,category,
+         urgency,severity,certainty,headline,description,area_desc,workflow,references_text)
+      VALUES (?,?,?,'Test','Alert',?,?,?,?,'Met','Expected','Moderate','Likely',?,?,?, ?,?)
+    `);
+    restrictedAlertId = Number(insertRestricted.run(
+      "restricted-audit-" + Date.now(), "audit-fixture@example.test", new Date().toISOString(),
+      "Restricted", "Authorized recipients only", null, "Restricted audit event",
+      "Restricted audit fixture headline", "RESTRICTED_AUDIT_DESCRIPTION", "Restricted test area",
+      "pending", ""
+    ).lastInsertRowid);
+    auditDb.prepare(`UPDATE organization_memberships SET expires_at=?
+      WHERE user_id=? AND organization_id=? AND status='active'`)
+      .run(new Date(Date.now() - 60_000).toISOString(), expiredReviewerId, orgB.data.id);
+    appendAuditLog(auditDb, {
+      alertId: restrictedAlertId, action: "restricted_audit_fixture", details: "RESTRICTED_AUDIT_MARKER"
+    });
+    appendAuditLog(auditDb, { action: "platform_only_audit_probe", details: "must not appear in tenant audit views" });
+  } finally { auditDb.close(); }
+
   const ownerAssigned = await request(`/api/alerts/${restrictedAlertId}/owner-organization`, {
     method: "POST", token: admin, body: { organization_id: orgA.data.id },
   });
   assert.equal(ownerAssigned.status, 200, "assign restricted alert owner");
-
-  const auditDb = new Database(path.join(cwd, "storage", "cap.sqlite"));
-  let reviewerBId;
-  let expiredReviewerId;
-  try {
-    reviewerBId = auditDb.prepare("SELECT id FROM users WHERE username=?").get("acc_reviewer_b").id;
-    expiredReviewerId = auditDb.prepare("SELECT id FROM users WHERE username=?").get("acc_reviewer_expired").id;
-    auditDb.prepare(`UPDATE organization_memberships SET expires_at=?
-      WHERE user_id=? AND organization_id=? AND status='active'`)
-      .run(new Date(Date.now() - 60_000).toISOString(), expiredReviewerId, orgB.data.id);
-    appendAuditLog(auditDb, { action: "platform_only_audit_probe", details: "must not appear in tenant audit views" });
-  } finally { auditDb.close(); }
 
   const grantCreated = await request(`/api/alerts/${restrictedAlertId}/grants`, {
     method: "POST", token: admin,
@@ -437,8 +440,8 @@ test("acceptance pack: two-tenant webhook isolation and public test lifecycle", 
   const authorizedCsv = await authorizedCsvResponse.text();
   assert.ok(authorizedCsv.split("\r\n").some(line => line.split(",")[3] === String(restrictedAlertId)),
     "authorized CSV export must include granted alert-linked audit rows");
-  assert.equal((await request("/api/audit/verify", { token: reviewerB })).status, 403,
-    "audit-chain verification metadata is platform-admin only");
+  assert.equal((await request("/api/audit/verify", { token: reviewerB })).status, 200,
+    "reviewers may inspect chain-integrity metadata without receiving alert-linked event rows");
   assert.equal((await request("/api/audit/verify", { token: admin })).status, 200,
     "platform administrator can verify chain integrity without event-read bypass");
 

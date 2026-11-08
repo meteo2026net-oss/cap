@@ -260,7 +260,7 @@ This addendum supersedes historical statements above that claim organization, me
 - Alert ownership and direct, organization, and group recipient grants exist, with read and deliver actions and current membership/grant validity checks.
 - The Webhook inbox uses shared current-membership checks, including start and expiry windows.
 - Audit list and CSV export use a shared SQL predicate that filters alert-linked events before search, pagination, and export. Public-linked events remain visible. Restricted/Private-linked events require the feature flag, a current membership in the recipient organization, and a matching active read grant. Admin role alone is not a bypass.
-- Alert-less audit events are platform-only and visible to the platform administrator route role, not ordinary tenant roles. Alert-linked non-Public events still require a matching recipient grant even for Admin. Chain verification metadata is limited to the platform administrator route role.
+- Alert-less audit events are platform-only and visible to the platform administrator route role, not ordinary tenant roles. Alert-linked non-Public events still require a matching recipient grant even for Admin. Chain verification metadata is limited to admin, reviewer, and approver roles and does not expose event rows.
 - Two-tenant integration coverage exercises valid direct-grant visibility, same-role no-grant denial, owner-side no-grant denial, future and expired membership denial, admin no-bypass, CSV parity, and alert-less platform event exclusion.
 
 ### Remaining gaps and boundaries

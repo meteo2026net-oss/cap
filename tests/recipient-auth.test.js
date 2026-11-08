@@ -103,16 +103,16 @@ test("membership expiry is enforced at authorization time and by expiry sweep", 
   const database = fixture();
   try {
     const org = createOrganization(database, { slug: "expiry", name: "Expiry Org", actorUserId: 1 });
-    const expiresAt = new Date(Date.now() + 250);
+    const expiresAt = new Date(Date.now() + 1500);
     const membershipId = requestOrganizationMembership(database, {
       organizationId: org, userId: 2, actorUserId: 1,
       startsAt: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
       expiresAt: expiresAt.toISOString()
     });
     transitionOrganizationMembership(database, { membershipId, nextStatus: "active", actorUserId: 1 });
-    assert.equal(hasActiveOrganizationMembership(database, 2, org, new Date(Date.now() + 100)), true);
+    assert.equal(hasActiveOrganizationMembership(database, 2, org, new Date(Date.now() + 500)), true);
     assert.equal(hasActiveOrganizationMembership(database, 2, org, expiresAt), false);
-    await new Promise(resolve => setTimeout(resolve, 350));
+    await new Promise(resolve => setTimeout(resolve, 1600));
     assert.equal(expireOrganizationMemberships(database, { at: expiresAt }), 1);
     assert.equal(database.prepare("SELECT status FROM organization_memberships WHERE id=?").get(membershipId).status, "expired");
   } finally {
@@ -289,7 +289,7 @@ test("grant expiry is immediate at authorization time and terminal after expiry 
     transitionOrganizationMembership(database,{membershipId:membership,nextStatus:"active",actorUserId:1});
     database.prepare("INSERT INTO alerts(id) VALUES(101)").run();
     assignAlertOrganizationOwner(database,{alertId:101,organizationId:owner,actorUserId:1});
-    const expiresAt=new Date(Date.now()+250);
+    const expiresAt=new Date(Date.now()+1500);
     const grant=createAlertRecipientGrant(database,{
       alertId:101,ownerOrganizationId:owner,recipientType:"user",recipientUserId:3,
       recipientOrganizationId:recipient,action:"read",actorUserId:1,
@@ -297,12 +297,12 @@ test("grant expiry is immediate at authorization time and terminal after expiry 
     });
     transitionAlertRecipientGrant(database,{grantId:grant,nextStatus:"active",actorUserId:1});
     assert.equal(hasActiveAlertRecipientGrant(database,{
-      alertId:101,userId:3,organizationId:recipient,at:new Date(Date.now()+100)
+      alertId:101,userId:3,organizationId:recipient,at:new Date(Date.now()+500)
     }),true);
     assert.equal(hasActiveAlertRecipientGrant(database,{
       alertId:101,userId:3,organizationId:recipient,at:expiresAt
     }),false);
-    await new Promise(resolve=>setTimeout(resolve,350));
+    await new Promise(resolve=>setTimeout(resolve,1600));
     assert.equal(expireAlertRecipientGrants(database,{at:expiresAt}),1);
     assert.equal(database.prepare("SELECT status FROM alert_recipient_grants WHERE id=?").get(grant).status,"expired");
   }finally{database.close();}

@@ -65,3 +65,35 @@ The current administrator model is single-actor for account provisioning and rec
 - Self-reset and self-role-change are blocked, and the last active administrator cannot be demoted or deactivated, but these controls do not prevent one administrator from changing another administrator's credentials or role.
 
 Before operational use, the institution should decide whether creation/promotion of administrators and resets of privileged accounts require dual authorization, out-of-band identity verification, notification to the target, a controlled password handoff, and explicit audit events. No policy was assumed or enforcement change made in this review.
+
+
+## Endpoint-level role matrix observed in `src/server.js`
+
+This matrix describes current route guards, not a recommendation or institutional approval.
+
+| API capability | Admin | Forecaster | Reviewer | Approver | Publisher | Viewer |
+|---|---:|---:|---:|---:|---:|---:|
+| Read authenticated Public alert list/detail/XML, stats, CSV | Yes | Yes | Yes | Yes | Yes | Yes |
+| Create, derive, edit, submit alert | Yes | Yes | No | No | No | No |
+| Read review queue/history, versions, timeline; add review notes | Yes | No | Yes | Yes | No | No |
+| Return or approve an alert | Yes | No | Yes | Yes | No | No |
+| Publish an approved alert | Yes | No | No | No | Yes | No |
+| Read/review inbound webhook inbox | Yes | No | Yes | No | No | No |
+| Read/process internal delivery outbox and retries | Yes | No | No | No | Yes | No |
+| Read operational health metrics | Yes | No | No | No | Yes | No |
+| Read/export/verify audit history | Yes | No | Yes | Yes | No | No |
+| List/create accounts; reset passwords; change roles/status | Yes | No | No | No | No | No |
+| Apply operational retention | Yes | No | No | No | No | No |
+
+Important observations:
+- Reviewer and approver are identical for alert review/return/approval and audit routes; only reviewer (not approver) can review inbound webhook items.
+- Admin is included in nearly every operational role guard, so the application does not enforce least privilege or separation of duties for administrators.
+- Forecaster, reviewer, approver, publisher, and viewer all receive the same broad authenticated Public alert read capability; none receives a narrower organization or jurisdiction filter.
+- Role authorization and scope authorization are separate concerns. Passing a route-role check does not imply a recipient entitlement, and this matrix does not grant Restricted/Private access.
+
+## Account administration safeguards and remaining exposure
+- Account creation and password reset write their audit events in the same immediate SQLite transaction as the account mutation. Role and activation changes also use immediate transactions and record old/new role or activation state.
+- Last-active-admin checks run inside the immediate transaction, preventing concurrent demotion/deactivation from removing the final active administrator.
+- Admin password reset is rate-limited to five requests per 15 minutes per limiter key and cannot target the requesting administrator. However, it can target another administrator and returns the generated temporary password to the requesting administrator. It preserves the target's existing enabled MFA factor but does not require dual authorization or notify the target through a verified independent channel.
+- Account creation and role/status mutation routes rely on the admin role guard and the global API limiter; they do not have a separate operation-specific rate limiter. Review whether privileged account changes need an additional approval/notification control.
+- The deployment example leaves `MFA_REQUIRED_ROLES` blank. The code therefore does not require MFA for any role unless the operator configures it. This is a deployment control, not a guaranteed secure default.

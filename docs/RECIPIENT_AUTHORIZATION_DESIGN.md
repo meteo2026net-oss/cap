@@ -153,3 +153,15 @@ Provisional behavior:
 - The expiry sweep is a controlled operation; clients cannot directly set a membership to expired.
 
 Important boundary: this phase does **not** yet attach alerts to owning organizations, create recipient groups or grants, or authorize Restricted/Private reads. It does not establish tenant isolation for alert data by itself. Restricted/Private remain blocked, Public-only API and delivery filters remain in force, and external adapters remain disabled. The same-role cross-organization alert IDOR acceptance gate is not complete until the grant and alert-owner phases are implemented.
+
+
+### Phase 2 implementation snapshot — organization-scoped recipient groups
+
+The branch now also includes:
+- `recipient_groups`, with group identity scoped by organization and a unique group slug per organization.
+- `recipient_group_memberships`, bound by composite foreign keys to both the owning group and one specific organization-membership period. A group cannot contain a user through a different organization's membership.
+- Group membership lifecycle and immutable event history, with active-administrator mutation guards, terminal revocation/expiry, and request-time checks of the parent organization membership.
+- Administrator-only group and group-membership endpoints.
+- Unit and API integration coverage for identical group slugs in separate organizations, cross-organization membership substitution denial, and parent membership revocation.
+
+The group layer is still not an alert authorization policy. No alert grants or owner-organization links are active yet; the Public-only containment remains unchanged.

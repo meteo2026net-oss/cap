@@ -7,6 +7,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createWebhookSignature } from "../src/webhook-signature.js";
+import Database from "better-sqlite3";
+import { appendAuditLog } from "../src/audit.js";
 
 const serverEntry = fileURLToPath(new URL("../src/server.js", import.meta.url));
 
@@ -41,6 +43,7 @@ test("acceptance pack: two-tenant webhook isolation and public test lifecycle", 
       MFA_ENCRYPTION_KEY: "e".repeat(64),
       MFA_REQUIRED_ROLES: "",
       CAP_WEBHOOK_INGRESS_ENABLED: "true",
+      CAP_NON_PUBLIC_RECIPIENT_ACCESS_ENABLED: "true",
       CAP_WEBHOOK_SECRET: "acceptance-pack-legacy-secret-at-least-32-bytes",
       API_RATE_LIMIT: "5000",
       ADMIN_ACCOUNT_MUTATION_LIMIT: "1000",
@@ -155,6 +158,8 @@ test("acceptance pack: two-tenant webhook isolation and public test lifecycle", 
 
   const reviewerA = await createActiveMember("acc_reviewer_a", "reviewer", orgA.data.id);
   const reviewerB = await createActiveMember("acc_reviewer_b", "reviewer", orgB.data.id);
+  const reviewerBNoGrant = await createActiveMember("acc_reviewer_b_no_grant", "reviewer", orgB.data.id);
+  const reviewerExpired = await createActiveMember("acc_reviewer_expired", "reviewer", orgB.data.id);
   const forecasterA = await createActiveMember("acc_forecaster_a", "forecaster", orgA.data.id);
   const publisherA = await createActiveMember("acc_publisher_a", "publisher", orgA.data.id);
   const reviewerFuture = await createActiveMember(
@@ -318,6 +323,91 @@ test("acceptance pack: two-tenant webhook isolation and public test lifecycle", 
   assert.equal(row.workflow, "published", "workflow must be published after publish");
   assert.equal(row.status, "Test", "CAP status remains Test for acceptance slice");
   assert.equal(row.scope || "Public", "Public", "scope remains Public");
+
+  // Audit authorization: identical-role recipient users differ only by an explicit active grant.
+  const restrictedDraft = await request("/api/alerts", {
+    method: "POST", token: admin,
+    body: {
+      event: "Restricted audit isolation test",
+      headline: "Restricted audit event must be grant-scoped",
+      description: "Synthetic cross-organization audit authorization test",
+      area_desc: "Isolated test area", circle: "33.5,36.2 8",
+      category: "Met", urgency: "Future", severity: "Moderate",
+      certainty: "Possible", status: "Test", scope: "Restricted",
+    },
+  });
+  assert.equal(restrictedDraft.status, 201, "restricted audit fixture");
+  const restrictedAlertId = restrictedDraft.data.id;
+  const ownerAssigned = await request(`/api/alerts/${restrictedAlertId}/owner-organization`, {
+    method: "POST", token: admin, body: { organization_id: orgA.data.id },
+  });
+  assert.equal(ownerAssigned.status, 200, "assign restricted alert owner");
+
+  const auditDb = new Database(path.join(cwd, "storage", "cap.sqlite"));
+  let reviewerBId;
+  let expiredReviewerId;
+  try {
+    reviewerBId = auditDb.prepare("SELECT id FROM users WHERE username=?").get("acc_reviewer_b").id;
+    expiredReviewerId = auditDb.prepare("SELECT id FROM users WHERE username=?").get("acc_reviewer_expired").id;
+    auditDb.prepare(`UPDATE organization_memberships SET expires_at=?
+      WHERE user_id=? AND organization_id=? AND status='active'`)
+      .run(new Date(Date.now() - 60_000).toISOString(), expiredReviewerId, orgB.data.id);
+    appendAuditLog(auditDb, { action: "platform_only_audit_probe", details: "must not appear in tenant audit views" });
+  } finally { auditDb.close(); }
+
+  const grantCreated = await request(`/api/alerts/${restrictedAlertId}/grants`, {
+    method: "POST", token: admin,
+    body: {
+      owner_organization_id: orgA.data.id, recipient_type: "user",
+      recipient_user_id: reviewerBId, recipient_organization_id: orgB.data.id, action: "read",
+    },
+  });
+  assert.equal(grantCreated.status, 201, "create direct audit-read grant");
+  const grantActivated = await request(`/api/alert-recipient-grants/${grantCreated.data.id}`, {
+    method: "PATCH", token: admin, body: { status: "active" },
+  });
+  assert.equal(grantActivated.status, 200, "activate direct audit-read grant");
+
+  const authorizedAudit = await request(`/api/audit?organization_id=${orgB.data.id}`, { token: reviewerB });
+  assert.equal(authorizedAudit.status, 200);
+  assert.ok(authorizedAudit.data.entries.some(entry => entry.alert_id === restrictedAlertId),
+    "valid direct recipient grant must expose linked audit events");
+
+  for (const [label, token, organizationId] of [
+    ["same-role peer without grant", reviewerBNoGrant, orgB.data.id],
+    ["alert owner organization without recipient grant", reviewerA, orgA.data.id],
+    ["expired membership", reviewerExpired, orgB.data.id],
+    ["future membership", reviewerFuture, orgA.data.id],
+    ["administrator without recipient grant", admin, undefined],
+  ]) {
+    const suffix = organizationId ? `?organization_id=${organizationId}` : "";
+    const listing = await request("/api/audit" + suffix, { token });
+    assert.equal(listing.status, 200, label + " audit list");
+    assert.equal(listing.data.entries.some(entry => entry.alert_id === restrictedAlertId), false,
+      label + " must not see restricted alert-linked audit events");
+    assert.equal(listing.data.entries.some(entry => entry.details === "must not appear in tenant audit views"), false,
+      label + " must not see alert-less platform audit events");
+    const csvResponse = await fetch(base + "/api/audit/export.csv" + suffix, {
+      headers: { Authorization: "Bearer " + token },
+    });
+    assert.equal(csvResponse.status, 200, label + " audit CSV export");
+    const csv = await csvResponse.text();
+    assert.equal(csv.split("\r\n").some(line => line.split(",")[3] === String(restrictedAlertId)), false,
+      label + " CSV must not disclose restricted alert-linked audit rows");
+    assert.equal(csv.includes("must not appear in tenant audit views"), false,
+      label + " CSV must not disclose alert-less platform audit details");
+  }
+  const authorizedCsvResponse = await fetch(base + `/api/audit/export.csv?organization_id=${orgB.data.id}`, {
+    headers: { Authorization: "Bearer " + reviewerB },
+  });
+  assert.equal(authorizedCsvResponse.status, 200);
+  const authorizedCsv = await authorizedCsvResponse.text();
+  assert.ok(authorizedCsv.split("\r\n").some(line => line.split(",")[3] === String(restrictedAlertId)),
+    "authorized CSV export must include granted alert-linked audit rows");
+  assert.equal((await request("/api/audit/verify", { token: reviewerB })).status, 403,
+    "audit-chain verification metadata is platform-admin only");
+  assert.equal((await request("/api/audit/verify", { token: admin })).status, 200,
+    "platform administrator can verify chain integrity without event-read bypass");
 
   // Public feed must not list Test messages as operational Actual
   const publicFeed = await request("/api/public/alerts");

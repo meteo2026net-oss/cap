@@ -267,12 +267,19 @@ function webhookInboxAccess(req,res,next) {
  return next();
 }
 
-function auditReadPredicate(user) {
- const organizationsConfigured=Boolean(db.prepare("SELECT 1 FROM organizations LIMIT 1").get());
- if(user.role!=="admin" && organizationsConfigured) {
-  return "(l.alert_id IS NOT NULL AND EXISTS (SELECT 1 FROM alerts scoped_alert WHERE scoped_alert.id=l.alert_id AND scoped_alert.scope='Public'))";
- }
- return "((l.alert_id IS NOT NULL AND EXISTS (SELECT 1 FROM alerts scoped_alert WHERE scoped_alert.id=l.alert_id AND scoped_alert.scope='Public')) OR (l.alert_id IS NULL AND l.action<>'retention_applied'))";
+function auditReadPredicate(req) {
+ const organizationId=recipientOrganizationContext(req);
+ const publicOnly="(l.alert_id IS NOT NULL AND EXISTS (SELECT 1 FROM alerts scoped_alert WHERE scoped_alert.id=l.alert_id AND scoped_alert.scope='Public'))";
+ if(!nonPublicRecipientAccessEnabled || !organizationId) return {sql:publicOnly,params:[]};
+ return {
+  sql:`(l.alert_id IS NOT NULL AND EXISTS (
+   SELECT 1 FROM alerts scoped_alert
+   WHERE scoped_alert.id=l.alert_id
+     AND (scoped_alert.scope='Public' OR
+       (scoped_alert.scope IN ('Restricted','Private') AND ${alertRecipientGrantSql("scoped_alert","read")}))
+  ))`,
+  params:[req.user.id,organizationId]
+ };
 }
 
 function audit(userId, alertId, action, details="") {
@@ -1763,7 +1770,8 @@ app.get("/api/public/alerts/:identifier/cap.xml", (req,res)=>{
   res.status(500).json({error:"Unable to generate the public CAP XML message"});
  }
 });
-app.get("/api/audit/verify",auth,roles("admin","reviewer","approver"),(_req,res)=>{
+// Chain verification is platform-level integrity metadata, not an event-read bypass.
+app.get("/api/audit/verify",auth,roles("admin"),(_req,res)=>{
  res.set("Cache-Control","no-store");
  res.set("Pragma","no-cache");
  res.json(verifyAuditChain(db));
@@ -1772,7 +1780,7 @@ app.get("/api/audit/verify",auth,roles("admin","reviewer","approver"),(_req,res)
 app.get("/api/audit/export.csv",auth,roles("admin","reviewer","approver"),(req,res)=>{
  const action=typeof req.query.action==="string"?req.query.action.trim().slice(0,80):"";
  const search=typeof req.query.q==="string"?req.query.q.trim().slice(0,160):"";
- const clauses=[auditReadPredicate(req.user)],params=[];
+ const auditScope=auditReadPredicate(req),clauses=[auditScope.sql],params=[...auditScope.params];
  if(action){clauses.push("l.action=?");params.push(action);}
  if(search){clauses.push("(instr(lower(COALESCE(l.action,'')),lower(?))>0 OR instr(lower(COALESCE(l.details,'')),lower(?))>0 OR instr(lower(COALESCE(u.username,'')),lower(?))>0)");params.push(search,search,search);}
  const where=clauses.length?"WHERE "+clauses.join(" AND "):"";
@@ -1798,7 +1806,7 @@ app.get("/api/audit",auth,roles("admin","reviewer","approver"),(req,res)=>{
  }
  const action=typeof req.query.action==="string"?req.query.action.trim().slice(0,80):"";
  const search=typeof req.query.q==="string"?req.query.q.trim().slice(0,160):"";
- const clauses=[auditReadPredicate(req.user)],params=[];
+ const auditScope=auditReadPredicate(req),clauses=[auditScope.sql],params=[...auditScope.params];
  if(action){clauses.push("l.action=?");params.push(action);}
  if(search){clauses.push("(instr(lower(COALESCE(l.action,char(0))),lower(?))>0 OR instr(lower(COALESCE(l.details,char(0))),lower(?))>0 OR instr(lower(COALESCE(u.username,char(0))),lower(?))>0)");params.push(search,search,search);}
  if(beforeId!==null){clauses.push("l.id<?");params.push(beforeId);}

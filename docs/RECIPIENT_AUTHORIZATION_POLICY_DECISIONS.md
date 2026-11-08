@@ -1,7 +1,7 @@
 # Recipient Authorization — Institutional Policy Decisions
 
 Status: **decision register only; awaiting institutional approval**.
-Implementation status: **no schema or runtime changes authorized by this document**.
+Implementation status: **technical recipient mechanisms are present in the repository; institutional policy approval remains outstanding**. This register is not authorization to enable Restricted/Private production access.
 Security baseline: Public-only behavior remains in force; Restricted/Private remain unavailable through recipient workflows; external delivery adapters remain disabled.
 
 This register is the prerequisite to implementing the agreed technical sequence:
@@ -12,7 +12,7 @@ This register is the prerequisite to implementing the agreed technical sequence:
 5. Central enforcement across API and delivery.
 6. Cross-organization IDOR tests using users with identical workflow roles.
 
-The repository currently has user accounts and workflow roles, but no organization, membership, recipient-group, or grant entities. Existing CAP `restriction` and `addresses` fields are not identity or authorization evidence.
+The repository now contains organization, membership, recipient-group, grant, and central authorization mechanisms. Existing CAP `restriction` and `addresses` fields remain message data, not identity or authorization evidence. The implementation status and remaining institutional controls are recorded below.
 
 ## Decision register
 
@@ -103,3 +103,16 @@ No policy decisions are approved by this file. Record each decision with:
 - linked policy or governance reference.
 
 Until the required decisions are approved, implementation remains design-only and Public-only containment remains the release boundary.
+
+## Technical implementation status — audit authorization (2026-11-08)
+
+The policy decisions above remain **awaiting institutional approval**. Technical mechanisms do not approve P-01–P-25, authorize production Restricted/Private use, or close Gate 8.
+
+- Organization, membership, recipient-group, group-membership, alert-owner, and recipient-grant schema and runtime mechanisms exist. They remain fail-closed by default; CAP_NON_PUBLIC_RECIPIENT_ACCESS_ENABLED is disabled unless explicitly configured.
+- Audit list (GET /api/audit) and CSV export (GET /api/audit/export.csv) apply one SQL visibility predicate before search, ordering, pagination, row limits, and export serialization.
+- Alert-linked audit rows are visible when the linked alert is Public, or when non-Public recipient access is explicitly enabled and the requester has a current organization membership plus an active, approved, in-window read grant matching the alert owner. Workflow role does not replace the grant. Admin role does not bypass this check.
+- Alert-less audit events are withheld from tenant list/export views. No separately approved tenant-facing platform-operator role exists; chain-verification metadata (GET /api/audit/verify) is limited to the platform administrator route role and exposes no event rows.
+- Integration tests cover a direct grant, same-role peer without grant, owner-side user without recipient grant, future and expired memberships, administrator without recipient grant, CSV parity, and platform-only event exclusion.
+- Existing grant and membership lifecycle unit tests cover grant expiry and membership time windows. Automated checks are technical regression evidence only, not institutional acceptance.
+
+Release boundary remains unchanged: do not enable non-Public access in production, do not activate external adapters, and do not claim Restricted/Private operational readiness until institutional decisions, independent security review, and Gate 8 evidence are complete.

@@ -1,13 +1,13 @@
 # Recipient Authorization Gap Audit — CAP 1.2
 
-Audit target: PR #4 current head `1f7029b4487ddb929a0edb8083136a87bf91c165` (source review completed after the recipient-gap audit documentation commit).
+Historical audit target: PR #4 head `1f7029b4487ddb929a0edb8083136a87bf91c165`. Current technical status is superseded by the addendum at the end of this document (reviewed against PR #4 head `955a713be17748e2622db5d87822750186f1a572`).
 Review type: source/schema/test inspection. No recipient schema, membership data, grants, account records, or deployment settings were changed.
 
 ## 1. Executive conclusion
 
-Status: Public-only containment remains active.
+Status: Public-only containment remains the production default; recipient authorization mechanisms are implemented but gated pending institutional approval.
 
-The repository does **not** currently implement a multi-organization recipient authorization model. The existing protections are a scope boundary, not tenant isolation or recipient grants:
+At the historical audit target, the repository did **not** implement a multi-organization recipient authorization model. The implementation has since evolved; consult the current-status addendum before relying on historical findings below.
 
 - The `users` table has account identity and workflow role, but no organization or tenant membership relation.
 - The `alerts` table has CAP `scope`, creator and approver identities, but no owning organization, tenant, or recipient-set relation.
@@ -248,3 +248,28 @@ The flag remains disabled by default because this is a controlled enforcement pa
 - Add independent review/approver role coverage and test revoked/expired membership and grant behavior against every collection and mutation route.
 - Define tenant-aware worker identity and job claim/dispatch authorization before any background processing of non-Public deliveries.
 - Keep the deployment flag unset until these controls and operational procedures are reviewed and explicitly approved.
+
+## Current-status addendum — 2026-11-08
+
+This addendum supersedes historical statements above that claim organization, membership, recipient-group, grant, or central authorization tables/functions are absent. Historical sections remain a record of the earlier audit, not a description of the current head.
+
+### Implemented technical mechanisms
+
+- Organization and organization-membership schema, lifecycle transitions, active membership checks, and time-window enforcement exist.
+- Recipient-group and group-membership schema and lifecycle checks exist.
+- Alert ownership and direct, organization, and group recipient grants exist, with read and deliver actions and current membership/grant validity checks.
+- The Webhook inbox uses shared current-membership checks, including start and expiry windows.
+- Audit list and CSV export use a shared SQL predicate that filters alert-linked events before search, pagination, and export. Public-linked events remain visible. Restricted/Private-linked events require the feature flag, a current membership in the recipient organization, and a matching active read grant. Admin role alone is not a bypass.
+- Alert-less audit events are excluded from tenant list/export views. Chain verification metadata is limited to the platform administrator route role.
+- Two-tenant integration coverage exercises valid direct-grant visibility, same-role no-grant denial, owner-side no-grant denial, future and expired membership denial, admin no-bypass, CSV parity, and alert-less platform event exclusion.
+
+### Remaining gaps and boundaries
+
+- Institutional policy decisions P-01–P-25 remain awaiting approval; technical schema or tests do not constitute approval.
+- CAP_NON_PUBLIC_RECIPIENT_ACCESS_ENABLED remains disabled by default and must remain disabled in production until institutional approvals and acceptance are complete.
+- Admin is currently the only platform-level route role available for chain-verification metadata; no separate platform-operator role or tenant-visible platform audit view has been institutionally approved.
+- Background delivery remains fail-closed for non-Public outbox work; no production Restricted/Private delivery is authorized.
+- external_adapters_enabled: false remains mandatory.
+- Independent security review, documented restore evidence, external receiver interoperability acceptance, formal operational controls, and signed institutional Gate 8 acceptance remain outstanding.
+
+Do not describe the recipient model as production-ready, OASIS-certified, institutionally accepted, or Gate 8 complete on the basis of these code changes or CI results.

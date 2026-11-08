@@ -36,6 +36,7 @@ test("Restricted and Private legacy alerts are denied across authenticated and p
       JWT_SECRET: "isolation-test-secret-that-is-at-least-32-characters",
       ADMIN_PASSWORD: adminPassword,
       CAP_DELIVERY_ENABLED: "true",
+      CAP_NON_PUBLIC_RECIPIENT_ACCESS_ENABLED: "false",
       MFA_ENCRYPTION_KEY: "c".repeat(64),
       MFA_REQUIRED_ROLES: "",
       API_RATE_LIMIT: "5000",

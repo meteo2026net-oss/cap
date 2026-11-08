@@ -182,3 +182,10 @@ The branch now adds a staged grant model:
 Administrative endpoints are currently restricted to the existing platform `admin` role because the organization-scoped manager authority model has not yet been approved. This is a temporary control boundary, not a final institutional delegation model.
 
 **Important safety boundary:** these grant records and the predicate are not yet wired into every alert read, export, webhook, outbox, worker, and delivery route. Restricted/Private remain blocked by the existing Public-only containment. This phase does not enable external delivery. No claim of end-to-end tenant isolation or completed API-level IDOR remediation is made until those paths are integrated and tested against two same-role users in separate organizations.
+
+
+Grant API and test follow-up:
+- Added one-time alert-owner assignment and administrator-only grant list/create/transition/expiry endpoints.
+- Added integration coverage that creates a test alert, assigns it to Organization A, rejects a direct-user grant that attempts to treat an Organization A forecaster as a member of Organization B, accepts the actual Organization B member, and verifies grant activation/revocation terminality.
+- Added a same-role cross-organization predicate test: a forecaster belonging to the owning organization does not inherit a direct, organization, or group grant issued to a different recipient organization.
+- These tests validate grant construction and the grant predicate, not the final alert read/export/delivery authorization surface. That surface remains intentionally unmodified until the policy is wired consistently across API and background processing.

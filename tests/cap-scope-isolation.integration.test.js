@@ -223,9 +223,19 @@ test("Restricted and Private legacy alerts are denied across authenticated and p
   assert.equal((await request(`/api/delivery/outbox/${deliveryId}/claim`, {
     token: publisher, method: "POST"
   })).status, 404);
+  assert.equal((await request(`/api/delivery/outbox/${deliveryId}/retry`, {
+    token: publisher, method: "POST"
+  })).status, 404, "non-Public outbox entries must not be manually retried");
+  assert.equal((await request(`/api/delivery/outbox/${deliveryId}/receipt`, {
+    token: publisher, method: "POST",
+    body: { status: "delivered", leaseToken: "123e4567-e89b-42d3-a456-426614174000" }
+  })).status, 404, "non-Public outbox entries must not accept delivery receipts");
   assert.equal((await request("/api/delivery/process-retries", {
     token: publisher, method: "POST"
   })).status, 403);
+  assert.equal((await request("/api/delivery/recover-stale", {
+    token: publisher, method: "POST", body: { staleMinutes: 10 }
+  })).status, 403, "global stale recovery remains blocked while legacy non-Public rows exist");
 
   const metrics = await request("/api/health/metrics", { token: publisher });
   assert.equal(metrics.status, 200);

@@ -97,3 +97,19 @@ Important observations:
 - Admin password reset is rate-limited to five requests per 15 minutes per limiter key and cannot target the requesting administrator. However, it can target another administrator and returns the generated temporary password to the requesting administrator. It preserves the target's existing enabled MFA factor but does not require dual authorization or notify the target through a verified independent channel.
 - Account creation and role/status mutation routes rely on the admin role guard and the global API limiter; they do not have a separate operation-specific rate limiter. Review whether privileged account changes need an additional approval/notification control.
 - The deployment example leaves `MFA_REQUIRED_ROLES` blank. The code therefore does not require MFA for any role unless the operator configures it. This is a deployment control, not a guaranteed secure default.
+
+
+## Privileged-account hardening follow-up — 2026-11-08
+
+Source review and regression coverage were extended on the current follow-up branch:
+
+- Administrator-assisted password reset now refuses targets whose current role is admin. The reset transaction returns a privileged-target result before changing the password hash, token version, MFA enrollment state, or login challenges; the requester receives no temporary credential.
+- The API integration test provisions a second administrator, attempts a peer-admin reset, verifies HTTP 403 and absence of a temporary password in the response, and confirms the target's original credential still authenticates.
+- Account creation, role changes, and activation/deactivation now share an administrator-specific rate limiter (30 mutations per 15 minutes per authenticated administrator). The existing password-reset limiter remains separate.
+- Self-role-change, self-password-reset, self-deactivation, last-active-admin protection, transactional audit writes, and session invalidation remain in place.
+
+### Remaining privileged-account policy gap
+
+This hardening closes the direct peer-admin credential handoff path; it does not implement dual control. A single administrator can still create another administrator or promote an existing account to admin, and can still reset non-admin accounts. The institution must decide whether privileged-role grants, demotions, account recovery, and sensitive non-admin resets require a second approver, verified out-of-band identity checks, target notification, or a supervised credential handoff. Until that policy and workflow are approved and implemented, administrator provisioning remains a single-actor trust boundary and must be treated as a governance risk.
+
+The new rate limit is an abuse-control measure, not an approval quorum. No account has been promoted, demoted, activated, deactivated, or reset as part of this code change. No MFA deployment policy was changed; an empty MFA_REQUIRED_ROLES setting still means MFA is not mandatory by default.

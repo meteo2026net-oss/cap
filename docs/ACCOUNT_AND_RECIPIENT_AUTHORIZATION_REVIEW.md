@@ -55,3 +55,13 @@ Do not remove the Public-only boundary until an approved recipient model has bee
 ## Evidence and limitations
 
 At the review basis above, the exact PR head passed CAP System Checks (211 Node tests, 0 failures; 10,000-message synthetic benchmark; official OASIS CAP 1.2 XSD suite, 8 tests, 0 failures; Windows backup/restore) and CodeQL. These results demonstrate automated regression coverage on that commit, not an external penetration test, institutional identity verification, recipient delivery, certification, or production readiness.
+
+
+## Additional privileged-administration risk
+
+The current administrator model is single-actor for account provisioning and recovery:
+- An administrator can create a new `admin` account or promote another account to `admin`; there is no second-person approval workflow for privileged-role grants.
+- An administrator can reset the password of any other active account, including another administrator. The generated temporary password is returned once to the requesting administrator. Although the target must change it and existing sessions are revoked, the administrator who receives that value could authenticate as the target account. This creates an account-impersonation and audit-attribution risk for privileged accounts.
+- Self-reset and self-role-change are blocked, and the last active administrator cannot be demoted or deactivated, but these controls do not prevent one administrator from changing another administrator's credentials or role.
+
+Before operational use, the institution should decide whether creation/promotion of administrators and resets of privileged accounts require dual authorization, out-of-band identity verification, notification to the target, a controlled password handoff, and explicit audit events. No policy was assumed or enforcement change made in this review.

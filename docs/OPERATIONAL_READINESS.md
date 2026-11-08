@@ -114,3 +114,9 @@ Go-live is blocked until all applicable items below have named evidence and an a
 The current application is a development foundation. It has a local SQLite-backed workflow, CAP XML generation/schema checks, public JSON/GeoJSON feeds, audit logging, an internal delivery outbox, and an optional inbound manual-review inbox. The maintenance worker does not send messages. No external CAP, email, SMS, push, or government gateway transport is currently enabled. The inbound webhook receiver is disabled by default and does not create or publish alerts.
 
 The current CI suite and CodeQL are useful automated checks, but they do not replace the acceptance gates above. Do not describe this repository as certified, institutionally approved, or production-ready for public-warning issuance until those gates have been completed and independently evidenced.
+
+
+## Account and recipient authorization review
+- [x] Code-level review of account lifecycle, session invalidation, role guards, MFA controls, and current recipient-scope containment recorded in [ACCOUNT_AND_RECIPIENT_AUTHORIZATION_REVIEW.md](ACCOUNT_AND_RECIPIENT_AUTHORIZATION_REVIEW.md).
+- [ ] Institution must approve the role/approval matrix, trusted organization and recipient identity source, geographic/temporal grant semantics, grant/revoke lifecycle, MFA-required roles, and account recovery process.
+- [ ] Implement and independently test recipient grants before enabling Restricted or Private operations. Keep the Public-only boundary in place until the multi-user/multi-organization IDOR and revocation test matrix is accepted.

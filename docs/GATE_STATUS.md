@@ -1,15 +1,18 @@
 # Project Gate Status
 
-> **Windows CI runner follow-up — 2026-11-08 UTC**
-
-- Runner fix commit: `ee3bda3e1ebc57528159a7692c247c5d29eb0986`; subsequent commits in this PR update the status records only.
-- The Windows backup job now targets `windows-2022` so `node-gyp` can use the stable Visual Studio 2022 toolchain for `better-sqlite3`.
-- The earlier `windows-latest` run failed during dependency installation; backup/restore tests did not run. The runner change must be verified by the live PR checks on the latest branch tip.
-- Do not treat predecessor CI success as validation of the latest tip. `external_adapters_enabled: false`; Gate 8 remains Open; no merge or external delivery.
+> **Verified CI refresh — 2026-11-08 UTC**
+>
+> - Last fully verified software head: `8d6f2ab68fef288da766773cf160e7ff73c371bf`.
+> - CAP System Checks: **success** (run [42485260317](https://github.com/meteo2026net-oss/cap/actions/runs/42485260317)).
+> - CodeQL: **success** (run [42485260289](https://github.com/meteo2026net-oss/cap/actions/runs/42485260289)).
+> - Windows backup job: **success** on `windows-2022`, including dependency installation, backup/restore CLI tests, and PowerShell parsing.
+> - The earlier `windows-latest` failure was a runner/toolchain detection issue; the Windows validation now passes on the verified head.
+> - Gate 8 remains Open; `external_adapters_enabled: false`; no merge, Go-Live, or external delivery.
+>
 
 **Branch:** `fix/retention-audit-atomicity`  
-**PR #4 head (current tip):** `26e7cf45889cffdb0fd9b3be2c6a750755e235d0` (Draft, not merged)
-**Software verification head (CAP system checks + CodeQL success):** `26e7cf45889cffdb0fd9b3be2c6a750755e235d0`
+**PR #4 head (current tip):** `8d6f2ab68fef288da766773cf160e7ff73c371bf` (Draft, not merged)
+**Software verification head (CAP system checks + CodeQL success):** `8d6f2ab68fef288da766773cf160e7ff73c371bf`
 **Verification note:** CAP system checks + CodeQL **success** on `26e7cf45889c` (includes acceptance-two-tenant).
 **Institutional Gate 8:** **Open** — sole register: [`INSTITUTIONAL_ACCEPTANCE_EVIDENCE.md`](INSTITUTIONAL_ACCEPTANCE_EVIDENCE.md)
 **external_adapters_enabled:** **false**
@@ -41,7 +44,7 @@ No other document may mark Gate 8 closed. CI, README, and PR state are not accep
 |------|----------------|-------|
 | Pin SHA + review commits | Software-tested | Historical close-out in `PHASE1_BASELINE.md`; branch continues |
 | PR #4 review posture | Software-tested | Draft only; no merge without explicit approval |
-| Full suite on PR head | Software-tested | CAP system checks + CodeQL success on `26e7cf45889cffdb0fd9b3be2c6a750755e235d0` |
+| Full suite on last verified PR head | Software-tested | CAP system checks + CodeQL success on `8d6f2ab68fef288da766773cf160e7ff73c371bf` |
 
 ---
 

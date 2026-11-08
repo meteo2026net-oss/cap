@@ -4,8 +4,8 @@
 > Other documents may link here; they must not mark Gate 8 rows Accepted on their own.  
 > Automated tests, CodeQL, documentation commits, and PR #4 Draft status are **not** acceptance evidence.
 
-**PR #4 head (current tip):** `26e7cf45889cffdb0fd9b3be2c6a750755e235d0` (Draft, not merged)
-**Software verification head (CAP system checks + CodeQL success):** `26e7cf45889cffdb0fd9b3be2c6a750755e235d0`
+**Last fully verified software head:** `8d6f2ab68fef288da766773cf160e7ff73c371bf` (PR #4 remains Draft, not merged)
+**Software verification head (CAP system checks + CodeQL success):** `8d6f2ab68fef288da766773cf160e7ff73c371bf` — CAP System Checks run [42485260317](https://github.com/meteo2026net-oss/cap/actions/runs/42485260317); CodeQL run [42485260289](https://github.com/meteo2026net-oss/cap/actions/runs/42485260289). Windows backup/restore job also succeeded on this head.
 **Institutional Gate 8:** **Open** — this file is the sole register
 **external_adapters_enabled:** **false**
 

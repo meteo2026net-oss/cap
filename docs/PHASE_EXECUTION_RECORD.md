@@ -1,16 +1,19 @@
 # Phase Execution Record
 
-## Windows CI runner follow-up — 2026-11-08 UTC
+## Verified CI refresh — 2026-11-08 UTC
 
-- Runner fix commit: `ee3bda3e1ebc57528159a7692c247c5d29eb0986`; later commits in this PR update documentation only.
-- Changed `.github/workflows/test.yml` to run the Windows backup job on `windows-2022`, which provides the stable Visual Studio 2022 toolchain expected by `node-gyp`. The prior `windows-latest` image exposed Visual Studio 18, which the installed `node-gyp` could not detect; `npm ci` failed before backup/restore or PowerShell tests ran.
-- This is a CI runner compatibility adjustment; no dependency versions, application behavior, test assertions, or production configuration were changed.
-- The live PR checks must finish on the latest branch tip before this issue is considered resolved. Historical CI records below remain historical and do not validate later commits.
-- `external_adapters_enabled: false`; Gate 8 remains Open; no Go-Live or institutional acceptance is claimed.
+- Last fully verified software head: `8d6f2ab68fef288da766773cf160e7ff73c371bf`.
+- CAP System Checks run [42485260317](https://github.com/meteo2026net-oss/cap/actions/runs/42485260317): **success**.
+- CodeQL run [42485260289](https://github.com/meteo2026net-oss/cap/actions/runs/42485260289): **success**.
+- Windows backup job on `windows-2022`: **success** for exact dependency installation, backup/restore CLI tests, and PowerShell script parsing.
+- This resolves the previously observed Windows runner/toolchain installation failure for the verified head. No dependency versions, application behavior, test assertions, or production configuration were changed.
+- The two-tenant automated test is included in `npm test` on this head; this does not replace the operator-host acceptance scenarios.
+- `external_adapters_enabled: false`; Gate 8 remains Open; no Go-Live, institutional acceptance, or external delivery is claimed.
+
 
 **Recorded:** 2026-11-08 (UTC)  
 **Branch:** `fix/retention-audit-atomicity`  
-**PR #4 head:** `26e7cf45889cffdb0fd9b3be2c6a750755e235d0` — **Draft**, not merged  
+**Previously recorded PR #4 head (historical):** `8d6f2ab68fef288da766773cf160e7ff73c371bf` — **Draft**, not merged  
 **external_adapters_enabled:** false  
 
 ## Automated technical evidence (Phase 3 suite via CI)
@@ -24,8 +27,8 @@
 
 | Workflow | Head | Conclusion | URL |
 |----------|------|------------|-----|
-| CAP system checks | `26e7cf45889cffdb0fd9b3be2c6a750755e235d0` | **success** | https://github.com/meteo2026net-oss/cap/actions/runs/42447889994 |
-| CodeQL security analysis | `26e7cf45889cffdb0fd9b3be2c6a750755e235d0` | **success** | https://github.com/meteo2026net-oss/cap/actions/runs/42447890005 |
+| CAP system checks | `8d6f2ab68fef288da766773cf160e7ff73c371bf` | **success** | https://github.com/meteo2026net-oss/cap/actions/runs/42447889994 |
+| CodeQL security analysis | `8d6f2ab68fef288da766773cf160e7ff73c371bf` | **success** | https://github.com/meteo2026net-oss/cap/actions/runs/42447890005 |
 
 This satisfies the **automated** portion of steps 11–16 (isolation, lifecycle, roles, webhook/outbox, Public-only boundary, CAP schema) as exercised in the repository test suite.
 

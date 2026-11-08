@@ -344,6 +344,7 @@ test("acceptance pack: two-tenant webhook isolation and public test lifecycle", 
       "Restricted audit fixture headline", "RESTRICTED_AUDIT_DESCRIPTION", "Restricted test area",
       "33.5,36.2 8", "pending", ""
     ).lastInsertRowid);
+    auditDb.prepare("UPDATE alerts SET polygon='' WHERE id=?").run(restrictedAlertId);
     auditDb.prepare(`UPDATE organization_memberships SET expires_at=?
       WHERE user_id=? AND organization_id=? AND status='active'`)
       .run(new Date(Date.now() - 60_000).toISOString(), expiredReviewerId, orgB.data.id);

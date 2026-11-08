@@ -151,3 +151,39 @@ test("SQLite guards reject forged membership actors and premature expiry", () =>
     database.close();
   }
 });
+
+
+test("recipient groups are organization-bound and require a live matching organization membership", () => {
+  const database = fixture();
+  try {
+    const orgA = createOrganization(database, { slug: "group-org-a", name: "Group Org A", actorUserId: 1 });
+    const orgB = createOrganization(database, { slug: "group-org-b", name: "Group Org B", actorUserId: 1 });
+    const memberA = requestOrganizationMembership(database, { organizationId: orgA, userId: 2, actorUserId: 1 });
+    const memberB = requestOrganizationMembership(database, { organizationId: orgB, userId: 3, actorUserId: 1 });
+    transitionOrganizationMembership(database, { membershipId: memberA, nextStatus: "active", actorUserId: 1 });
+    transitionOrganizationMembership(database, { membershipId: memberB, nextStatus: "active", actorUserId: 1 });
+    const groupA = createRecipientGroup(database, {
+      organizationId: orgA, slug: "ops", name: "Operations", actorUserId: 1
+    });
+    const groupB = createRecipientGroup(database, {
+      organizationId: orgB, slug: "ops", name: "Operations", actorUserId: 1
+    });
+    assert.notEqual(groupA, groupB, "group slugs are scoped to their owning organization");
+    assert.throws(() => requestRecipientGroupMembership(database, {
+      groupId: groupA, organizationMembershipId: memberB, actorUserId: 1
+    }), /Active group and matching organization membership/);
+    const groupMemberB = requestRecipientGroupMembership(database, {
+      groupId: groupB, organizationMembershipId: memberB, actorUserId: 1
+    });
+    transitionRecipientGroupMembership(database, {
+      membershipId: groupMemberB, nextStatus: "active", actorUserId: 1
+    });
+    assert.equal(hasActiveRecipientGroupMembership(database, 3, orgB, groupB), true);
+    assert.equal(hasActiveRecipientGroupMembership(database, 3, orgA, groupA), false);
+    transitionOrganizationMembership(database, { membershipId: memberB, nextStatus: "revoked", actorUserId: 1 });
+    assert.equal(hasActiveRecipientGroupMembership(database, 3, orgB, groupB), false,
+      "a group membership cannot outlive its parent organization membership");
+  } finally {
+    database.close();
+  }
+});

@@ -125,3 +125,9 @@ The current CI suite and CodeQL are useful automated checks, but they do not rep
 ## Recipient authorization design proposal
 - [x] Drafted [RECIPIENT_AUTHORIZATION_DESIGN.md](RECIPIENT_AUTHORIZATION_DESIGN.md) with a deny-by-default conceptual model, identity prerequisites, enforcement inventory, revocation semantics, and multi-organization negative/positive test matrix.
 - [ ] This proposal is not institution-approved and is not implemented. Do not create grants or enable Restricted/Private workflows until the identity authority, organization hierarchy, recipient semantics, role separation, expiry/revocation, and operational controls are approved.
+
+
+## Delivery and background recipient-scope audit
+- [x] Reviewed every current delivery state transition and background queue-maintenance path; recorded the findings in [DELIVERY_RECIPIENT_SCOPE_AUDIT.md](DELIVERY_RECIPIENT_SCOPE_AUDIT.md).
+- [x] Added Public-scope SQL enforcement to enqueue, claim, receipt, retry, automatic retry, and stale-lease recovery paths, with negative unit and API regression coverage.
+- [ ] Recipient grants, identity verification, expiry/revocation semantics, and institution-approved queue behavior remain prerequisites before any Restricted/Private delivery or external adapter is enabled.

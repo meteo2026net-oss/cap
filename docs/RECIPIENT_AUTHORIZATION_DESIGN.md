@@ -2,7 +2,7 @@
 
 Status: **not approved, not implemented, and not enabled**. The source/schema gap findings and detailed multi-organization IDOR test plan are in [RECIPIENT_AUTHORIZATION_GAP_AUDIT.md](RECIPIENT_AUTHORIZATION_GAP_AUDIT.md).
 
-This document converts the current Public-only containment into an implementation plan. It deliberately does not infer institutional organizations, recipient groups, identity providers, geographic jurisdiction, or the meaning of CAP `addresses`. An institution must approve those semantics before schema or enforcement code is introduced.
+The institutional decisions required before schema work are tracked in [RECIPIENT_AUTHORIZATION_POLICY_DECISIONS.md](RECIPIENT_AUTHORIZATION_POLICY_DECISIONS.md). The agreed technical sequence and phase gates are recorded there. This document converts the current Public-only containment into an implementation plan. It deliberately does not infer institutional organizations, recipient groups, identity providers, geographic jurisdiction, or the meaning of CAP `addresses`. An institution must approve those semantics before schema or enforcement code is introduced.
 
 ## 1. Security objective
 

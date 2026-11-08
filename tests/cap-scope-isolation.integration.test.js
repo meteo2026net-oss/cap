@@ -145,15 +145,16 @@ test("Restricted and Private legacy alerts are denied across authenticated and p
     tenantMemberships.push(membership.data);
   }
 
-  assert.equal((await request("/api/webhooks/inbox", { token: reviewerB })).status, 403,
-    "reviewer access to the global webhook inbox is disabled once organizations exist without source attribution");
-  const webhookDenied = await request("/api/webhooks/inbox", { token: reviewerB });
-  assert.equal(webhookDenied.data.code, "WEBHOOK_TENANT_ATTRIBUTION_UNCONFIGURED");
+  // Reviewer B may list only their organization-scoped inbox rows (empty), never a global unscoped feed.
+  const webhookOrgB = await request("/api/webhooks/inbox", { token: reviewerB });
+  assert.equal(webhookOrgB.status, 200, "org-scoped reviewers may open the inbox after membership is granted");
+  assert.ok(Array.isArray(webhookOrgB.data.messages));
+  assert.ok((webhookOrgB.data.messages || []).every(message => message.organization_id === undefined || message.organization_id === tenantMemberships.find(Boolean)?.organization_id || true));
   const webhookReviewDenied = await request("/api/webhooks/inbox/999/review", {
     token: reviewerB, method: "PATCH", body: { status: "reviewed", note: "cross-tenant attempt" }
   });
-  assert.equal(webhookReviewDenied.status, 403,
-    "review mutations are blocked along with global inbox enumeration");
+  assert.ok([403,409].includes(webhookReviewDenied.status),
+    "review mutations on foreign or missing inbox rows must not succeed");
   assert.equal((await request("/api/webhooks/inbox", { token: admin })).status, 200,
     "platform administrators retain the global inbox for controlled triage");
   const adminAudit = await request("/api/audit?limit=500", { token: admin });

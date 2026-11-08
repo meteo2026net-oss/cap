@@ -674,6 +674,26 @@ test("API enforces role separation, public-feed filtering and account deactivati
   const forecaster = await login("forecaster1", "Temporary-Password-2026!");
   const forecaster2 = await login("forecaster2", "Temporary-Password-2026!");
   const reviewer = await login("reviewer1", "Temporary-Password-2026!");
+  // Grant reviewer membership on the integration organization so org-scoped webhook inbox access works.
+  {
+    const database = new Database(path.join(cwd, "storage", "cap.sqlite"));
+    try {
+      const { requestOrganizationMembership, transitionOrganizationMembership } = await import("../src/recipient-auth.js");
+      const adminRow = database.prepare("SELECT id FROM users WHERE username='admin'").get();
+      const reviewerRow = database.prepare("SELECT id FROM users WHERE username='reviewer1'").get();
+      const org = database.prepare("SELECT id FROM organizations WHERE slug='integration-org'").get();
+      if (adminRow && reviewerRow && org) {
+        const membershipId = requestOrganizationMembership(database, {
+          organizationId: org.id, userId: reviewerRow.id, actorUserId: adminRow.id
+        });
+        transitionOrganizationMembership(database, {
+          membershipId, nextStatus: "active", actorUserId: adminRow.id
+        });
+      }
+    } finally {
+      database.close();
+    }
+  }
   const publisherInitialSession = await login("publisher1", "Temporary-Password-2026!");
   const publisher = await enrollMfa(publisherInitialSession, "Temporary-Password-2026!");
   const publisherProfile = await request("/api/me", { token: publisher });

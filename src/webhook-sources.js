@@ -19,20 +19,25 @@ export function ensureWebhookSourcesSchema(database) {
       ON webhook_sources(organization_id, status, source_key);
   `);
 
-  const columns = database.prepare("PRAGMA table_info(webhook_inbox)").all().map(column => column.name);
-  if (!columns.includes("organization_id")) {
-    database.exec("ALTER TABLE webhook_inbox ADD COLUMN organization_id INTEGER REFERENCES organizations(id)");
+  const inboxExists = database.prepare(
+    "SELECT 1 AS ok FROM sqlite_master WHERE type='table' AND name='webhook_inbox'"
+  ).get();
+  if (inboxExists) {
+    const columns = database.prepare("PRAGMA table_info(webhook_inbox)").all().map(column => column.name);
+    if (!columns.includes("organization_id")) {
+      database.exec("ALTER TABLE webhook_inbox ADD COLUMN organization_id INTEGER REFERENCES organizations(id)");
+    }
+    if (!columns.includes("webhook_source_id")) {
+      database.exec("ALTER TABLE webhook_inbox ADD COLUMN webhook_source_id INTEGER REFERENCES webhook_sources(id)");
+    }
+    if (!columns.includes("source_key")) {
+      database.exec("ALTER TABLE webhook_inbox ADD COLUMN source_key TEXT");
+    }
+    database.exec(`
+      CREATE INDEX IF NOT EXISTS idx_webhook_inbox_org_status
+        ON webhook_inbox(organization_id, status, id DESC);
+    `);
   }
-  if (!columns.includes("webhook_source_id")) {
-    database.exec("ALTER TABLE webhook_inbox ADD COLUMN webhook_source_id INTEGER REFERENCES webhook_sources(id)");
-  }
-  if (!columns.includes("source_key")) {
-    database.exec("ALTER TABLE webhook_inbox ADD COLUMN source_key TEXT");
-  }
-  database.exec(`
-    CREATE INDEX IF NOT EXISTS idx_webhook_inbox_org_status
-      ON webhook_inbox(organization_id, status, id DESC);
-  `);
 }
 
 function normalizeSourceKey(sourceKey) {

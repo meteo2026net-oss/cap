@@ -39,7 +39,7 @@ Recipient-level grants for Restricted and Private messages are not implemented. 
 - GET /api/alerts, /stats, and /export.csv include Public scope only; explicitly requesting Restricted or Private returns 403 with SCOPE_AUTHORIZATION_UNCONFIGURED.
 - Detail, CAP XML, review history, versions, timeline, and relationship requests for a non-Public alert return 404, including workflow mutation attempts against those IDs. Public detail/XML/CSV/review-queue/version responses suppress restriction and addresses fields, including stale legacy values.
 - The review queue, generic audit listing/export, delivery outbox listing/counts, and relationship traversal exclude non-Public alert data.
-- Creating Restricted/Private alerts or changing an alert into either scope returns 403. Global delivery retry/recovery is blocked while any non-Public outbox row exists; direct non-Public delivery IDs return 404.
+- Creating structurally valid Restricted/Private alerts or changing an alert into either scope returns 403. Structurally incomplete requests still receive CAP validation errors (400) and are not stored. Global delivery retry/recovery is blocked while any non-Public outbox row exists; direct non-Public delivery IDs return 404.
 - Public JSON/GeoJSON feeds remain separately restricted to published, Public, Actual, unexpired Alert/Update/Cancel messages.
 
 This temporary policy does not create recipient entitlements and is not a substitute for an institution-specific grant model. Existing non-Public rows remain stored but unavailable through these application routes. Do not use these scopes operationally until the recipient model is reviewed and tested.

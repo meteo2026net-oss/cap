@@ -6,6 +6,7 @@ import {
   createAlertRecipientGrant,
   createOrganization,
   createRecipientGroup,
+  expireAlertRecipientGrants,
   expireOrganizationMemberships,
   hasActiveAlertRecipientGrant,
   hasActiveOrganizationMembership,

@@ -417,8 +417,9 @@ test("acceptance pack: two-tenant webhook isolation and public test lifecycle", 
     assert.equal(listing.status, 200, label + " audit list");
     assert.equal(listing.data.entries.some(entry => entry.alert_id === restrictedAlertId), false,
       label + " must not see restricted alert-linked audit events");
-    assert.equal(listing.data.entries.some(entry => entry.details === "must not appear in tenant audit views"), false,
-      label + " must not see alert-less platform audit events");
+    const isPlatformAdmin = label === "administrator without recipient grant";
+    assert.equal(listing.data.entries.some(entry => entry.details === "must not appear in tenant audit views"), isPlatformAdmin,
+      label + " platform-only audit visibility must follow the platform administrator boundary");
     const csvResponse = await fetch(base + "/api/audit/export.csv" + suffix, {
       headers: { Authorization: "Bearer " + token },
     });
@@ -426,8 +427,8 @@ test("acceptance pack: two-tenant webhook isolation and public test lifecycle", 
     const csv = await csvResponse.text();
     assert.equal(csv.split("\r\n").some(line => line.split(",")[3] === String(restrictedAlertId)), false,
       label + " CSV must not disclose restricted alert-linked audit rows");
-    assert.equal(csv.includes("must not appear in tenant audit views"), false,
-      label + " CSV must not disclose alert-less platform audit details");
+    assert.equal(csv.includes("must not appear in tenant audit views"), isPlatformAdmin,
+      label + " CSV platform-only events must follow the platform administrator boundary");
   }
   const authorizedCsvResponse = await fetch(base + `/api/audit/export.csv?organization_id=${orgB.data.id}`, {
     headers: { Authorization: "Bearer " + reviewerB },

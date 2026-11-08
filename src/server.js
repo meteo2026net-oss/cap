@@ -269,15 +269,21 @@ function webhookInboxAccess(req,res,next) {
 
 function auditReadPredicate(req) {
  const organizationId=recipientOrganizationContext(req);
- const publicOnly="(l.alert_id IS NOT NULL AND EXISTS (SELECT 1 FROM alerts scoped_alert WHERE scoped_alert.id=l.alert_id AND scoped_alert.scope='Public'))";
- if(!nonPublicRecipientAccessEnabled || !organizationId) return {sql:publicOnly,params:[]};
+ const alertLinkedPublic="(l.alert_id IS NOT NULL AND EXISTS (SELECT 1 FROM alerts scoped_alert WHERE scoped_alert.id=l.alert_id AND scoped_alert.scope='Public'))";
+ const platformEvents=req.user.role==="admin" ? "(l.alert_id IS NULL AND l.action<>'retention_applied')" : "0";
+ if(!nonPublicRecipientAccessEnabled || !organizationId) {
+  return {sql:`(${alertLinkedPublic} OR ${platformEvents})`,params:[]};
+ }
  return {
-  sql:`(l.alert_id IS NOT NULL AND EXISTS (
-   SELECT 1 FROM alerts scoped_alert
-   WHERE scoped_alert.id=l.alert_id
-     AND (scoped_alert.scope='Public' OR
+  sql:`(
+   ${platformEvents}
+   OR (l.alert_id IS NOT NULL AND EXISTS (
+    SELECT 1 FROM alerts scoped_alert
+    WHERE scoped_alert.id=l.alert_id
+      AND (scoped_alert.scope='Public' OR
        (scoped_alert.scope IN ('Restricted','Private') AND ${alertRecipientGrantSql("scoped_alert","read")}))
-  ))`,
+   ))
+  )`,
   params:[req.user.id,organizationId]
  };
 }

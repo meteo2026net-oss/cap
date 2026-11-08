@@ -180,6 +180,10 @@ Store completed logs with the institution; do not mark [`INSTITUTIONAL_ACCEPTANC
 
 ---
 
+## 8b. Execution matrix
+
+Full phase mapping: [ACCEPTANCE_EXECUTION_MATRIX.md](ACCEPTANCE_EXECUTION_MATRIX.md). Evidence log template: [ACCEPTANCE_EVIDENCE_LOG_TEMPLATE.md](ACCEPTANCE_EVIDENCE_LOG_TEMPLATE.md).
+
 ## 9. After this pack
 
 1. Engineering: fix any technical FAIL on the Draft PR branch.  

@@ -112,12 +112,13 @@ test("acceptance pack: two-tenant webhook isolation and public test lifecycle", 
   assert.equal(orgA.status, 201);
   assert.equal(orgB.status, 201);
 
-  const pwd = "Acceptance-User-Password-14+";
+  const tempPassword = "Acceptance-Temp-Password-14+";
+  const finalPassword = "Acceptance-Final-Password-14+";
   async function createActiveMember(username, role, organizationId) {
     const user = await request("/api/users", {
       method: "POST",
       token: admin,
-      body: { username, password: pwd, role },
+      body: { username, password: tempPassword, role },
     });
     assert.equal(user.status, 201, "create " + username);
     const mem = await request(`/api/organizations/${organizationId}/memberships`, {
@@ -132,9 +133,21 @@ test("acceptance pack: two-tenant webhook isolation and public test lifecycle", 
       body: { status: "active" },
     });
     assert.equal(act.status, 200, "activate " + username);
+    const loginTemp = await request("/api/auth/login", {
+      method: "POST",
+      body: { username, password: tempPassword },
+    });
+    assert.equal(loginTemp.status, 200, "temp login " + username);
+    // New users must change temporary password before non-setup API access (not a relaxation of policy).
+    const changed = await request("/api/auth/change-password", {
+      method: "POST",
+      token: loginTemp.data.token,
+      body: { currentPassword: tempPassword, newPassword: finalPassword },
+    });
+    assert.equal(changed.status, 200, "password change " + username + " " + JSON.stringify(changed.data));
     const login = await request("/api/auth/login", {
       method: "POST",
-      body: { username, password: pwd },
+      body: { username, password: finalPassword },
     });
     assert.equal(login.status, 200, "login " + username);
     return login.data.token;

@@ -76,3 +76,9 @@ Recipient-level authorization for Restricted and Private alerts is not implement
 
 
 - Recipient authorization remains Public-only pending institutional approval and implementation. See [RECIPIENT_AUTHORIZATION_DESIGN.md](RECIPIENT_AUTHORIZATION_DESIGN.md) for the proposal and required cross-organization test matrix; it is not an enabled grant system.
+
+
+## Delivery and background recipient-scope audit
+
+- [DELIVERY_RECIPIENT_SCOPE_AUDIT.md](DELIVERY_RECIPIENT_SCOPE_AUDIT.md) records the source-level inventory of enqueue, outbox reads, claim, receipt, retry, background maintenance, worker behavior, webhook inbox separation, and residual recipient-grant gates.
+- Delivery state transitions now enforce Public scope in their SQL predicates as defense in depth; the background worker remains paused when legacy non-Public outbox rows exist. External adapters remain disabled.

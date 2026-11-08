@@ -29,7 +29,7 @@
 | Concurrent draft create/submit stress sample | phase 6 integration test | Tested in CI |
 | Process restart durability | phase 4 integration test | Tested in CI |
 
-**Current CAP scope boundary:** Until recipient-level grants are implemented, the application now fails closed for Restricted and Private scopes. Authenticated lists, detail/XML/history/relations, exports, statistics, review queues, audit listing/export, and delivery views are restricted to Public data; non-Public direct IDs are concealed as 404. New structurally valid Restricted/Private creation and scope promotion are blocked. Structurally incomplete requests continue to fail CAP validation with HTTP 400 and are not persisted. Global delivery retry/recovery is blocked while non-Public outbox rows exist. Regression tests cover both validation and authorization outcomes; CI evidence for the latest head is pending. Existing non-Public rows remain in storage and must not be treated as available or authorized. This temporary Public-only mode is not a completed recipient authorization system.
+**Current CAP scope boundary:** Until recipient-level grants are implemented, the application now fails closed for Restricted and Private scopes. Authenticated lists, detail/XML/history/relations, exports, statistics, review queues, audit listing/export, and delivery views are restricted to Public data; non-Public direct IDs are concealed as 404. New structurally valid Restricted/Private creation and scope promotion are blocked. Structurally incomplete requests continue to fail CAP validation with HTTP 400 and are not persisted. Global delivery retry/recovery is blocked while non-Public outbox rows exist. Regression tests cover both validation and authorization outcomes; software CI on the PR verification head is green and does not constitute institutional acceptance. Existing non-Public rows remain in storage and must not be treated as available or authorized. This temporary Public-only mode is not a completed recipient authorization system.
 
 ## B. Requires institutional acceptance (not claimed by CI)
 
@@ -49,7 +49,11 @@
 - [ ] Explicit decision that external adapters may be enabled (still disabled in this repository)
 - [ ] Legal/communications approval for Actual public warnings
 
-## C. Monitoring probes recommended for test deployments
+## C. Isolated two-tenant technical acceptance pack
+
+Operator checklist for isolated technical acceptance (not Gate 8 closure): [ISOLATED_ACCEPTANCE_TEST_PACK.md](ISOLATED_ACCEPTANCE_TEST_PACK.md).
+
+## D. Monitoring probes recommended for test deployments
 
 1. `GET /api/health` — process up; confirms `external_adapters_enabled: false`
 2. `GET /api/health/ready` — SQLite integrity + foreign keys
@@ -57,7 +61,7 @@
 4. `npm run backup` + `npm run backup:health` — newest backup freshness
 5. `npm run retention:apply` — optional local cleanup of terminal operational rows (does not delete audit log)
 
-## D. Explicit non-goals of the current test system
+## E. Explicit non-goals of the current test system
 
 - No real CAP/email/SMS/push/government-gateway transmission
 - No claim of CAP certification or institutional go-live approval

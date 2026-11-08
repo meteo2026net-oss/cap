@@ -6,6 +6,7 @@
 **Institutional Gate 8:** **Open** — sole register: [`INSTITUTIONAL_ACCEPTANCE_EVIDENCE.md`](INSTITUTIONAL_ACCEPTANCE_EVIDENCE.md)
 **external_adapters_enabled:** **false**
 
+**Isolated two-tenant technical pack:** [`ISOLATED_ACCEPTANCE_TEST_PACK.md`](ISOLATED_ACCEPTANCE_TEST_PACK.md)  
 **Software completion record:** [`SOFTWARE_COMPLETION.md`](SOFTWARE_COMPLETION.md)  
 **Canonical institutional acceptance register (Gate 8 only):**  
 [`INSTITUTIONAL_ACCEPTANCE_EVIDENCE.md`](INSTITUTIONAL_ACCEPTANCE_EVIDENCE.md)  

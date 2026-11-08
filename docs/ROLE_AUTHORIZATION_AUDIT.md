@@ -43,7 +43,7 @@ Current route behavior:
 
 Finding and hardening:
 
-- Draft edit already checks authorship; the submission route previously did not. This left an ownership gap in the draft lifecycle. The route now permits a forecaster to submit only their own draft, while an administrator remains an explicit override. An API regression test verifies that a second forecaster receives 403 and the owner can still submit.
+- Draft edit and submission both enforce authorship; an administrator remains an explicit override. An API regression test verifies that a second forecaster receives 403 and the owner can still submit.
 
 ### 3. Publisher
 

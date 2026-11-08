@@ -399,7 +399,8 @@ test("acceptance pack: two-tenant webhook isolation and public test lifecycle", 
   const authorizedXml = await fetch(base + `/api/alerts/${restrictedAlertId}/cap.xml?organization_id=${orgB.data.id}`, {
     headers: { Authorization: "Bearer " + reviewerB },
   });
-  assert.equal(authorizedXml.status, 200, "valid grant must authorize CAP XML read");
+  const authorizedXmlBody = await authorizedXml.text();
+  assert.equal(authorizedXml.status, 200, "valid grant must authorize CAP XML read: " + authorizedXmlBody);
   const deniedXml = await fetch(base + `/api/alerts/${restrictedAlertId}/cap.xml?organization_id=${orgA.data.id}`, {
     headers: { Authorization: "Bearer " + reviewerA },
   });

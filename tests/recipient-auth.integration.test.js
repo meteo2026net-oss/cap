@@ -143,6 +143,40 @@ test("organization membership API enforces admin control and same-role tenant me
   })).status, 403, "same-role users cannot enumerate organization membership administration");
   assert.equal((await request("/api/organizations", { token: forecasterA })).status, 403);
 
+  const groupA = await request(`/api/organizations/${organizationA.data.id}/groups`, {
+    token: admin, method: "POST", body: { slug: "operations", name: "Operations" }
+  });
+  const groupB = await request(`/api/organizations/${organizationB.data.id}/groups`, {
+    token: admin, method: "POST", body: { slug: "operations", name: "Operations" }
+  });
+  assert.equal(groupA.status, 201);
+  assert.equal(groupB.status, 201);
+  assert.notEqual(groupA.data.id, groupB.data.id,
+    "same group slug may exist in separate organizations without sharing identity");
+  assert.equal((await request(`/api/recipient-groups/${groupA.data.id}/memberships`, {
+    token: admin, method: "POST",
+    body: { organization_membership_id: membershipB.data.id }
+  })).status, 404, "a group cannot accept a member from another organization");
+  const groupMembershipA = await request(`/api/recipient-groups/${groupA.data.id}/memberships`, {
+    token: admin, method: "POST",
+    body: { organization_membership_id: membershipA.data.id }
+  });
+  assert.equal(groupMembershipA.status, 201);
+  assert.equal((await request(`/api/recipient-group-memberships/${groupMembershipA.data.id}`, {
+    token: admin, method: "PATCH", body: { status: "active" }
+  })).status, 200);
+  const groupMembersA = await request(`/api/recipient-groups/${groupA.data.id}/memberships`, { token: admin });
+  assert.deepEqual(groupMembersA.data.memberships.map(row => row.username), ["tenant_a_forecaster"]);
+  assert.equal((await request(`/api/recipient-groups/${groupA.data.id}/memberships`, {
+    token: forecasterB
+  })).status, 403, "same-role users cannot enumerate recipient group membership administration");
+  assert.equal((await request(`/api/recipient-group-memberships/${groupMembershipA.data.id}`, {
+    token: admin, method: "PATCH", body: { status: "revoked" }
+  })).status, 200);
+  assert.equal((await request(`/api/recipient-group-memberships/${groupMembershipA.data.id}`, {
+    token: admin, method: "PATCH", body: { status: "active" }
+  })).status, 409, "revoked group membership cannot be resurrected");
+
   const revoked = await request(`/api/organization-memberships/${membershipA.data.id}`, {
     token: admin, method: "PATCH", body: { status: "revoked" }
   });

@@ -17,7 +17,7 @@ import { applyOperationalRetentionWithAudit, collectOperationalMetrics } from ".
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { consumeRecoveryCode, decryptTotpSecret, encryptTotpSecret, generateRecoveryCodes, generateTotpSecret, hashRecoveryCode, verifyTotp } from "./mfa.js";
 import { verifyAndConsumeWebhook } from "./webhook-replay.js";
-import { createOrganization, requestOrganizationMembership, transitionOrganizationMembership } from "./recipient-auth.js";
+import { createOrganization, expireOrganizationMemberships, requestOrganizationMembership, transitionOrganizationMembership } from "./recipient-auth.js";
 
 const app = express();
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -583,11 +583,11 @@ app.post("/api/organizations/:id/memberships",auth,roles("admin"),adminAccountMu
   return res.status(400).json({error:error.message});
  }
 });
-app.patch("/api/organization-memberships/:id",auth,roles("admin"),adminAccountMutationLimiter,(req,res)=>{
+app.post("/api/organizations/memberships/expire",auth,roles("admin"),adminAccountMutationLimiter,(req,res)=>{\n try {\n  const expired=expireOrganizationMemberships(db);\n  if(expired>0) audit(req.user.id,null,"organization_memberships_expired",`Expired ${expired} organization memberships`);\n  return res.json({ok:true,expired});\n } catch(error) {\n  console.error("Membership expiry sweep failed:",error);\n  return res.status(500).json({error:"Unable to expire memberships safely"});\n }\n});\napp.patch("/api/organization-memberships/:id",auth,roles("admin"),adminAccountMutationLimiter,(req,res)=>{
  const membershipId=Number(req.params.id);
  if(!Number.isSafeInteger(membershipId)||membershipId<1) return res.status(400).json({error:"Invalid membership id"});
  try {
-  const data=z.object({status:z.enum(["active","suspended","revoked","expired"])}).parse(req.body);
+  const data=z.object({status:z.enum(["active","suspended","revoked"])}).parse(req.body);
   const result=transitionOrganizationMembership(db,{
    membershipId,nextStatus:data.status,actorUserId:req.user.id
   });

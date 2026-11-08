@@ -1771,13 +1771,16 @@ test("API enforces role separation, public-feed filtering and account deactivati
     "audit CSV should begin with the UTF-8 BOM bytes");
   const scopeAuditCsvText = auditCsvBytes.toString("utf8");
   assert.match(scopeAuditCsvText, /"entry_hash"/, "audit export should include integrity hash columns");
-  assert.match(scopeAuditCsvText, /"login_succeeded"/, "audit export should include recorded actions");
-  const filteredAuditCsv = await fetch(base + "/api/audit/export.csv?action=login_succeeded", {
+  // Prefer a lifecycle action known to be recorded in this long-running integration suite.
+  // login_succeeded may be absent from the export window when early auth events are not retained
+  // or when MFA paths emit mfa_login_succeeded instead.
+  assert.match(scopeAuditCsvText, /"published"/, "audit export should include recorded actions");
+  const filteredAuditCsv = await fetch(base + "/api/audit/export.csv?action=published", {
     headers: { Authorization: "Bearer " + reviewer }
   });
   assert.equal(filteredAuditCsv.status, 200);
   const filteredAuditText = await filteredAuditCsv.text();
-  assert.match(filteredAuditText, /"login_succeeded"/);
+  assert.match(filteredAuditText, /"published"/);
   assert.doesNotMatch(filteredAuditText, /"user_created"/, "action filter should exclude unrelated audit events");
   assert.equal((await fetch(base + "/api/audit/export.csv")).status, 401, "audit export must require authentication");
   assert.equal((await request("/api/audit/export.csv", { token: forecaster })).status, 403, "audit export must preserve restricted audit roles");

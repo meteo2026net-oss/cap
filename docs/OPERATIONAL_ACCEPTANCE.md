@@ -8,6 +8,7 @@
 > **Verification note:** Tip `6ade8179d8d2` includes the tightened two-tenant acceptance test; promote it as software verification head only after CI success on this tip.
 > **Institutional Gate 8:** **Open** — sole register: [`INSTITUTIONAL_ACCEPTANCE_EVIDENCE.md`](INSTITUTIONAL_ACCEPTANCE_EVIDENCE.md)
 > **external_adapters_enabled:** **false**
+> **Intended scope:** Syrian Arab Republic only — local programme, not global distribution.
 
 ## A. Verified in automated tests (local / CI)
 

@@ -37,9 +37,11 @@ Engineering CI success is **not** evidence for any form below.
 
 ## Step 18 / Register row 2 — Geography, language, severity, public feed
 
+**Product intent (pre-filled for institutional confirmation):** Deployment and warning responsibility are limited to the **Syrian Arab Republic**. This system is a **local programme**, not a global alert distribution service. Institution may narrow further (governorates / areas) but should not expand to worldwide dissemination without a new explicit decision.
+
 | Field | Value |
 |-------|-------|
-| Approved geographies / CAP area policy | |
+| Approved geographies / CAP area policy | Default intent: Syrian Arab Republic only; list any sub-national limits |
 | Approved languages | |
 | Severity / urgency / certainty policy | |
 | Public feed policy (Actual only? Test handling?) | |

@@ -64,11 +64,14 @@
 
 ## 5. نطاق القبول والقيود / Scope and constraints
 
+**Intent locked for this product line:** Syrian Arab Republic only — local operations programme, not global distribution. Institutional signature confirms or further narrows this scope; it does not by itself authorize worldwide dissemination.
+
+
 | البند | القيمة المعتمدة عند التوقيع |
 |-------|------------------------------|
-| البيئات المسموحة (تجريبي / staging / إنتاج) | |
+| البيئات المسموحة (تجريبي / staging / إنتاج) | محلي / داخل المؤسسة في سوريا |
 | أنواع الرسائل المسموحة (Test / Exercise / Actual) | |
-| النطاق الجغرافي | |
+| النطاق الجغرافي | **المقصود: الجمهورية العربية السورية فقط** (يُؤكد عند التوقيع) |
 | اللغات | |
 | الموجز العام | |
 | المحولات الخارجية (بريد / رسائل / Webhook صادر) | **الافتراضي: معطّلة** ما لم يُذكر خلاف ذلك صراحةً بعد قبول البند 11 |

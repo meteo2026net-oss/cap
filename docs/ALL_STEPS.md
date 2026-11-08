@@ -3,6 +3,7 @@
 **الفرع:** `fix/retention-audit-atomicity`  
 **PR #4:** Draft — غير مدمج  
 **external_adapters_enabled:** false  
+**النطاق المقصود:** سوريا فقط — برنامج محلي وليس نشراً عالمياً  
 **بوابة 8:** مفتوحة — السجل الوحيد: [INSTITUTIONAL_ACCEPTANCE_EVIDENCE.md](INSTITUTIONAL_ACCEPTANCE_EVIDENCE.md)
 
 **مرجع التحقق البرمجي (CI أخضر على رأس PR):** `179fa1f14c19f076512fc8c7be23288f4120727a` (سابقاً أيضاً `cfa124e`)  

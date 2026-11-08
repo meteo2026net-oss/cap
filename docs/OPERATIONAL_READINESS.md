@@ -3,6 +3,14 @@
 > **Status: NOT APPROVED FOR OPERATIONAL PUBLIC WARNING ISSUANCE.**
 > This checklist is a planning and acceptance record, not a certification. A passing CI run does not establish CAP interoperability, institutional authority, or operational safety. Keep deployments private and use only Test/Exercise data until every applicable gate has been independently accepted.
 
+## 0. Intended operational scope (fixed product intent)
+
+- **Geography:** Syrian Arab Republic only.
+- **Mode:** Local programme on institution-controlled hosts (operations centre), not a worldwide distribution network.
+- **Message standard:** OASIS CAP 1.2 for alert structure; scope of *use* remains national/local.
+- **Outbound global channels:** Not in scope by default; `external_adapters_enabled` remains false unless the owning institution later accepts a narrow channel after Gate 8 evidence.
+- **النطاق:** سوريا فقط · تشغيل محلي · ليس خدمة عالمية.
+
 ## 1. Decisions and inputs required from the deploying institution
 
 These are deployment-time decisions; they are not needed to continue repository development.

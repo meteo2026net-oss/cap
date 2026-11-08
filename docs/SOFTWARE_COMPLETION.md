@@ -33,6 +33,10 @@ Gate 8 is tracked only in [`INSTITUTIONAL_ACCEPTANCE_EVIDENCE.md`](INSTITUTIONAL
 7. **Reliability** — audit hash chain, retention atomicity, backup/restore/drill tooling, perf harness  
 8. **Ops docs** — architecture, API, deployment, runbook, DR, gate status, institutional register  
 
+## Intended scope
+
+Local programme for use in the **Syrian Arab Republic only**. Not positioned as a global warning-distribution network.
+
 ## Explicit non-delivery (by policy)
 
 - External transport adapters  

@@ -6,6 +6,8 @@
 **Verification note:** Confirm CI success on tip before treating it as the software verification head.
 **Institutional Gate 8:** **Open** — sole register: [`INSTITUTIONAL_ACCEPTANCE_EVIDENCE.md`](INSTITUTIONAL_ACCEPTANCE_EVIDENCE.md)
 **external_adapters_enabled:** **false**
+**Intended scope:** Syrian Arab Republic only — local programme, not global distribution.
+**النطاق المقصود:** الجمهورية العربية السورية فقط — برنامج محلي وليس نشراً عالمياً.
 
 **All steps 1–28 (single file):** [`ALL_STEPS.md`](ALL_STEPS.md)  
 **Execution matrix (phases 3–5):** [`ACCEPTANCE_EXECUTION_MATRIX.md`](ACCEPTANCE_EXECUTION_MATRIX.md)  

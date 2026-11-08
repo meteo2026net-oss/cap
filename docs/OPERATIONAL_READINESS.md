@@ -132,3 +132,10 @@ The current CI suite and CodeQL are useful automated checks, but they do not rep
 - [x] Reviewed every current delivery state transition and background queue-maintenance path; recorded the findings in [DELIVERY_RECIPIENT_SCOPE_AUDIT.md](DELIVERY_RECIPIENT_SCOPE_AUDIT.md).
 - [x] Added Public-scope SQL enforcement to enqueue, claim, receipt, retry, automatic retry, and stale-lease recovery paths, with negative unit and API regression coverage.
 - [ ] Recipient grants, identity verification, expiry/revocation semantics, and institution-approved queue behavior remain prerequisites before any Restricted/Private delivery or external adapter is enabled.
+
+
+## Role authorization review
+
+- [x] Completed a source-and-test role audit for Reviewer, Approver, Forecaster, Publisher, Viewer, and Admin; findings and open policy decisions are in [ROLE_AUTHORIZATION_AUDIT.md](ROLE_AUTHORIZATION_AUDIT.md).
+- [x] Enforced forecaster ownership on draft submission, matching the existing draft-edit ownership check; a second forecaster cannot submit another user's draft.
+- [ ] Institution must approve the distinct reviewer/approver workflow, approval quorum, conflict-of-interest rules, publisher/delivery-operator boundary, and admin override/dual-control policy before operational acceptance.

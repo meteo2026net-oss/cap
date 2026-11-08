@@ -2,8 +2,8 @@
 
 ## Baseline
 - Branch: `fix/retention-audit-atomicity`
-- PR head / software verification head: `cfa124e5d45c2815abe78604b742317333a71687` (CAP system checks + CodeQL success).
-- Progression note: `6bbeef6` → org-bound sources → integration alignment → green CI on `cfa124e5d45c2815abe78604b742317333a71687`.
+- PR head / software verification head: `179fa1f14c19f076512fc8c7be23288f4120727a` (CAP system checks + CodeQL success).
+- Progression note: `6bbeef6` → org-bound sources → integration alignment → green CI on `179fa1f14c19f076512fc8c7be23288f4120727a`.
 - Institutional Gate 8: see [`INSTITUTIONAL_ACCEPTANCE_EVIDENCE.md`](INSTITUTIONAL_ACCEPTANCE_EVIDENCE.md) (Open).
 - PR: https://github.com/meteo2026net-oss/cap/pull/4 (Draft)
 

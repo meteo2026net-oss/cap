@@ -5,7 +5,7 @@
 **external_adapters_enabled:** false  
 **بوابة 8:** مفتوحة — السجل الوحيد: [INSTITUTIONAL_ACCEPTANCE_EVIDENCE.md](INSTITUTIONAL_ACCEPTANCE_EVIDENCE.md)
 
-**مرجع التحقق البرمجي (CI أخضر على رأس PR):** `639e11a2873d` (سابقاً أيضاً `cfa124e`)  
+**مرجع التحقق البرمجي (CI أخضر على رأس PR):** `179fa1f14c19f076512fc8c7be23288f4120727a` (سابقاً أيضاً `cfa124e`)  
 **رأس الفرع عند إنشاء هذا الملف:** يُحدَّث مع commits التوثيق على نفس الفرع
 
 ---

@@ -1,8 +1,9 @@
 # Project Gate Status
 
 **Branch:** `fix/retention-audit-atomicity`  
-**PR #4 head (current tip at documentation update):** `cfa124e5d45c2815abe78604b742317333a71687` (Draft, not merged)
-**Software verification on that head:** CAP system checks **success** · CodeQL **success**
+**PR #4 head (current tip):** `6ade8179d8d24d94076bf021a4a93335d4f200a0` (Draft, not merged)
+**Last green CAP system checks + CodeQL:** `179fa1f14c19f076512fc8c7be23288f4120727a`
+**Verification note:** Confirm CI success on tip before treating it as the software verification head.
 **Institutional Gate 8:** **Open** — sole register: [`INSTITUTIONAL_ACCEPTANCE_EVIDENCE.md`](INSTITUTIONAL_ACCEPTANCE_EVIDENCE.md)
 **external_adapters_enabled:** **false**
 
@@ -30,7 +31,7 @@ No other document may mark Gate 8 closed. CI, README, and PR state are not accep
 |------|----------------|-------|
 | Pin SHA + review commits | Software-tested | Historical close-out in `PHASE1_BASELINE.md`; branch continues |
 | PR #4 review posture | Software-tested | Draft only; no merge without explicit approval |
-| Full suite on PR head | Software-tested | CAP system checks + CodeQL success on `cfa124e5d45c2815abe78604b742317333a71687` |
+| Full suite on PR head | Software-tested | CAP system checks + CodeQL success on `179fa1f14c19f076512fc8c7be23288f4120727a` |
 
 ---
 

@@ -4,7 +4,7 @@
 **Does not close Gate 8.** Institutional rows stay in [`INSTITUTIONAL_ACCEPTANCE_EVIDENCE.md`](INSTITUTIONAL_ACCEPTANCE_EVIDENCE.md).
 
 **Branch / PR:** `fix/retention-audit-atomicity` · PR #4 Draft  
-**Software reference head (CI green at docs alignment):** `cfa124e5d45c2815abe78604b742317333a71687`  
+**Software reference head (CI green at docs alignment):** `179fa1f14c19f076512fc8c7be23288f4120727a`  
 **external_adapters_enabled:** **false** (must remain false for this pack)
 
 ---

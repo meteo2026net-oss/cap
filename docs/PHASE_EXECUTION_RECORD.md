@@ -2,15 +2,15 @@
 
 **Recorded:** 2026-11-08 (UTC)  
 **Branch:** `fix/retention-audit-atomicity`  
-**PR #4 head:** `639e11a2873d` — **Draft**, not merged  
+**PR #4 head:** `179fa1f14c19f076512fc8c7be23288f4120727a` — **Draft**, not merged  
 **external_adapters_enabled:** false  
 
 ## Automated technical evidence (Phase 3 suite via CI)
 
 | Workflow | Head | Conclusion | URL |
 |----------|------|------------|-----|
-| CAP system checks | `639e11a2873d` | **success** | https://github.com/meteo2026net-oss/cap/actions/runs/42447889994 |
-| CodeQL security analysis | `639e11a2873d` | **success** | https://github.com/meteo2026net-oss/cap/actions/runs/42447890005 |
+| CAP system checks | `179fa1f14c19f076512fc8c7be23288f4120727a` | **success** | https://github.com/meteo2026net-oss/cap/actions/runs/42447889994 |
+| CodeQL security analysis | `179fa1f14c19f076512fc8c7be23288f4120727a` | **success** | https://github.com/meteo2026net-oss/cap/actions/runs/42447890005 |
 
 This satisfies the **automated** portion of steps 11–16 (isolation, lifecycle, roles, webhook/outbox, Public-only boundary, CAP schema) as exercised in the repository test suite.
 

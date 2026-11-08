@@ -197,6 +197,11 @@ test("opt-in recipient grants isolate same-role alert reads, exports and deliver
   const readB = await request(`/api/alerts/${alertId}`, { token: forecasterB, organizationId: orgB.data.id });
   assert.equal(readB.status, 200);
   assert.equal(readB.data.alert.headline, "TENANT_B_ONLY_HEADLINE");
+  assert.equal((await request(`/api/alerts/${alertId}`, { token: forecasterB })).status, 404,
+    "a valid grant is insufficient without an explicit active organization context");
+  assert.equal((await request("/api/alerts?scope=Restricted", {
+    token: forecasterA, organizationId: orgB.data.id
+  })).status, 403, "a user cannot select an organization where they have no active membership");
   for (const result of [
     await request(`/api/alerts/${alertId}`, { token: forecasterA, organizationId: orgA.data.id }),
     await request(`/api/alerts/${alertId}/cap.xml`, { token: forecasterA, organizationId: orgA.data.id }),

@@ -120,3 +120,8 @@ The current CI suite and CodeQL are useful automated checks, but they do not rep
 - [x] Code-level review of account lifecycle, session invalidation, role guards, MFA controls, and current recipient-scope containment recorded in [ACCOUNT_AND_RECIPIENT_AUTHORIZATION_REVIEW.md](ACCOUNT_AND_RECIPIENT_AUTHORIZATION_REVIEW.md).
 - [ ] Institution must approve the role/approval matrix, trusted organization and recipient identity source, geographic/temporal grant semantics, grant/revoke lifecycle, MFA-required roles, and account recovery process.
 - [ ] Implement and independently test recipient grants before enabling Restricted or Private operations. Keep the Public-only boundary in place until the multi-user/multi-organization IDOR and revocation test matrix is accepted.
+
+
+## Recipient authorization design proposal
+- [x] Drafted [RECIPIENT_AUTHORIZATION_DESIGN.md](RECIPIENT_AUTHORIZATION_DESIGN.md) with a deny-by-default conceptual model, identity prerequisites, enforcement inventory, revocation semantics, and multi-organization negative/positive test matrix.
+- [ ] This proposal is not institution-approved and is not implemented. Do not create grants or enable Restricted/Private workflows until the identity authority, organization hierarchy, recipient semantics, role separation, expiry/revocation, and operational controls are approved.

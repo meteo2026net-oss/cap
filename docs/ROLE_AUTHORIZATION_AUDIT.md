@@ -80,7 +80,7 @@ Current route behavior:
 - Cannot reset their own password through the administrator-assisted reset route or change their own role.
 - Cannot deactivate themselves or remove the final active administrator.
 - Peer-administrator password reset is blocked; the requesting administrator does not receive another administrator's temporary credential.
-- Role/status/account mutations are audited, transactional where applicable, and protected by an administrator-specific rate limit. The default mutation limit is 30 operations per 15 minutes per authenticated administrator.
+- Role/status/account mutations are audited, transactional where applicable, and protected by an administrator-specific rate limit. The default mutation limit is 30 operations per 15 minutes per authenticated administrator. Administrator-assisted password resets have a separate default limit of 5 per 15 minutes; both limits are configurable through validated environment settings.
 - Per-alert workflow guards prevent the creator from approving their own alert and prevent the approving user from publishing that same alert.
 
 Residual concern:

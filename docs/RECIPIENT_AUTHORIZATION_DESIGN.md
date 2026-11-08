@@ -98,13 +98,14 @@ Use at least two organizations, three users, two recipient groups, and multiple 
 5. Disabled organization/group and deactivated user are denied.
 6. A reviewer role without a scope grant cannot read or review another organization's alert.
 7. A scope grant without the required workflow role cannot approve or publish.
-8. Private address text that does not resolve to a verified principal grants no access.
-9. Collection pagination, total counts, CSV, stats, GeoJSON, XML, relations, audit, and metrics do not leak denied records.
-10. Revocation blocks subsequent detail, list, export, workflow, and delivery access.
-11. Concurrent revoke/read and grant/revoke races have deterministic, documented outcomes.
-12. ID guessing, cross-tenant relations, duplicate identifiers, and alternate endpoint paths do not bypass policy.
-13. Background jobs do not deliver after a grant expires or is revoked, according to the institution-approved queue policy.
-14. All grant creation, change, expiry, and revocation events are attributable and tamper-evident.
+8. Reviewer and Approver separation follows the approved workflow policy; a reviewer-only identity cannot approve when approval is reserved for a distinct approver, and one identity cannot satisfy both stages where dual control is required.
+9. Private address text that does not resolve to a verified principal grants no access.
+10. Collection pagination, total counts, CSV, stats, GeoJSON, XML, relations, audit, and metrics do not leak denied records.
+11. Revocation blocks subsequent detail, list, export, workflow, and delivery access.
+12. Concurrent revoke/read and grant/revoke races have deterministic, documented outcomes.
+13. ID guessing, cross-tenant relations, duplicate identifiers, and alternate endpoint paths do not bypass policy.
+14. Background jobs do not deliver after a grant expires or is revoked, according to the institution-approved queue policy.
+15. All grant creation, change, expiry, and revocation events are attributable and tamper-evident.
 
 Negative tests must assert both the response and the absence of side effects or leaked markers. Do not weaken existing CAP structural validation to implement authorization.
 

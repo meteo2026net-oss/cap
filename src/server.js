@@ -17,7 +17,7 @@ import { applyOperationalRetentionWithAudit, collectOperationalMetrics } from ".
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { consumeRecoveryCode, decryptTotpSecret, encryptTotpSecret, generateRecoveryCodes, generateTotpSecret, hashRecoveryCode, verifyTotp } from "./mfa.js";
 import { verifyAndConsumeWebhook } from "./webhook-replay.js";
-import { assignAlertOrganizationOwner, createAlertRecipientGrant, createOrganization, createRecipientGroup, expireAlertRecipientGrants, expireOrganizationMemberships, expireRecipientGroupMemberships, requestOrganizationMembership, requestRecipientGroupMembership, transitionAlertRecipientGrant, transitionOrganizationMembership, transitionRecipientGroupMembership } from "./recipient-auth.js";
+import { alertRecipientGrantSql, assignAlertOrganizationOwner, createAlertRecipientGrant, createOrganization, createRecipientGroup, expireAlertRecipientGrants, expireOrganizationMemberships, expireRecipientGroupMemberships, hasActiveAlertRecipientGrant, hasActiveOrganizationMembership, requestOrganizationMembership, requestRecipientGroupMembership, transitionAlertRecipientGrant, transitionOrganizationMembership, transitionRecipientGroupMembership } from "./recipient-auth.js";
 
 const app = express();
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -30,6 +30,36 @@ if (configuredMfaRoles.some(role=>!validMfaRoles.has(role)) || new Set(configure
  process.exit(1);
 }
 const mfaRequiredRoles = new Set(configuredMfaRoles);
+const nonPublicRecipientAccessEnabled = process.env.CAP_NON_PUBLIC_RECIPIENT_ACCESS_ENABLED === "true";
+
+function recipientOrganizationContext(req) {
+ const raw=req.get("x-cap-organization-id") ?? req.query.organization_id;
+ if(raw===undefined || raw===null || raw==="") return null;
+ if(!/^[1-9][0-9]*$/.test(String(raw))) return null;
+ const organizationId=Number(raw);
+ if(!Number.isSafeInteger(organizationId) || !hasActiveOrganizationMembership(db,req.user.id,organizationId)) return null;
+ return organizationId;
+}
+
+function alertScopePredicate(req, alias="a", action="read") {
+ if(!nonPublicRecipientAccessEnabled) return {sql:`${alias}.scope='Public'`,params:[]};
+ const organizationId=recipientOrganizationContext(req);
+ if(!organizationId) return {sql:`${alias}.scope='Public'`,params:[]};
+ return {
+  sql:`(${alias}.scope='Public' OR (${alias}.scope IN ('Restricted','Private') AND ${alertRecipientGrantSql(alias,action)}))`,
+  params:[req.user.id,organizationId]
+ };
+}
+
+function canAccessAlertForRequest(req, alert, action="read") {
+ if(!alert) return false;
+ if(alert.scope==="Public") return true;
+ if(!nonPublicRecipientAccessEnabled) return false;
+ const organizationId=recipientOrganizationContext(req);
+ return Boolean(organizationId && hasActiveAlertRecipientGrant(db,{
+  alertId:alert.id,userId:req.user.id,organizationId,action
+ }));
+}
 const apiRateLimit = Number(process.env.API_RATE_LIMIT || 300);
 if (!Number.isSafeInteger(apiRateLimit) || apiRateLimit < 50 || apiRateLimit > 10000) {
  console.error("FATAL: API_RATE_LIMIT must be an integer between 50 and 10000.");
@@ -935,7 +965,9 @@ app.use("/api/alerts",auth,(req,res,next)=>{
  while(normalizedPath.length>1 && normalizedPath.endsWith("/")) normalizedPath=normalizedPath.slice(0,-1);
  const collectionRead=req.method==="GET" && ["/api/alerts","/api/alerts/stats","/api/alerts/export.csv"].includes(normalizedPath);
  if(collectionRead){
-  if(["Restricted","Private"].includes(req.query.scope)) return res.status(403).json({error:"Restricted and Private alert access is disabled until recipient authorization is configured",code:"SCOPE_AUTHORIZATION_UNCONFIGURED"});
+  if(["Restricted","Private"].includes(req.query.scope) &&
+     (!nonPublicRecipientAccessEnabled || !recipientOrganizationContext(req)))
+   return res.status(403).json({error:"Restricted and Private alert access requires an active organization membership and recipient grant",code:"SCOPE_AUTHORIZATION_UNCONFIGURED"});
   return next();
  }
  if(req.method==="POST" && normalizedPath==="/api/alerts"){
@@ -951,8 +983,19 @@ app.use("/api/alerts",auth,(req,res,next)=>{
  const alertId=Number(alertIdSegment);
  const idMatch=normalizedPath.startsWith("/api/alerts/") && Number.isSafeInteger(alertId) && alertId>0 ? [null,alertId] : null;
  if(idMatch){
-  const existing=db.prepare("SELECT scope FROM alerts WHERE id=?").get(idMatch[1]);
-  if(existing && existing.scope!=="Public") return res.status(404).json({error:"Alert not found"});
+  const existing=db.prepare("SELECT id,scope FROM alerts WHERE id=?").get(idMatch[1]);
+  if(existing && existing.scope!=="Public") {
+   const readPath=req.method==="GET" && [
+    `/api/alerts/${idMatch[1]}`,
+    `/api/alerts/${idMatch[1]}/cap.xml`,
+    `/api/alerts/${idMatch[1]}/relations`,
+    `/api/alerts/${idMatch[1]}/review-history`,
+    `/api/alerts/${idMatch[1]}/versions`,
+    `/api/alerts/${idMatch[1]}/timeline`
+   ].includes(normalizedPath);
+   if(!readPath || !canAccessAlertForRequest(req,existing,"read"))
+    return res.status(404).json({error:"Alert not found"});
+  }
   if(req.method==="PATCH" && req.body?.scope==="Restricted" &&
      typeof (req.body.restriction ?? existing?.restriction)==="string" && (req.body.restriction ?? existing?.restriction).trim())
    return res.status(403).json({error:"Changing an alert to Restricted is disabled until recipient authorization is configured",code:"SCOPE_AUTHORIZATION_UNCONFIGURED"});

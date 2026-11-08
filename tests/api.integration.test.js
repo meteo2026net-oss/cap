@@ -1853,20 +1853,22 @@ test("API enforces role separation, public-feed filtering and account deactivati
   } finally {
     auditPaginationDatabase.close();
   }
-  const auditPageOne = await request("/api/audit?limit=50", { token: reviewer });
+  // Pagination fixtures have null alert_id; under organization-aware audit visibility
+  // only admins can read them. Exercise cursor paging with the admin token.
+  const auditPageOne = await request("/api/audit?limit=50", { token: admin });
   assert.equal(auditPageOne.status, 200);
   assert.equal(auditPageOne.data.entries.length, 50);
   assert.equal(auditPageOne.data.has_more, true);
   const auditPageTwo = await request(
     "/api/audit?limit=50&before_id=" + auditPageOne.data.next_before_id,
-    { token: reviewer }
+    { token: admin }
   );
   assert.equal(auditPageTwo.status, 200);
   assert.equal(auditPageTwo.data.entries.length, 50);
   assert.equal(auditPageTwo.data.has_more, true);
   const auditPageThree = await request(
     "/api/audit?limit=50&before_id=" + auditPageTwo.data.next_before_id,
-    { token: reviewer }
+    { token: admin }
   );
   assert.equal(auditPageThree.status, 200);
   assert.ok(auditPageThree.data.entries.length > 0);

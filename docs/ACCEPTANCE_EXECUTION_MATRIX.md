@@ -4,8 +4,8 @@ Maps the full acceptance checklist to **what the repository can prove**, **what 
 
 **PR #4:** Draft · **Adapters:** disabled · **Gate 8 register:** [INSTITUTIONAL_ACCEPTANCE_EVIDENCE.md](INSTITUTIONAL_ACCEPTANCE_EVIDENCE.md) (all Open)
 
-**Software CI reference head:** `26e7cf45889cffdb0fd9b3be2c6a750755e235d0` (CAP system checks + CodeQL success)  
-**Pack head (includes this matrix lineage):** branch tip on `fix/retention-audit-atomicity`
+**Last fully verified software CI head:** `8d6f2ab68fef288da766773cf160e7ff73c371bf` (CAP system checks + CodeQL success)  
+**Pack head (includes this matrix lineage):** see PR #4 branch tip; documentation-only follow-up commits may be newer than the verified software head.
 
 ---
 
@@ -30,6 +30,8 @@ Maps the full acceptance checklist to **what the repository can prove**, **what 
 ---
 
 ## Phase 3 — Technical tests
+
+**Latest verified CI evidence:** CAP System Checks and CodeQL both succeeded on `8d6f2ab68fef288da766773cf160e7ff73c371bf`; the Windows backup job on `windows-2022` also passed dependency installation, backup/restore CLI tests, and PowerShell parsing. This confirms the Windows runner fix on that software head; subsequent documentation-only commits are tracked separately.
 
 | Step | Automated evidence (repo/CI) | Operator (isolated host) | Engineering close? |
 |------|------------------------------|--------------------------|--------------------|

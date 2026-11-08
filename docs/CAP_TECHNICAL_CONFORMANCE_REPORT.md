@@ -4,11 +4,13 @@
 **Not:** OASIS certification, receiver certification, or Gate 8 institutional acceptance.
 
 **Branch:** `fix/retention-audit-atomicity` (PR #4 Draft)  
-**Last confirmed green CAP system checks + CodeQL (lineage):** `26e7cf45889cffdb0fd9b3be2c6a750755e235d0`  
-**Software verification head (acceptance pack included):** `26e7cf45889cffdb0fd9b3be2c6a750755e235d0`  
+**Last confirmed green CAP system checks + CodeQL:** `8d6f2ab68fef288da766773cf160e7ff73c371bf`  
+**Software verification head (acceptance pack included):** `8d6f2ab68fef288da766773cf160e7ff73c371bf`  
 **external_adapters_enabled:** false  
 
 ## 1. Method
+
+**Windows CI:** The `windows-2022` backup job passed on the verified head, including exact dependency installation, backup/restore CLI tests, and PowerShell parsing.
 
 - GitHub Actions **CAP system checks**: Node test suite + OASIS CAP 1.2 XSD validation path.  
 - GitHub Actions **CodeQL**.  

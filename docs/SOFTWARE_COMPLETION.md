@@ -1,10 +1,14 @@
 # Software Completion Record
 
 **Branch:** `fix/retention-audit-atomicity`  
-**PR #4 head (current tip):** `26e7cf45889cffdb0fd9b3be2c6a750755e235d0` (Draft, not merged)
-**Software verification head (CAP system checks + CodeQL success):** `26e7cf45889cffdb0fd9b3be2c6a750755e235d0`
+**Last fully verified software head:** `8d6f2ab68fef288da766773cf160e7ff73c371bf` (PR #4 remains Draft, not merged)
+**Software verification head (CAP system checks + CodeQL success):** `8d6f2ab68fef288da766773cf160e7ff73c371bf`
 **Institutional Gate 8:** **Open** — sole register: INSTITUTIONAL_ACCEPTANCE_EVIDENCE.md
 **external_adapters_enabled:** **false**
+
+## Latest CI evidence
+
+CAP System Checks and CodeQL both succeeded on `8d6f2ab68fef288da766773cf160e7ff73c371bf`. The Windows backup job on `windows-2022` also passed dependency installation, backup/restore CLI tests, and PowerShell parsing. The branch may have later documentation-only commits; see the live PR head for current CI status.
 
 ## What “complete” means here
 
@@ -50,5 +54,5 @@ Local programme for use in the **Syrian Arab Republic only**. Not positioned as 
 2. Run institutional drills and fill [`INSTITUTIONAL_ACCEPTANCE_EVIDENCE.md`](INSTITUTIONAL_ACCEPTANCE_EVIDENCE.md).  
 3. Only after register row 14 is Accepted may Gate 8 be marked closed in `GATE_STATUS.md`.  
 
-**Software completion: yes (verified on `26e7cf45889cffdb0fd9b3be2c6a750755e235d0`).**  
+**Software completion: yes (verified on `8d6f2ab68fef288da766773cf160e7ff73c371bf`).**  
 **Project institutional completion / go-live: no.**

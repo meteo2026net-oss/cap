@@ -5,6 +5,7 @@ import bcrypt from "bcryptjs";
 import { installAuditLogGuards } from "./audit.js";
 import { migrateLeaseTokenStorage } from "./lease-migration.js";
 import { initializeWebhookReplayStore } from "./webhook-replay.js";
+import { installRecipientSchema } from "./recipient-auth.js";
 
 const databasePath = path.resolve(process.env.DB_PATH || path.join("storage", "cap.sqlite"));
 fs.mkdirSync(path.dirname(databasePath), { recursive: true });
@@ -93,6 +94,9 @@ CREATE INDEX IF NOT EXISTS idx_delivery_status ON delivery_outbox(status, create
 CREATE INDEX IF NOT EXISTS idx_delivery_alert ON delivery_outbox(alert_id);
 
 `);
+
+ // Install recipient authorization entities before any tenant-aware route or worker is loaded.
+ installRecipientSchema(db);
 
  // Forward-compatible, idempotent SQLite migrations for existing installations.
  db.exec(`

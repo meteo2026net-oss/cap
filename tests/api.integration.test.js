@@ -1196,12 +1196,20 @@ test("API enforces role separation, public-feed filtering and account deactivati
     "fractional inbox cursors must be rejected");
   const paginationDatabase = new Database(path.join(cwd, "storage", "cap.sqlite"));
   try {
+    const orgRow = paginationDatabase.prepare("SELECT id FROM organizations WHERE slug='integration-org'").get();
+    assert.ok(orgRow, "integration-org must exist for org-scoped inbox pagination");
     const addInboxRow = paginationDatabase.prepare(
-      "INSERT INTO webhook_inbox (source_timestamp,signature_hash,payload_json,status) VALUES (?,?,?,'pending')"
+      "INSERT INTO webhook_inbox (source_timestamp,signature_hash,payload_json,status,organization_id,source_key) VALUES (?,?,?,'pending',?,?)"
     );
     const addPageRows = paginationDatabase.transaction(() => {
       for (let index = 0; index < 101; index++) {
-        addInboxRow.run(webhookTimestamp, "pagination-test-" + index, JSON.stringify({ page_test: index }));
+        addInboxRow.run(
+          webhookTimestamp,
+          "pagination-test-" + index,
+          JSON.stringify({ page_test: index }),
+          orgRow.id,
+          "pagination-source"
+        );
       }
     });
     addPageRows();

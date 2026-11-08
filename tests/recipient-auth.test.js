@@ -352,3 +352,28 @@ test("grant expiry is immediate at authorization time and terminal after expiry 
     assert.equal(database.prepare("SELECT status FROM alert_recipient_grants WHERE id=?").get(grant).status,"expired");
   }finally{database.close();}
 });
+
+
+test("future-start recipient grants remain non-authorizing until their effective window",()=>{
+  const database=fixture();
+  try{
+    const owner=createOrganization(database,{slug:"future-grant-owner",name:"Future Grant Owner",actorUserId:1});
+    const recipient=createOrganization(database,{slug:"future-grant-recipient",name:"Future Grant Recipient",actorUserId:1});
+    const membership=requestOrganizationMembership(database,{organizationId:recipient,userId:3,actorUserId:1});
+    transitionOrganizationMembership(database,{membershipId:membership,nextStatus:"active",actorUserId:1});
+    database.prepare("INSERT INTO alerts(id) VALUES(102)").run();
+    assignAlertOrganizationOwner(database,{alertId:102,organizationId:owner,actorUserId:1});
+    const startsAt=new Date(Date.now()+60_000).toISOString();
+    const expiresAt=new Date(Date.now()+120_000).toISOString();
+    const grant=createAlertRecipientGrant(database,{
+      alertId:102,ownerOrganizationId:owner,recipientType:"user",recipientUserId:3,
+      recipientOrganizationId:recipient,action:"read",actorUserId:1,startsAt,expiresAt
+    });
+    assert.equal(hasActiveAlertRecipientGrant(database,{
+      alertId:102,userId:3,organizationId:recipient
+    }),false,"pending future grant must not authorize");
+    assert.throws(()=>transitionAlertRecipientGrant(database,{
+      grantId:grant,nextStatus:"active",actorUserId:1
+    }),/validity window/i,"a future grant cannot be activated before its start");
+  }finally{database.close();}
+});

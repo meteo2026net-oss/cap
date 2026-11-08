@@ -273,3 +273,8 @@ This addendum supersedes historical statements above that claim organization, me
 - Independent security review, documented restore evidence, external receiver interoperability acceptance, formal operational controls, and signed institutional Gate 8 acceptance remain outstanding.
 
 Do not describe the recipient model as production-ready, OASIS-certified, institutionally accepted, or Gate 8 complete on the basis of these code changes or CI results.
+
+
+### Additional route-level verification — 2026-11-08
+
+The route-level guard is applied before handler execution for non-Public alert detail, CAP XML, relations, review-history, versions, and timeline reads. The integration pack now verifies that a matching direct read grant permits these reads, while a same-role peer, an owner-side user without a recipient grant, and an administrator without a recipient grant receive concealed 404 responses. A read grant does not authorize review-note mutation. A future-start grant is tested as non-authorizing until its effective window; grant expiry is covered by the existing lifecycle unit test.

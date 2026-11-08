@@ -116,3 +116,8 @@ The policy decisions above remain **awaiting institutional approval**. Technical
 - Existing grant and membership lifecycle unit tests cover grant expiry and membership time windows. Automated checks are technical regression evidence only, not institutional acceptance.
 
 Release boundary remains unchanged: do not enable non-Public access in production, do not activate external adapters, and do not claim Restricted/Private operational readiness until institutional decisions, independent security review, and Gate 8 evidence are complete.
+
+
+### Additional route-level enforcement coverage
+
+The shared non-Public alert guard also protects detail, CAP XML, relations, review-history, versions, and timeline routes. A read grant authorizes those reads only for the matching recipient identity and organization; it does not authorize review-note mutations. These routes are covered by the two-tenant integration pack. Future-start grants are separately tested as non-authorizing until their effective window.

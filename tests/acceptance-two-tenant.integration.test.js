@@ -373,6 +373,38 @@ test("acceptance pack: two-tenant webhook isolation and public test lifecycle", 
   assert.ok(authorizedAudit.data.entries.some(entry => entry.alert_id === restrictedAlertId),
     "valid direct recipient grant must expose linked audit events");
 
+  const alertReadPaths = [
+    `/api/alerts/${restrictedAlertId}`,
+    `/api/alerts/${restrictedAlertId}/relations`,
+    `/api/alerts/${restrictedAlertId}/review-history`,
+    `/api/alerts/${restrictedAlertId}/versions`,
+    `/api/alerts/${restrictedAlertId}/timeline`,
+  ];
+  for (const path of alertReadPaths) {
+    assert.equal((await request(path + `?organization_id=${orgB.data.id}`, { token: reviewerB })).status, 200,
+      "valid recipient grant must authorize " + path);
+    for (const [label, token, organizationId] of [
+      ["same-role peer without grant", reviewerBNoGrant, orgB.data.id],
+      ["owner-side user without recipient grant", reviewerA, orgA.data.id],
+      ["administrator without recipient grant", admin, undefined],
+    ]) {
+      const suffix = organizationId ? `?organization_id=${organizationId}` : "";
+      assert.equal((await request(path + suffix, { token })).status, 404,
+        label + " must not read " + path);
+    }
+  }
+  const authorizedXml = await fetch(base + `/api/alerts/${restrictedAlertId}/cap.xml?organization_id=${orgB.data.id}`, {
+    headers: { Authorization: "Bearer " + reviewerB },
+  });
+  assert.equal(authorizedXml.status, 200, "valid grant must authorize CAP XML read");
+  const deniedXml = await fetch(base + `/api/alerts/${restrictedAlertId}/cap.xml?organization_id=${orgA.data.id}`, {
+    headers: { Authorization: "Bearer " + reviewerA },
+  });
+  assert.equal(deniedXml.status, 404, "missing grant must conceal CAP XML");
+  assert.equal((await request(`/api/alerts/${restrictedAlertId}/review-notes?organization_id=${orgB.data.id}`, {
+    method: "POST", token: reviewerB, body: { note: "read grant is not review permission" },
+  })).status, 404, "read grant must not authorize review-note mutation");
+
   for (const [label, token, organizationId] of [
     ["same-role peer without grant", reviewerBNoGrant, orgB.data.id],
     ["alert owner organization without recipient grant", reviewerA, orgA.data.id],

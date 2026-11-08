@@ -191,6 +191,9 @@ test("opt-in recipient grants isolate same-role alert reads, exports and deliver
   ).run(alertId).lastInsertRowid);
   db.close();
 
+  const adminGrantList = await request(`/api/alerts/${alertId}/grants`, { token: admin });
+  assert.equal(adminGrantList.status, 200, "platform Admin must retain grant management visibility after an alert becomes non-Public");
+
   const readB = await request(`/api/alerts/${alertId}`, { token: forecasterB, organizationId: orgB.data.id });
   assert.equal(readB.status, 200);
   assert.equal(readB.data.alert.headline, "TENANT_B_ONLY_HEADLINE");

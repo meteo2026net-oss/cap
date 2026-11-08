@@ -52,3 +52,16 @@ This temporary policy does not create recipient entitlements and is not a substi
 - Inbound requests require an HMAC-SHA256 signature over the exact timestamp and raw request body. The timestamp tolerance is 300 seconds; a consumed signature is retained by the replay guard for 600 seconds.
 - Signature verification, replay consumption, and inbox insertion are performed atomically. Concurrent replays of the same signed request must result in at most one accepted inbox entry.
 - Accepted messages enter the inbox as `pending` and require manual review. Ingress does not publish alerts or activate an external delivery adapter.
+
+## Webhook sources (admin)
+
+- `GET /api/webhook-sources` — list sources (optional `organization_id` filter)
+- `POST /api/webhook-sources` — register organization-bound source; secret returned once (generated if omitted)
+- `POST /api/webhook-sources/:id/disable` — disable source (ingress rejects disabled keys)
+
+## Webhook ingress and inbox
+
+- `POST /api/webhooks/inbound` — requires `CAP_WEBHOOK_INGRESS_ENABLED=true`, `X-Webhook-Source`, signed timestamp; body `organization_id` ignored for auth
+- `GET /api/webhooks/inbox` — admin global; non-admin membership-scoped
+- `PATCH /api/webhooks/inbox/:id/review` — reviewed/rejected; membership required for non-admin
+

@@ -4,10 +4,10 @@
 > Other documents may link here; they must not mark Gate 8 rows Accepted on their own.  
 > Automated tests, CodeQL, documentation commits, and PR #4 Draft status are **not** acceptance evidence.
 
-**Software verification head (CI green):** `a5225a61023e1030fdbe8ddd18b8eba79fbcdba8`  
-**Documentation / software completion head:** `a5225a61023e1030fdbe8ddd18b8eba79fbcdba8`  
-**PR #4:** Draft — not an acceptance vehicle  
-**external_adapters_enabled:** false  
+**PR #4 head (current tip at documentation update):** `cfa124e5d45c2815abe78604b742317333a71687` (Draft, not merged)
+**Software verification on that head:** CAP system checks **success** · CodeQL **success**
+**Institutional Gate 8:** **Open** — sole register: [`INSTITUTIONAL_ACCEPTANCE_EVIDENCE.md`](INSTITUTIONAL_ACCEPTANCE_EVIDENCE.md)
+**external_adapters_enabled:** **false**
 
 ## How to use
 

@@ -3,7 +3,7 @@
 **Gate:** Stabilize the current revision before adding new functions.  
 **Reference branch:** `fix/retention-audit-atomicity`  
 **Reference SHA (Phase 1 close-out):** `b991d5c411b81a6fe18bc9112c91f7206b809f08`  
-**Superseding branch heads:** software CI `53ee894ba0894bb92017c95f238d0af2290f2b4c`; docs/register alignment `a5225a61023e1030fdbe8ddd18b8eba79fbcdba8`  
+**Superseding branch head (PR tip / software verification):** `cfa124e5d45c2815abe78604b742317333a71687`  
 **Gate 8 register:** [`INSTITUTIONAL_ACCEPTANCE_EVIDENCE.md`](INSTITUTIONAL_ACCEPTANCE_EVIDENCE.md) (Open — not closed by Phase 1)  
 **PR:** [#4](https://github.com/meteo2026net-oss/cap/pull/4) — **Draft**, not merged  
 **Base (main):** `f9b0f1fe8eca2d73070a8870eb325586090b9f7d`  
@@ -19,7 +19,7 @@
 | 4 | Webhook inbox pagination | Inserts include `organization_id` + `source_key` for `integration-org`; page size 100 + cursor | **Closed** |
 | 5 | Organization isolation / IDOR | `tests/cap-scope-isolation.integration.test.js`, recipient grant enforcement tests | **Closed** in automated suite |
 | 6 | SQLite schema create/migrate | `ensureWebhookSourcesSchema`, inbox column guards, org tables via `recipient-auth` | **Closed** |
-| 7 | Full test suite | CAP system checks success on Phase 1 close-out `b991d5c` (historical); current software verification head `53ee894` | **Closed** |
+| 7 | Full test suite | CAP system checks success on Phase 1 close-out `b991d5c` (historical); current software verification head `cfa124e` | **Closed** |
 
 ## Explicit non-regressions retained
 

@@ -1,14 +1,14 @@
 # Project Gate Status
 
 **Branch:** `fix/retention-audit-atomicity`  
-**Documentation head:** `a5225a61023e1030fdbe8ddd18b8eba79fbcdba8`  
-**Last head with CAP system checks + CodeQL success (software verification):** `a5225a61023e1030fdbe8ddd18b8eba79fbcdba8` (also verified lineage including `53ee894`)  
-**PR #4:** open, **Draft**, not merged — https://github.com/meteo2026net-oss/cap/pull/4  
+**PR #4 head (current tip at documentation update):** `cfa124e5d45c2815abe78604b742317333a71687` (Draft, not merged)
+**Software verification on that head:** CAP system checks **success** · CodeQL **success**
+**Institutional Gate 8:** **Open** — sole register: [`INSTITUTIONAL_ACCEPTANCE_EVIDENCE.md`](INSTITUTIONAL_ACCEPTANCE_EVIDENCE.md)
 **external_adapters_enabled:** **false**
 
 **Software completion record:** [`SOFTWARE_COMPLETION.md`](SOFTWARE_COMPLETION.md)  
 **Canonical institutional acceptance register (Gate 8 only):**  
-[`docs/INSTITUTIONAL_ACCEPTANCE_EVIDENCE.md`](INSTITUTIONAL_ACCEPTANCE_EVIDENCE.md)  
+[`INSTITUTIONAL_ACCEPTANCE_EVIDENCE.md`](INSTITUTIONAL_ACCEPTANCE_EVIDENCE.md)  
 No other document may mark Gate 8 closed. CI, README, and PR state are not acceptance evidence.
 
 ## Legend (strict)
@@ -27,7 +27,7 @@ No other document may mark Gate 8 closed. CI, README, and PR state are not accep
 |------|----------------|-------|
 | Pin SHA + review commits | Software-tested | Historical close-out in `PHASE1_BASELINE.md`; branch continues |
 | PR #4 review posture | Software-tested | Draft only; no merge without explicit approval |
-| Full suite on software verification head | Software-tested | CAP system checks + CodeQL success on `a5225a61023e1030fdbe8ddd18b8eba79fbcdba8` |
+| Full suite on PR head | Software-tested | CAP system checks + CodeQL success on `cfa124e5d45c2815abe78604b742317333a71687` |
 
 ---
 
@@ -36,7 +36,7 @@ No other document may mark Gate 8 closed. CI, README, and PR state are not accep
 | Gate | Classification | Bound |
 |------|----------------|-------|
 | 2 CAP + alert lifecycle | Software-tested | XSD and lifecycle tests; not receiver certification |
-| 3 Auth, MFA, roles, IDOR tests | Software-tested | Restricted/Private recipient **authorization for operations** remains Open/Partial; Public-only API boundary still enforced for non-Public rows |
+| 3 Auth, MFA, roles, IDOR tests | Software-tested | Restricted/Private **operational** recipient authorization remains Open on Gate 8 row 4; Public-only API boundary still enforced for non-Public rows |
 | 4 Maps + org-bound webhooks | Software-tested | Ingress off unless explicitly enabled; inbox is manual review |
 | 5 Internal outbox / workers | Software-tested | External transport **Open by policy** |
 | 6 Retention atomicity, backup tooling, CI perf harness | Software-tested | Off-host backup + signed restore drill tracked only in the institutional register |

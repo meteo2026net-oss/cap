@@ -1,9 +1,9 @@
 # Software Completion Record
 
 **Branch:** `fix/retention-audit-atomicity`  
-**Completion head:** `a5225a61023e1030fdbe8ddd18b8eba79fbcdba8`  
-**CI on this head:** CAP system checks **success** · CodeQL **success**  
-**PR #4:** Draft — **not merged** (requires explicit human approval)  
+**PR #4 head (current tip at documentation update):** `cfa124e5d45c2815abe78604b742317333a71687` (Draft, not merged)
+**Software verification on that head:** CAP system checks **success** · CodeQL **success**
+**Institutional Gate 8:** **Open** — sole register: [`INSTITUTIONAL_ACCEPTANCE_EVIDENCE.md`](INSTITUTIONAL_ACCEPTANCE_EVIDENCE.md)
 **external_adapters_enabled:** **false**
 
 ## What “complete” means here
@@ -15,7 +15,7 @@ Gate 8 is tracked only in [`INSTITUTIONAL_ACCEPTANCE_EVIDENCE.md`](INSTITUTIONAL
 
 | Claim | Allowed? |
 |-------|----------|
-| Software suite green on completion head | Yes |
+| Software suite green on PR head `cfa124e` | Yes |
 | Ready for isolated technical evaluation / Test data | Yes, with docs |
 | Institutional go-live / Actual public warnings | **No** |
 | External email/SMS/outbound webhook delivery enabled | **No** |
@@ -46,5 +46,5 @@ Gate 8 is tracked only in [`INSTITUTIONAL_ACCEPTANCE_EVIDENCE.md`](INSTITUTIONAL
 2. Run institutional drills and fill [`INSTITUTIONAL_ACCEPTANCE_EVIDENCE.md`](INSTITUTIONAL_ACCEPTANCE_EVIDENCE.md).  
 3. Only after register row 14 is Accepted may Gate 8 be marked closed in `GATE_STATUS.md`.  
 
-**Software completion: yes (this head).**  
+**Software completion: yes (verified on `cfa124e5d45c2815abe78604b742317333a71687`).**  
 **Project institutional completion / go-live: no.**

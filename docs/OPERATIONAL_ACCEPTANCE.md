@@ -1,9 +1,12 @@
 # Operational Acceptance Checklist (Test Environment)
 
 > This document separates **software behaviors already exercised in automated tests** from **institutional go-live decisions** that this repository cannot complete on its own.
-> External delivery adapters remain disabled (`external_adapters_enabled: false`). Do not treat a green CI run as authority to issue public warnings.
+> Do not treat a green CI run as authority to issue public warnings.
 >
-> Latest automated verification head on `fix/retention-audit-atomicity`: `53ee894ba0894bb92017c95f238d0af2290f2b4c` (CAP system checks + CodeQL success). Documentation head: `a5225a61023e1030fdbe8ddd18b8eba79fbcdba8`. Gate 8 is tracked solely in [`INSTITUTIONAL_ACCEPTANCE_EVIDENCE.md`](INSTITUTIONAL_ACCEPTANCE_EVIDENCE.md) (all rows Open); CI does not close them.
+> **PR #4 head (current tip at documentation update):** `cfa124e5d45c2815abe78604b742317333a71687` (Draft, not merged)
+> **Software verification on that head:** CAP system checks **success** · CodeQL **success**
+> **Institutional Gate 8:** **Open** — sole register: [`INSTITUTIONAL_ACCEPTANCE_EVIDENCE.md`](INSTITUTIONAL_ACCEPTANCE_EVIDENCE.md)
+> **external_adapters_enabled:** **false**
 
 ## A. Verified in automated tests (local / CI)
 
@@ -11,8 +14,8 @@
 |------|----------|--------|
 | CAP 1.2 XML generation and OASIS XSD checks | `tests/cap-schema.test.js`, lifecycle tests | Tested in CI |
 | Alert / Update / Cancel / Ack / Error lifecycle | phase 1–5 integration tests | Tested in CI |
-| Restricted / Private exclusion from public feeds | isolation + phase 4/5 tests | Tested in CI; recipient grants remain unimplemented |
-| Temporary Public-only internal API boundary | API integration tests seed legacy non-Public rows and exercise list/detail/export/stats/review/audit/relations/delivery paths | Added; CI pending for this follow-up head |
+| Restricted / Private exclusion from public feeds | isolation + phase 4/5 tests | Software-tested in CI; operational Restricted/Private recipient authorization remains institutional (Gate 8 register row 4 Open) |
+| Temporary Public-only internal API boundary | API integration tests seed legacy non-Public rows and exercise list/detail/export/stats/review/audit/relations/delivery paths | Software-tested on current PR head (CI green); not institutional acceptance of Restricted/Private operations |
 | Public feed message-type allowlist | public JSON/GeoJSON expose Alert, Update, Cancel only; Ack/Error excluded by API integration regression tests | Tested in CI on head `046c69ea78435721f211aac88cffed602a799916` (run `42420785229`) |
 | Role separation (forecaster / reviewer / publisher) | API + phase 4/6 tests | Tested in CI |
 | MFA enroll/login/recovery paths | `tests/mfa.test.js`, API integration | Tested in CI |

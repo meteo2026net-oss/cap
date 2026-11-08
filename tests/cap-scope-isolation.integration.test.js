@@ -156,6 +156,10 @@ test("Restricted and Private legacy alerts are denied across authenticated and p
   })).status, 200);
   assert.equal((await request(`/api/alerts/${publicId}`, { token: forecasterB })).status, 200,
     "Public alerts remain globally readable by the same role across organizations by explicit policy");
+  const publicListB = await request("/api/alerts?q=unique-public-xyz", { token: forecasterB });
+  assert.equal(publicListB.status, 200);
+  assert.ok((publicListB.data.alerts || []).some(row => row.id === publicId),
+    "same-role Organization B user sees only the explicitly global Public alert, not a tenant-scoped secret");
   assert.equal((await request(`/api/alerts/${publicId}/submit`, { token: forecaster, method: "POST", body: {} })).status, 200);
   assert.equal((await request(`/api/alerts/${publicId}/approve`, { token: reviewer, method: "POST", body: {} })).status, 200);
   assert.equal((await request(`/api/alerts/${publicId}/publish`, { token: publisher, method: "POST", body: {} })).status, 200);
@@ -229,6 +233,9 @@ test("Restricted and Private legacy alerts are denied across authenticated and p
     assert.equal((await request(`/api/alerts/${id}`, { token: forecaster })).status, 404);
     assert.equal((await request(`/api/alerts/${id}`, { token: forecasterB })).status, 404,
       "same-role user in Organization B cannot read Organization A non-Public alert by direct ID");
+    assert.equal((await request(`/api/alerts/0${id}`, { token: forecasterB })).status, 404,
+      "padded direct-ID aliases do not bypass cross-organization concealment");
+    assert.equal((await request(`/api/alerts/${id}/relations`, { token: forecasterB })).status, 404);
     assert.equal((await request(`/api/alerts/0${id}`, { token: forecaster })).status, 404);
     assert.equal((await request(`/api/alerts/${id}/cap.xml`, { token: forecaster })).status, 404);
     assert.equal((await request(`/api/alerts/${id}/cap.xml`, { token: forecasterB })).status, 404);
@@ -252,11 +259,11 @@ test("Restricted and Private legacy alerts are denied across authenticated and p
   assert.ok(!JSON.stringify(reviewQueue.data).includes("Authorized agencies only"));
   assert.ok(!JSON.stringify(reviewQueue.data).includes("ops@example.test"));
 
-  const audit = await request("/api/audit?limit=500", { token: reviewer });
+  const audit = await request("/api/audit?limit=500", { token: reviewerB });
   assert.equal(audit.status, 200);
   assert.ok(!JSON.stringify(audit.data).includes("PRIVATE_AUDIT_SECRET"));
   const auditCsv = await fetch(base + "/api/audit/export.csv", {
-    headers: { Authorization: "Bearer " + reviewer }
+    headers: { Authorization: "Bearer " + reviewerB }
   });
   const auditCsvText = await auditCsv.text();
   assert.ok(!auditCsvText.includes("PRIVATE_AUDIT_SECRET"));

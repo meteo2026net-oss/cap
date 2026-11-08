@@ -40,6 +40,10 @@ For each row:
 | 13 | Legal/communications approval for Actual public warnings | Legal / communications | | | | Open |
 | 14 | Final operational acceptance record (engineering sign-off alone insufficient) | Authorized owning body | | | | Open |
 
+## Row 14 instrument
+
+Unsigned template for the final minute: [FINAL_OPERATIONAL_ACCEPTANCE_MINUTE.md](FINAL_OPERATIONAL_ACCEPTANCE_MINUTE.md). Presence of the template does **not** Accept row 14.
+
 ## Binding constraints until rows are Accepted
 
 - Do not issue Actual public warnings from this system under institutional authority.  

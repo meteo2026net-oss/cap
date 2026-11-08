@@ -64,6 +64,9 @@ When the institution later changes this decision, replace the table above and re
 
 ## Step 28 — Official signature of the owning institution
 
+Use the bilingual minute template: [`FINAL_OPERATIONAL_ACCEPTANCE_MINUTE.md`](FINAL_OPERATIONAL_ACCEPTANCE_MINUTE.md). It ships **unsigned**. Row 14 stays Open until the owning body signs and Evidence ID is recorded in the canonical register.
+
+
 | Field | Value |
 |-------|-------|
 | Institution legal name | |

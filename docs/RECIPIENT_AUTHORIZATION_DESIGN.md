@@ -165,3 +165,20 @@ The branch now also includes:
 - Unit and API integration coverage for identical group slugs in separate organizations, cross-organization membership substitution denial, and parent membership revocation.
 
 The group layer is still not an alert authorization policy. No alert grants or owner-organization links are active yet; the Public-only containment remains unchanged.
+
+
+### Phase 3 implementation snapshot — alert ownership and recipient grants
+
+The branch now adds a staged grant model:
+
+- `alerts.owner_organization_id` is nullable for compatibility. Existing alerts are deliberately left unassigned; no tenant is inferred or backfilled.
+- An alert owner can be assigned once to an active organization. The assignment is immutable through the current service/API path.
+- `alert_recipient_grants` supports direct-user, organization-wide, and recipient-group targets, each bound to a specific recipient organization and an action (`read` or `deliver`).
+- Direct-user grants require that the named user has a current active membership in the specified recipient organization. Organization grants target a distinct active organization. Group grants target a group in the specified recipient organization.
+- Grant creation starts pending; activation requires an active administrator and rechecks alert ownership, organization state, recipient membership/group state, and the grant validity window.
+- Suspension, revocation, and expiry are represented explicitly. Revoked/expired grants are terminal; revocation is immediate for subsequent authorization checks. Grant events are immutable.
+- The authorization predicate `hasActiveAlertRecipientGrant` combines the recipient's current organization membership with the matching direct, organization, or group grant. It deliberately does not treat a workflow role as a substitute for a grant.
+
+Administrative endpoints are currently restricted to the existing platform `admin` role because the organization-scoped manager authority model has not yet been approved. This is a temporary control boundary, not a final institutional delegation model.
+
+**Important safety boundary:** these grant records and the predicate are not yet wired into every alert read, export, webhook, outbox, worker, and delivery route. Restricted/Private remain blocked by the existing Public-only containment. This phase does not enable external delivery. No claim of end-to-end tenant isolation or completed API-level IDOR remediation is made until those paths are integrated and tested against two same-role users in separate organizations.

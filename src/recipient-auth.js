@@ -143,47 +143,53 @@ function normalizeInstant(value, fieldName) {
 }
 
 export function createOrganization(database, { slug, name, actorUserId }) {
-  requireActiveAdmin(database, actorUserId);
   if (typeof slug !== "string" || !/^[a-z0-9](?:[a-z0-9-]{0,78}[a-z0-9])$/i.test(slug.trim())) {
     throw new TypeError("Organization slug must be 2-80 letters, numbers, or internal hyphens.");
   }
   if (typeof name !== "string" || name.trim().length < 2 || name.trim().length > 200) {
     throw new TypeError("Organization name must contain 2-200 characters.");
   }
-  const result = database.prepare(
-    "INSERT INTO organizations(slug,name,created_by) VALUES(?,?,?)"
-  ).run(slug.trim().toLowerCase(), name.trim(), actorUserId);
-  return Number(result.lastInsertRowid);
+  const create = database.transaction(() => {
+    requireActiveAdmin(database, actorUserId);
+    const result = database.prepare(
+      "INSERT INTO organizations(slug,name,created_by) VALUES(?,?,?)"
+    ).run(slug.trim().toLowerCase(), name.trim(), actorUserId);
+    return Number(result.lastInsertRowid);
+  });
+  return create.immediate();
 }
 
 export function requestOrganizationMembership(database, {
   organizationId, userId, actorUserId, startsAt = null, expiresAt = null
 }) {
-  requireActiveAdmin(database, actorUserId);
   const starts = normalizeInstant(startsAt, "startsAt");
   const expires = normalizeInstant(expiresAt, "expiresAt");
   if (starts && expires && Date.parse(expires) <= Date.parse(starts)) {
     throw new RangeError("Membership expiry must be later than its start.");
   }
-  const result = database.prepare(`
-    INSERT INTO organization_memberships
-      (organization_id,user_id,status,starts_at,expires_at,created_by)
-    SELECT o.id,u.id,'pending',?,?,?
-    FROM organizations o CROSS JOIN users u
-    WHERE o.id=? AND o.status='active' AND u.id=? AND u.active=1
-  `).run(starts, expires, actorUserId, organizationId, userId);
-  if (result.changes !== 1) throw new Error("Active organization and active user are required.");
-  return Number(result.lastInsertRowid);
+  const request = database.transaction(() => {
+    requireActiveAdmin(database, actorUserId);
+    const result = database.prepare(`
+      INSERT INTO organization_memberships
+        (organization_id,user_id,status,starts_at,expires_at,created_by)
+      SELECT o.id,u.id,'pending',?,?,?
+      FROM organizations o CROSS JOIN users u
+      WHERE o.id=? AND o.status='active' AND u.id=? AND u.active=1
+    `).run(starts, expires, actorUserId, organizationId, userId);
+    if (result.changes !== 1) throw new Error("Active organization and active user are required.");
+    return Number(result.lastInsertRowid);
+  });
+  return request.immediate();
 }
 
 export function transitionOrganizationMembership(database, {
   membershipId, nextStatus, actorUserId
 }) {
-  requireActiveAdmin(database, actorUserId);
   if (!ALLOWED_TRANSITIONS[nextStatus] || nextStatus === "expired") throw new TypeError("Expiry is system-managed; use the expiry sweep.");
   const transition = database.transaction(() => {
+    requireActiveAdmin(database, actorUserId);
     const current = database.prepare(
-      "SELECT id,status,organization_id,user_id FROM organization_memberships WHERE id=?"
+      "SELECT id,status,organization_id,user_id,expires_at FROM organization_memberships WHERE id=?"
     ).get(membershipId);
     if (!current) throw new Error("Membership not found.");
     if (!ALLOWED_TRANSITIONS[current.status].has(nextStatus)) {
@@ -193,7 +199,8 @@ export function transitionOrganizationMembership(database, {
       const eligible = database.prepare(`
         SELECT 1 FROM organizations o JOIN users u ON u.id=?
         WHERE o.id=? AND o.status='active' AND u.active=1
-      `).get(current.user_id, current.organization_id);
+          AND (? IS NULL OR julianday(?)>julianday('now'))
+      `).get(current.user_id, current.organization_id, current.expires_at, current.expires_at);
       if (!eligible) throw new Error("Membership requires an active organization and active user.");
     }
     const revokedAt = nextStatus === "revoked" ? new Date().toISOString() : null;

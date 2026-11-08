@@ -99,18 +99,21 @@ test("membership lifecycle is audited and terminal revocation cannot be resurrec
   }
 });
 
-test("membership expiry is enforced at authorization time and by expiry sweep", () => {
+test("membership expiry is enforced at authorization time and by expiry sweep", async () => {
   const database = fixture();
   try {
     const org = createOrganization(database, { slug: "expiry", name: "Expiry Org", actorUserId: 1 });
+    const expiresAt = new Date(Date.now() + 250);
     const membershipId = requestOrganizationMembership(database, {
       organizationId: org, userId: 2, actorUserId: 1,
-      startsAt: new Date(Date.now() - 60 * 60 * 1000).toISOString(), expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString()
+      startsAt: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+      expiresAt: expiresAt.toISOString()
     });
     transitionOrganizationMembership(database, { membershipId, nextStatus: "active", actorUserId: 1 });
-    assert.equal(hasActiveOrganizationMembership(database, 2, org, new Date(Date.now() + 30 * 60 * 1000)), true);
-    assert.equal(hasActiveOrganizationMembership(database, 2, org, new Date(Date.now() + 60 * 60 * 1000)), false);
-    assert.equal(expireOrganizationMemberships(database, { at: new Date("2026-11-02T00:00:00Z") }), 1);
+    assert.equal(hasActiveOrganizationMembership(database, 2, org, new Date(Date.now() + 100)), true);
+    assert.equal(hasActiveOrganizationMembership(database, 2, org, expiresAt), false);
+    await new Promise(resolve => setTimeout(resolve, 350));
+    assert.equal(expireOrganizationMemberships(database, { at: expiresAt }), 1);
     assert.equal(database.prepare("SELECT status FROM organization_memberships WHERE id=?").get(membershipId).status, "expired");
   } finally {
     database.close();

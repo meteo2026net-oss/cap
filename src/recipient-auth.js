@@ -563,18 +563,22 @@ export function transitionOrganizationMembership(database, {
   return transition.immediate();
 }
 
-export function hasActiveOrganizationMembership(database, userId, organizationId, at = new Date()) {
+export function listActiveOrganizationIds(database, userId, at = new Date()) {
   const instant = at instanceof Date ? at.toISOString() : normalizeInstant(at, "at");
-  return Boolean(database.prepare(`
-    SELECT 1
+  return database.prepare(`
+    SELECT DISTINCT m.organization_id
     FROM organization_memberships m
     JOIN organizations o ON o.id=m.organization_id AND o.status='active'
     JOIN users u ON u.id=m.user_id AND u.active=1
-    WHERE m.user_id=? AND m.organization_id=? AND m.status='active'
+    WHERE m.user_id=? AND m.status='active'
       AND (m.starts_at IS NULL OR julianday(m.starts_at)<=julianday(?))
       AND (m.expires_at IS NULL OR julianday(m.expires_at)>julianday(?))
-    LIMIT 1
-  `).get(userId, organizationId, instant, instant));
+    ORDER BY m.organization_id
+  `).all(userId, instant, instant).map(row => row.organization_id);
+}
+
+export function hasActiveOrganizationMembership(database, userId, organizationId, at = new Date()) {
+  return listActiveOrganizationIds(database, userId, at).includes(Number(organizationId));
 }
 
 export function expireOrganizationMemberships(database, { at = new Date(), actorUserId = null } = {}) {

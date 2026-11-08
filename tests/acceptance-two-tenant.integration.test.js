@@ -114,7 +114,7 @@ test("acceptance pack: two-tenant webhook isolation and public test lifecycle", 
 
   const tempPassword = "Acceptance-Temp-Password-14+";
   const finalPassword = "Acceptance-Final-Password-14+";
-  async function createActiveMember(username, role, organizationId) {
+  async function createActiveMember(username, role, organizationId, membershipWindow = {}) {
     const user = await request("/api/users", {
       method: "POST",
       token: admin,
@@ -124,7 +124,7 @@ test("acceptance pack: two-tenant webhook isolation and public test lifecycle", 
     const mem = await request(`/api/organizations/${organizationId}/memberships`, {
       method: "POST",
       token: admin,
-      body: { user_id: user.data.id },
+      body: { user_id: user.data.id, ...membershipWindow },
     });
     assert.equal(mem.status, 201, "membership " + username);
     const act = await request(`/api/organization-memberships/${mem.data.id}`, {
@@ -157,6 +157,10 @@ test("acceptance pack: two-tenant webhook isolation and public test lifecycle", 
   const reviewerB = await createActiveMember("acc_reviewer_b", "reviewer", orgB.data.id);
   const forecasterA = await createActiveMember("acc_forecaster_a", "forecaster", orgA.data.id);
   const publisherA = await createActiveMember("acc_publisher_a", "publisher", orgA.data.id);
+  const reviewerFuture = await createActiveMember(
+    "acc_reviewer_future", "reviewer", orgA.data.id,
+    { starts_at: new Date(Date.now() + 5 * 60 * 1000).toISOString() },
+  );
 
   const sourceA = await request("/api/webhook-sources", {
     method: "POST",
@@ -243,6 +247,19 @@ test("acceptance pack: two-tenant webhook isolation and public test lifecycle", 
     body: { status: "reviewed", note: "cross-tenant" },
   });
   assert.ok([403, 404].includes(crossReview.status), "I2 cross-tenant inbox review denied: " + crossReview.status);
+
+  // A membership marked active but not yet started is not current authorization.
+  const futureInbox = await request("/api/webhooks/inbox", { token: reviewerFuture });
+  assert.equal(futureInbox.status, 403, "future-dated membership must not grant webhook inbox access");
+  const futureReview = await request(`/api/webhooks/inbox/${targetId}/review`, {
+    method: "PATCH",
+    token: reviewerFuture,
+    body: { status: "reviewed", note: "future-membership-must-not-authorize" },
+  });
+  assert.equal(futureReview.status, 403, "future-dated membership must not authorize webhook review");
+  const stillPending = await request("/api/webhooks/inbox", { token: reviewerA });
+  assert.equal(stillPending.data.messages.find((message) => message.id === targetId)?.status, "pending",
+    "denied future-membership review must leave the inbox message pending");
 
   // Lifecycle slice: Public Test draft → submit → approve → publish
   const draft = await request("/api/alerts", {

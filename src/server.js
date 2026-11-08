@@ -18,7 +18,7 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { consumeRecoveryCode, decryptTotpSecret, encryptTotpSecret, generateRecoveryCodes, generateTotpSecret, hashRecoveryCode, verifyTotp } from "./mfa.js";
 import { verifyAndConsumeWebhook } from "./webhook-replay.js";
 import { createWebhookSource, disableWebhookSource, listWebhookSources, resolveActiveWebhookSource, generateWebhookSourceSecret } from "./webhook-sources.js";
-import { alertRecipientGrantSql, assignAlertOrganizationOwner, createAlertRecipientGrant, createOrganization, createRecipientGroup, expireAlertRecipientGrants, expireOrganizationMemberships, expireRecipientGroupMemberships, hasActiveAlertRecipientGrant, hasActiveOrganizationMembership, requestOrganizationMembership, requestRecipientGroupMembership, transitionAlertRecipientGrant, transitionOrganizationMembership, transitionRecipientGroupMembership } from "./recipient-auth.js";
+import { alertRecipientGrantSql, assignAlertOrganizationOwner, createAlertRecipientGrant, createOrganization, createRecipientGroup, expireAlertRecipientGrants, expireOrganizationMemberships, expireRecipientGroupMemberships, hasActiveAlertRecipientGrant, hasActiveOrganizationMembership, listActiveOrganizationIds, requestOrganizationMembership, requestRecipientGroupMembership, transitionAlertRecipientGrant, transitionOrganizationMembership, transitionRecipientGroupMembership } from "./recipient-auth.js";
 
 const app = express();
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -257,11 +257,10 @@ const roles = (...allowed) => (req,res,next) => {
 function webhookInboxAccess(req,res,next) {
  if(req.user.role==="admin") return next();
  if(req.user.role!=="reviewer") return res.status(403).json({error:"Insufficient permissions"});
- // Reviewers may inspect only inbox rows bound to organizations where they hold an active membership.
- const membership=db.prepare(`SELECT 1 FROM organization_memberships WHERE user_id=? AND status='active' LIMIT 1`).get(req.user.id);
- if(!membership) {
+ // Shared current-membership policy checks active user/org and starts_at/expires_at.
+ if(listActiveOrganizationIds(db,req.user.id).length===0) {
   return res.status(403).json({
-   error:"Webhook inbox access requires an active organization membership",
+   error:"Webhook inbox access requires a current organization membership",
    code:"WEBHOOK_ORGANIZATION_MEMBERSHIP_REQUIRED"
   });
  }
@@ -1577,7 +1576,7 @@ app.get("/api/webhooks/inbox",auth,webhookInboxAccess,(req,res)=>{
   beforeId=Number(beforeRaw);
  }
  const isAdmin=req.user.role==="admin";
- const membershipOrgs=isAdmin?null:db.prepare(`SELECT organization_id FROM organization_memberships WHERE user_id=? AND status='active'`).all(req.user.id).map(row=>row.organization_id);
+ const membershipOrgs=isAdmin?null:listActiveOrganizationIds(db,req.user.id);
  if(!isAdmin && (!membershipOrgs || !membershipOrgs.length)) {
   return res.set("Cache-Control","no-store").json({messages:[],count:0,has_more:false});
  }
@@ -1604,8 +1603,7 @@ app.patch("/api/webhooks/inbox/:id/review",auth,webhookInboxAccess,(req,res)=>{
   if(!row || row.status!=="pending") return {kind:"missing"};
   if(req.user.role!=="admin") {
    if(!row.organization_id) return {kind:"forbidden"};
-   const membership=db.prepare(`SELECT 1 FROM organization_memberships WHERE user_id=? AND organization_id=? AND status='active'`).get(req.user.id,row.organization_id);
-   if(!membership) return {kind:"forbidden"};
+   if(!hasActiveOrganizationMembership(db,req.user.id,row.organization_id)) return {kind:"forbidden"};
   }
   const updated=db.prepare("UPDATE webhook_inbox SET status=?,reviewed_at=CURRENT_TIMESTAMP,reviewed_by=?,review_note=? WHERE id=? AND status='pending'").run(data.status,req.user.id,data.note,id);
   if(!updated.changes) return {kind:"missing"};

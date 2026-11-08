@@ -11,6 +11,7 @@ import {
   expireOrganizationMemberships,
   hasActiveAlertRecipientGrant,
   hasActiveOrganizationMembership,
+  listActiveOrganizationIds,
   hasActiveRecipientGroupMembership,
   installRecipientSchema,
   requestOrganizationMembership,
@@ -66,6 +67,39 @@ test("organization memberships support multiple organizations without cross-tena
     assert.equal(hasActiveOrganizationMembership(database, 2, orgB), false);
     assert.equal(hasActiveOrganizationMembership(database, 3, orgB), true);
     assert.equal(hasActiveOrganizationMembership(database, 3, orgA), false);
+  } finally {
+    database.close();
+  }
+});
+
+test("active organization ID listing applies the same current-membership window as point checks", () => {
+  const database = fixture();
+  try {
+    const futureOrg = createOrganization(database, { slug: "future-window", name: "Future Window", actorUserId: 1 });
+    const expiringOrg = createOrganization(database, { slug: "expiring-window", name: "Expiring Window", actorUserId: 1 });
+    const now = Date.now();
+    const futureStart = new Date(now + 24 * 60 * 60 * 1000).toISOString();
+    const pastStart = new Date(now - 60 * 60 * 1000).toISOString();
+    const expiry = new Date(now + 24 * 60 * 60 * 1000).toISOString();
+    const futureMembership = requestOrganizationMembership(database, {
+      organizationId: futureOrg, userId: 2, actorUserId: 1, startsAt: futureStart
+    });
+    const expiringMembership = requestOrganizationMembership(database, {
+      organizationId: expiringOrg, userId: 3, actorUserId: 1,
+      startsAt: pastStart, expiresAt: expiry
+    });
+    transitionOrganizationMembership(database, { membershipId: futureMembership, nextStatus: "active", actorUserId: 1 });
+    transitionOrganizationMembership(database, { membershipId: expiringMembership, nextStatus: "active", actorUserId: 1 });
+
+    assert.deepEqual(listActiveOrganizationIds(database, 2, new Date(now)), []);
+    assert.equal(hasActiveOrganizationMembership(database, 2, futureOrg, new Date(now)), false);
+    assert.deepEqual(listActiveOrganizationIds(database, 3, new Date(now)), [expiringOrg]);
+    assert.equal(hasActiveOrganizationMembership(database, 3, expiringOrg, new Date(now)), true);
+
+    const afterWindow = new Date(now + 2 * 24 * 60 * 60 * 1000);
+    assert.deepEqual(listActiveOrganizationIds(database, 2, afterWindow), [futureOrg]);
+    assert.equal(hasActiveOrganizationMembership(database, 3, expiringOrg, afterWindow), false);
+    assert.deepEqual(listActiveOrganizationIds(database, 3, afterWindow), []);
   } finally {
     database.close();
   }

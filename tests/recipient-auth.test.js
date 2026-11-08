@@ -2,14 +2,18 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import Database from "better-sqlite3";
 import {
+  assignAlertOrganizationOwner,
+  createAlertRecipientGrant,
   createOrganization,
   createRecipientGroup,
   expireOrganizationMemberships,
+  hasActiveAlertRecipientGrant,
   hasActiveOrganizationMembership,
   hasActiveRecipientGroupMembership,
   installRecipientSchema,
   requestOrganizationMembership,
   requestRecipientGroupMembership,
+  transitionAlertRecipientGrant,
   transitionOrganizationMembership,
   transitionRecipientGroupMembership
 } from "../src/recipient-auth.js";
@@ -30,6 +34,11 @@ function fixture() {
       (2,'a_forecaster','x','forecaster',1),
       (3,'b_forecaster','x','forecaster',1),
       (4,'inactive_forecaster','x','forecaster',0);
+    CREATE TABLE alerts (
+      id INTEGER PRIMARY KEY,
+      owner_organization_id INTEGER REFERENCES organizations(id),
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
   `);
   installRecipientSchema(database);
   return database;
@@ -190,4 +199,97 @@ test("recipient groups are organization-bound and require a live matching organi
   } finally {
     database.close();
   }
+});
+
+
+test("alert grants bind direct users, organizations, and groups to an alert owner and enforce lifecycle", () => {
+  const database=fixture();
+  try {
+    const owner=createOrganization(database,{slug:"grant-owner",name:"Grant Owner",actorUserId:1});
+    const recipient=createOrganization(database,{slug:"grant-recipient",name:"Grant Recipient",actorUserId:1});
+    const member=requestOrganizationMembership(database,{organizationId:recipient,userId:3,actorUserId:1});
+    transitionOrganizationMembership(database,{membershipId:member,nextStatus:"active",actorUserId:1});
+    const group=createRecipientGroup(database,{organizationId:recipient,slug:"ops",name:"Operations",actorUserId:1});
+    const groupMember=requestRecipientGroupMembership(database,{groupId:group,organizationMembershipId:member,actorUserId:1});
+    transitionRecipientGroupMembership(database,{membershipId:groupMember,nextStatus:"active",actorUserId:1});
+    database.prepare("INSERT INTO alerts(id) VALUES(100)").run();
+    assignAlertOrganizationOwner(database,{alertId:100,organizationId:owner,actorUserId:1});
+
+    const direct=createAlertRecipientGrant(database,{
+      alertId:100,ownerOrganizationId:owner,recipientType:"user",recipientUserId:3,
+      recipientOrganizationId:recipient,action:"read",actorUserId:1
+    });
+    transitionAlertRecipientGrant(database,{grantId:direct,nextStatus:"active",actorUserId:1});
+    assert.equal(hasActiveAlertRecipientGrant(database,{
+      alertId:100,userId:3,organizationId:recipient,action:"read"
+    }),true);
+    assert.equal(hasActiveAlertRecipientGrant(database,{
+      alertId:100,userId:2,organizationId:recipient,action:"read"
+    }),false);
+
+    const organizationGrant=createAlertRecipientGrant(database,{
+      alertId:100,ownerOrganizationId:owner,recipientType:"organization",
+      recipientOrganizationId:recipient,action:"deliver",actorUserId:1
+    });
+    transitionAlertRecipientGrant(database,{grantId:organizationGrant,nextStatus:"active",actorUserId:1});
+    assert.equal(hasActiveAlertRecipientGrant(database,{
+      alertId:100,userId:3,organizationId:recipient,action:"deliver"
+    }),true);
+
+    const groupGrant=createAlertRecipientGrant(database,{
+      alertId:100,ownerOrganizationId:owner,recipientType:"group",
+      recipientOrganizationId:recipient,recipientGroupId:group,action:"read",actorUserId:1
+    });
+    transitionAlertRecipientGrant(database,{grantId:groupGrant,nextStatus:"active",actorUserId:1});
+    assert.equal(hasActiveAlertRecipientGrant(database,{
+      alertId:100,userId:3,organizationId:recipient,action:"read"
+    }),true);
+
+    transitionAlertRecipientGrant(database,{grantId:direct,nextStatus:"revoked",actorUserId:1});
+    assert.equal(database.prepare("SELECT status FROM alert_recipient_grants WHERE id=?").get(direct).status,"revoked");
+    assert.throws(()=>transitionAlertRecipientGrant(database,{
+      grantId:direct,nextStatus:"active",actorUserId:1
+    }),/not permitted/);
+    assert.throws(()=>createAlertRecipientGrant(database,{
+      alertId:100,ownerOrganizationId:recipient,recipientType:"user",recipientUserId:3,
+      recipientOrganizationId:recipient,action:"read",actorUserId:1
+    }),/valid recipient|FOREIGN KEY|CHECK constraint/);
+    assert.throws(()=>createAlertRecipientGrant(database,{
+      alertId:100,ownerOrganizationId:owner,recipientType:"user",recipientUserId:3,
+      recipientOrganizationId:owner,action:"read",actorUserId:1
+    }),/valid recipient|FOREIGN KEY|CHECK constraint/);
+    const events=database.prepare("SELECT event_type FROM alert_recipient_grant_events WHERE grant_id=? ORDER BY id").all(direct);
+    assert.deepEqual(events.map(row=>row.event_type),["grant_created","grant_activated","grant_revoked"]);
+    assert.throws(()=>database.prepare(
+      "UPDATE alert_recipient_grant_events SET to_status='active' WHERE grant_id=?"
+    ).run(direct),/immutable/);
+  } finally {
+    database.close();
+  }
+});
+
+test("grant expiry is immediate at authorization time and terminal after expiry sweep",()=>{
+  const database=fixture();
+  try{
+    const owner=createOrganization(database,{slug:"expiry-owner",name:"Expiry Owner",actorUserId:1});
+    const recipient=createOrganization(database,{slug:"expiry-recipient",name:"Expiry Recipient",actorUserId:1});
+    const membership=requestOrganizationMembership(database,{organizationId:recipient,userId:3,actorUserId:1});
+    transitionOrganizationMembership(database,{membershipId:membership,nextStatus:"active",actorUserId:1});
+    database.prepare("INSERT INTO alerts(id) VALUES(101)").run();
+    assignAlertOrganizationOwner(database,{alertId:101,organizationId:owner,actorUserId:1});
+    const grant=createAlertRecipientGrant(database,{
+      alertId:101,ownerOrganizationId:owner,recipientType:"user",recipientUserId:3,
+      recipientOrganizationId:recipient,action:"read",actorUserId:1,
+      startsAt:"2026-11-01T00:00:00Z",expiresAt:"2026-11-02T00:00:00Z"
+    });
+    transitionAlertRecipientGrant(database,{grantId:grant,nextStatus:"active",actorUserId:1});
+    assert.equal(hasActiveAlertRecipientGrant(database,{
+      alertId:101,userId:3,organizationId:recipient,at:new Date("2026-11-01T12:00:00Z")
+    }),true);
+    assert.equal(hasActiveAlertRecipientGrant(database,{
+      alertId:101,userId:3,organizationId:recipient,at:new Date("2026-11-02T00:00:00Z")
+    }),false);
+    assert.equal(expireAlertRecipientGrants(database,{at:new Date("2026-11-02T00:00:00Z")}),1);
+    assert.equal(database.prepare("SELECT status FROM alert_recipient_grants WHERE id=?").get(grant).status,"expired");
+  }finally{database.close();}
 });

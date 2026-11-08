@@ -4,7 +4,7 @@ Maps the full acceptance checklist to **what the repository can prove**, **what 
 
 **PR #4:** Draft · **Adapters:** disabled · **Gate 8 register:** [INSTITUTIONAL_ACCEPTANCE_EVIDENCE.md](INSTITUTIONAL_ACCEPTANCE_EVIDENCE.md) (all Open)
 
-**Software CI reference head:** `179fa1f14c19f076512fc8c7be23288f4120727a` (CAP system checks + CodeQL success)  
+**Software CI reference head:** `26e7cf45889cffdb0fd9b3be2c6a750755e235d0` (CAP system checks + CodeQL success)  
 **Pack head (includes this matrix lineage):** branch tip on `fix/retention-audit-atomicity`
 
 ---

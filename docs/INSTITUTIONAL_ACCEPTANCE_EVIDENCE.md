@@ -4,8 +4,8 @@
 > Other documents may link here; they must not mark Gate 8 rows Accepted on their own.  
 > Automated tests, CodeQL, documentation commits, and PR #4 Draft status are **not** acceptance evidence.
 
-**PR #4 head (current tip):** `6ade8179d8d24d94076bf021a4a93335d4f200a0` (Draft, not merged)
-**Last green CAP system checks + CodeQL:** `179fa1f14c19f076512fc8c7be23288f4120727a`
+**PR #4 head (current tip):** `26e7cf45889cffdb0fd9b3be2c6a750755e235d0` (Draft, not merged)
+**Software verification head (CAP system checks + CodeQL success):** `26e7cf45889cffdb0fd9b3be2c6a750755e235d0`
 **Institutional Gate 8:** **Open** — this file is the sole register
 **external_adapters_enabled:** **false**
 

@@ -1,8 +1,8 @@
 # Software Completion Record
 
 **Branch:** `fix/retention-audit-atomicity`  
-**PR #4 head (current tip):** `6ade8179d8d24d94076bf021a4a93335d4f200a0` (Draft, not merged)
-**Last green CAP system checks + CodeQL:** `179fa1f14c19f076512fc8c7be23288f4120727a`
+**PR #4 head (current tip):** `26e7cf45889cffdb0fd9b3be2c6a750755e235d0` (Draft, not merged)
+**Software verification head (CAP system checks + CodeQL success):** `26e7cf45889cffdb0fd9b3be2c6a750755e235d0`
 **Institutional Gate 8:** **Open** — sole register: INSTITUTIONAL_ACCEPTANCE_EVIDENCE.md
 **external_adapters_enabled:** **false**
 
@@ -50,5 +50,5 @@ Local programme for use in the **Syrian Arab Republic only**. Not positioned as 
 2. Run institutional drills and fill [`INSTITUTIONAL_ACCEPTANCE_EVIDENCE.md`](INSTITUTIONAL_ACCEPTANCE_EVIDENCE.md).  
 3. Only after register row 14 is Accepted may Gate 8 be marked closed in `GATE_STATUS.md`.  
 
-**Software completion: yes (verified on `179fa1f14c19f076512fc8c7be23288f4120727a`).**  
+**Software completion: yes (verified on `26e7cf45889cffdb0fd9b3be2c6a750755e235d0`).**  
 **Project institutional completion / go-live: no.**

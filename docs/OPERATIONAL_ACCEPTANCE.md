@@ -3,9 +3,9 @@
 > This document separates **software behaviors already exercised in automated tests** from **institutional go-live decisions** that this repository cannot complete on its own.
 > Do not treat a green CI run as authority to issue public warnings.
 >
-> **PR #4 head (current tip):** `6ade8179d8d24d94076bf021a4a93335d4f200a0` (Draft, not merged)
-> **Last green CAP system checks + CodeQL:** `179fa1f14c19f076512fc8c7be23288f4120727a`
-> **Verification note:** Tip `6ade8179d8d2` includes the tightened two-tenant acceptance test; promote it as software verification head only after CI success on this tip.
+> **PR #4 head (current tip):** `26e7cf45889cffdb0fd9b3be2c6a750755e235d0` (Draft, not merged)
+> **Software verification head (CAP system checks + CodeQL success):** `26e7cf45889cffdb0fd9b3be2c6a750755e235d0`
+> **Verification note:** Software verification head `26e7cf45889c` includes the two-tenant acceptance pack test (CI green).
 > **Institutional Gate 8:** **Open** — sole register: [`INSTITUTIONAL_ACCEPTANCE_EVIDENCE.md`](INSTITUTIONAL_ACCEPTANCE_EVIDENCE.md)
 > **external_adapters_enabled:** **false**
 > **Intended scope:** Syrian Arab Republic only — local programme, not global distribution.

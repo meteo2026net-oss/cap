@@ -4,8 +4,8 @@
 **Not:** OASIS certification, receiver certification, or Gate 8 institutional acceptance.
 
 **Branch:** `fix/retention-audit-atomicity` (PR #4 Draft)  
-**Last confirmed green CAP system checks + CodeQL (lineage):** `179fa1f14c19f076512fc8c7be23288f4120727a`  
-**Heads under verification after acceptance-pack test:** `489a5a7` (mutation-limit fix) ← `6ade817` ← `9787677`  
+**Last confirmed green CAP system checks + CodeQL (lineage):** `26e7cf45889cffdb0fd9b3be2c6a750755e235d0`  
+**Software verification head (acceptance pack included):** `26e7cf45889cffdb0fd9b3be2c6a750755e235d0`  
 **external_adapters_enabled:** false  
 
 ## 1. Method
@@ -47,7 +47,7 @@
 
 | Criterion | Status |
 |-----------|--------|
-| Automated suite green on a documented head | **Lineage green:** `179fa1f` · **Pending confirm:** `489a5a7` |
+| Automated suite green on a documented head | **Yes:** `26e7cf45889c` (CAP + CodeQL success; acceptance-two-tenant included) |
 | Acceptance isolation asserts retained (not weakened) | Yes — tightened in `6ade817` |
 | Operator isolated pack executed and logged | **Pending** host run (`ISOLATED_ACCEPTANCE_TEST_PACK.md`) |
 | This technical report filed | **Yes** (this document) |

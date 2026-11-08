@@ -1,6 +1,6 @@
 # Recipient Authorization Gap Audit — CAP 1.2
 
-Audit target: PR #4 current head `f0749a0627d2666957106826c2f5aba0d6c2c227`.
+Audit target: PR #4 current head `1f7029b4487ddb929a0edb8083136a87bf91c165` (source review completed after the recipient-gap audit documentation commit).
 Review type: source/schema/test inspection. No recipient schema, membership data, grants, account records, or deployment settings were changed.
 
 ## 1. Executive conclusion
@@ -153,3 +153,35 @@ Every negative test must assert status, response-body marker absence, and unchan
 - `external_adapters_enabled: false` remains unchanged.
 - No membership, group, or recipient grants are seeded or inferred.
 - Do not merge or claim recipient authorization readiness on the basis of Public-only scope tests.
+
+
+## 9. Route and background-surface inventory
+
+This inventory was checked against `src/server.js`, `src/delivery.js`, `src/delivery-worker.js`, `src/retention.js`, and `src/audit.js` at the audit target. "Public-only" below means the current fail-closed scope rule, not a future organization grant.
+
+| Surface | Current boundary | Required recipient-model treatment |
+|---|---|---|
+| `GET /api/alerts`, `/stats`, `/export.csv` | SQL constrained to Public before count/page/export | Add organization + grant predicate in SQL before COUNT, LIMIT/OFFSET, and export |
+| `GET /api/alerts/:id`, `/cap.xml`, `/relations` | Middleware conceals existing non-Public rows; relation traversal filters related rows to Public | Resolve the root grant and independently authorize each related record; do not inherit access from a visible root |
+| Review queue/history/notes/versions/timeline | Workflow roles plus Public-only filtering or concealment | Require both workflow capability and organization/alert grant; protect audit/version joins and counts |
+| Alert create/derive/edit/submit/return/approve/publish | Role/workflow/ownership rules; non-Public create/promotion blocked | Bind alert to immutable owning organization; validate grant and workflow capability on each transition |
+| `GET /api/delivery/outbox` and per-ID claim/receipt/retry | Publisher/admin role; Public-only SQL and ID concealment | Filter by authorized recipient and current grant at selection and mutation transaction boundary |
+| Delivery retry/recovery API and `delivery-worker.js` | Global maintenance pauses if any non-Public outbox row exists; worker itself only processes Public | Replace global pause only after each job is tenant/grant-scoped; re-check grant immediately before claim/dispatch |
+| `GET/PATCH /api/webhooks/inbox` | Global admin/reviewer inbox, cursor by global ID; payload not tied to a tenant | Bind ingress identity/source to an organization; scope inbox list, cursor, review and audit by that organization |
+| `POST /api/webhooks/inbound` | Signature/replay protection and global inbox insert; no authenticated user or organization mapping | Verify configured source-to-organization mapping and persist immutable tenant attribution before accepting |
+| `GET /api/audit`, `export.csv` | Alert-linked entries restricted to Public; alert-less events are globally visible except retention marker | Define organization attribution for grant/membership/admin events; prevent one tenant from reading another tenant's audit details; preserve global chain verification separately |
+| `GET /api/audit/verify` | Verifies the global hash chain; does not return event rows | Decide whether integrity status is global operational metadata or a privileged system-only function; never treat it as tenant event access |
+| `GET /api/health/metrics` | Admin/publisher global operational aggregates, currently Public-only alert counts | Decide whether aggregate metrics may be global; if not, scope every aggregate before grouping |
+| `POST /api/ops/retention/apply` | Global admin operation pruning terminal delivery and reviewed webhook rows | Define tenant-aware retention policy and ensure deletion predicates cannot cross a tenant's legal hold/retention boundary |
+| `GET /api/users`, user create/role/status/reset | Global Admin account administration | Separate platform administration from organization administration; org admins must only manage users in their own organization |
+| Public feeds and health endpoints | Public feeds explicitly query published Public alerts; health reports static capability state | Keep feeds strictly Public; never reveal organization membership or grant metadata |
+
+### Specific high-risk gaps surfaced by route review
+
+1. **Webhook tenant attribution is absent.** Inbound webhook messages are persisted in a global inbox. The inbound signature/replay guard proves message authenticity relative to a configured secret, not which organization owns the source or which users may review its payload. A future multi-organization deployment needs per-source organization binding, separate secrets/keys where appropriate, and tenant-scoped inbox queries and review mutations.
+2. **Global audit events need an explicit policy.** The current audit list/export intentionally includes alert-less events (except the retention marker). Once membership and grant lifecycle events are added, those events can expose usernames, organization IDs, administrative actions, or grant reasons. Add organization attribution and explicit platform-global event classes; do not infer tenant visibility from `alert_id IS NULL`.
+3. **Retention is global today.** Delivery and webhook retention delete across the whole database. Before organizations have different legal/operational retention policies or holds, retention needs tenant-aware eligibility and auditable policy selection.
+4. **Operational aggregates are privileged but global.** Metrics are restricted to Admin/Publisher and currently count Public records. If metrics later include non-Public data, scope before aggregation or explicitly approve a platform-global aggregate with disclosure review.
+5. **The current worker has no principal context.** It is safe only because it performs Public-only maintenance and pauses globally when any non-Public outbox row exists. It cannot safely become a recipient-aware dispatcher by adding a role or group check in the HTTP API alone; background jobs must evaluate persisted source, tenant, membership, grant expiry, and revocation state themselves.
+
+No code or schema changes are implied by this inventory. These are policy and implementation gates, not permission to activate non-Public access.
